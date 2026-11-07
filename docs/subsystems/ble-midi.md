@@ -270,7 +270,7 @@ verbs (`main/host_info.cpp`), on all three fronts.
   bolt while the host is alive (orange when an update waits); the two are
   separate icons, so a charging board shows both;
   DAW Control has a host row (CPU, RAM, the board's clock) and a firmware row;
-  Settings → Info adds "Update: vX at crosspad.app/device" whenever
+  Settings → Info adds "Update: vX at play.crosspad.app/device" whenever
   `fwUpdateAvailable` is set.
 - Stack: this runs on the main task's 5 kB stack when it comes in over SysEx
   or BLE, so the reply text is built in `noinline` helpers, not in the frame
