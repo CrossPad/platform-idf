@@ -149,7 +149,7 @@ private:
             s_info.add("Built", "%s %s", app->date, app->time);
         }
         if (status.fwUpdateAvailable) {
-            s_info.add("Update", "v%s at crosspad.app/device", status.fwLatest);
+            s_info.add("Update", "v%s at play.crosspad.app/device", status.fwLatest);
         }
         s_info.add("ESP-IDF", "%s", IDF_VER);
         s_info.add("crosspad-core", "%s %s", CROSSPAD_CORE_VERSION, CROSSPAD_CORE_REV);
