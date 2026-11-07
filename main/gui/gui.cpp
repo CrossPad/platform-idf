@@ -29,6 +29,11 @@
 
 #include "crosspad/kit/PortableKitLoader.hpp"
 #include "crosspad/control/AppName.hpp"
+#include "crosspad/kit/IKitManager.hpp"
+#include "crosspad/platform/PlatformServices.hpp"
+#include "crosspad/song/SongSounds.hpp"
+#include "crosspad-gui/components/ui_modal.h"
+#include "lv_async_safe.h"
 
 using crosspad::AppRegistry;
 
@@ -54,6 +59,48 @@ static lv_obj_t* gate_app_container() { return app_c; }
 static bool gate_kit_scan_done() { return g_kit_scan_done.load(); }
 static bool gate_card_present() { return bsp_sdcard_get_handle() != nullptr; }
 static void gate_log(const char* line) { ESP_LOGI(TAG, "%s", line); }
+
+// ── A kit picked away from Arrange (core SongSounds::kitChoiceTrack()) ──────
+/* Asked before Arrange is built, and answered every time: the kit replaces the
+ * track's, or goes on a new kit track. The power button answers nothing:
+ * Arrange does not open and the player is back where they came from. */
+static crosspad_gui::ILvglApp* s_kitChoiceApp  = nullptr;   // Arrange, while asked
+static crosspad_gui::ILvglApp* s_kitChoiceFrom = nullptr;   // the screen it came from
+
+static void kit_choice_cb(int index, void*)
+{
+    crosspad::SongSounds* ss = crosspad::getPlatformServices().songSounds;
+    if (index >= 0 && ss) ss->resolveKitChoice(index == 0);
+    crosspad_gui::ILvglApp* to = index >= 0 ? s_kitChoiceApp : s_kitChoiceFrom;
+    s_kitChoiceApp = s_kitChoiceFrom = nullptr;
+    /* After the dialog has given the encoder back, not inside its callback. */
+    if (to) lv_async_call_locked([](void* app) { crosspad_gui::AppOrchestrator::onAppSelected(app, app_c); }, to);
+}
+
+static bool pre_launch(crosspad_gui::ILvglApp* app, lv_obj_t* container)
+{
+    crosspad::SongSounds* ss = crosspad::getPlatformServices().songSounds;
+    const int track = ss && std::strcmp(app->getName(), "Arrange") == 0 ? ss->kitChoiceTrack() : -1;
+    if (track < 0) return crosspad_sampler::kit_gate_pre_launch(app, container);
+    if (s_kitChoiceApp) return false;   // already asked
+    crosspad_gui::ILvglApp* from = crosspad_gui::AppOrchestrator::getInstance().historyTop();
+    s_kitChoiceApp  = app;
+    s_kitChoiceFrom = from != app ? from : nullptr;
+
+    crosspad::IKitManager* km = crosspad::getKitManager();
+    const crosspad::KitInfo* kit = km ? km->getCurrentKit() : nullptr;
+    char msg[160];
+    std::snprintf(msg, sizeof(msg), "%s is loaded. Track %d keeps its own kit until you choose.",
+                  kit ? kit->name.c_str() : "Another kit", track + 1);
+    char replace[24];
+    std::snprintf(replace, sizeof(replace), "Replace on T%d", track + 1);
+    const ui_modal_button_t buttons[] = {
+        {replace, UI_MODAL_BUTTON_PRIMARY},
+        {"New track", UI_MODAL_BUTTON_NORMAL},
+    };
+    ui_modal_choice("Kit changed", msg, buttons, 2, 0, kit_choice_cb, nullptr, nullptr);
+    return false;
+}
 
 // ── Icon path resolver ──────────────────────────────────────────────────────
 
@@ -91,7 +138,7 @@ void InitializeAppRegistry() {
     song_sounds_start();               // the open song's kit and instrument
 
     crosspad_gui::OrchestratorConfig config;
-    config.pre_launch    = crosspad_sampler::kit_gate_pre_launch;
+    config.pre_launch    = pre_launch;
     crosspad_gui::touch_gesture_set_recents(crosspad_sampler::kit_gate_previous_screen);
     config.icon_resolver = resolveIconPath;
     config.app_factory   = crosspad_gui::defaultAppFactory<App>;

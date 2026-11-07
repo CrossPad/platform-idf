@@ -462,9 +462,22 @@ keeps the first. A track's kit is part of an undo step; the song's is not.
   laid as it is.
 - **The seq view of a kit block** (CLIP EDIT) plays its scene on route 0 with
   the track live; its EDIT opens the Sampler on the track's kit, or says it is
-  still loading. A kit loaded there, or anywhere while the song is open, is the
-  live track's (`SongSounds::kitLoaded()` -> `AudioSong::kitHeld()`). Opened
-  from MODE, the Sequencer is the armed kit track.
+  still loading. A kit loaded there is the live track's
+  (`SongSounds::kitLoaded()` -> `AudioSong::kitHeld()`, while core's
+  `ArrangeFocus` names the track; a pick on the MODE map or going home clears it). Opened from MODE, the
+  Sequencer is the armed kit track.
+- **A kit loaded anywhere else** while a song with kit tracks is open is the
+  pads', not yet the song's: the track it would replace keeps its kit and plays
+  its freeze (`AudioSong::liveKit` -1), the song is not written, and the next
+  entry into Arrange asks first (`SongSounds::kitChoiceTrack()`, the platform's
+  pre-launch hook in `main/gui/gui.cpp`): **Replace on T<n>** (the track plays
+  the kit, as before) or **New track** (a kit track of its own, made as ADD
+  TRACK > KITS makes one, `new_kit_track()`). The power button answers nothing:
+  Arrange stays closed and the screen it came from comes back. The question is
+  kept in RAM only; another song opening or a reboot drops it, and the song
+  loads its own kit. A song with no kit track takes the kit as its own, as
+  before. With a Pitch track, the instrument is built beside a loaded kit
+  (`song_wants_beside()`), so the kit is never kept out of the arena by it.
 - **The kit loader.** ADD TRACK > KITS > Kit opens the board's kit browser over
   Arrange (core `IKitPicker`, `PlatformServices::kitPicker`; the browser in
   pick mode, `KitSelectorConfig::onPicked`, lists only the kits, reads PICK
