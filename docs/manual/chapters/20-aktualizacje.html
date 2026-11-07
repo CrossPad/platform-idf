@@ -9,12 +9,12 @@
 <tr><th style="width:18%">Zakładka</th><th>Co zawiera</th></tr>
 <tr><td><span class="lbl">Library</span></td><td>Wersje firmware zapisane na karcie i to, co jest w slotach A i B.</td></tr>
 <tr><td><span class="lbl">Store</span></td><td>Katalog wersji do pobrania (Official i Community), przez Wi-Fi.</td></tr>
-<tr><td><span class="lbl">Updates</span></td><td>Sprawdzanie nowszej wersji; <span class="lbl">Check now</span> sprawdza od razu.</td></tr>
+<tr><td><span class="lbl">Updates</span></td><td>Sprawdzanie nowszej wersji; <span class="lbl">Check now</span> sprawdza od razu. Znalezioną wersję pobierasz i instalujesz stąd (<span class="lbl">Update</span>); po instalacji CrossPad pyta <i>Run the new version now?</i>.</td></tr>
 </table>
-<p>Kafelek otwiera kartę wersji z opisem i przyciskami: <span class="lbl">Download</span>, <span class="lbl">Install</span>, <span class="lbl">Install and run</span>, <span class="lbl">Run</span>, <span class="lbl">Pin</span>/<span class="lbl">Unpin</span> (przypięta wersja nie zostanie usunięta przy porządkach), <span class="lbl">Delete</span>. Wersje Community pochodzą od społeczności i pokazują ostrzeżenie.</p>
+<p>Kafelek otwiera kartę wersji z opisem i przyciskami: <span class="lbl">Download</span>, <span class="lbl">Install</span>, <span class="lbl">Install and run</span>, <span class="lbl">Run</span>, <span class="lbl">Pin</span>/<span class="lbl">Unpin</span> (przypięta wersja nie zostanie usunięta przy porządkach), <span class="lbl">Delete from card</span>. Wersje Community pochodzą od społeczności i pokazują ostrzeżenie.</p>
 
-<div class="warn"><b>Katalog online jeszcze nie działa</b>
-W pierwszym wydaniu firmware katalog wersji na crosspad.app nie jest jeszcze uruchomiony: <span class="lbl">Store</span> pokaże, że sklep jest niedostępny, a <span class="lbl">Check now</span> zakończy się błędem. Wi-Fi jest też domyślnie wyłączone (Settings › WiFi › <span class="lbl">WiFi allowed</span>). Przy wczytanym kicie CrossPad może zaproponować restart w trybie sieciowym, bo Wi-Fi potrzebuje pamięci; wybierz wtedy <span class="lbl">Cancel</span>, jeśli nie chcesz restartu.</div>
+<div class="tip"><b>Store i Updates potrzebują Wi-Fi</b>
+Wi-Fi jest domyślnie wyłączone: włącz je w Settings › WiFi › <span class="lbl">WiFi allowed</span> i dodaj sieć (<span class="lbl">Find networks</span> › <span class="lbl">Scan</span>). Przy wczytanym kicie CrossPad może zaproponować restart w trybie sieciowym, bo Wi-Fi potrzebuje pamięci; wybierz wtedy <span class="lbl">Cancel</span>, jeśli nie chcesz restartu. Bez Wi-Fi zakładka Store pokazuje ostatnio pobrany katalog z jego datą.</div>
 
 <h2>Nowa wersja z karty</h2>
 <p>Tak instalujesz wersję, którą dostaniesz jako paczkę (folder z plikami firmware):</p>
@@ -31,7 +31,7 @@ W pierwszym wydaniu firmware katalog wersji na crosspad.app nie jest jeszcze uru
   <li>Przez pierwsze ok. 10 sekund po uruchomieniu nowej wersji nie wyłączaj CrossPada: w tym czasie wersja potwierdza, że działa.</li>
   <li>Aktualizuj z naładowaną baterią albo z podłączoną ładowarką.</li>
 </ul>
-<p>Settings › Updates: <span class="lbl">Check at startup</span> (sprawdzanie przy starcie), kanał <span class="lbl">Stable</span> albo <span class="lbl">Beta</span>. Gdy katalog online zacznie działać, nowsza wersja zapali na pomarańczowo ikonę na pasku statusu.</p>
+<p>Settings › Updates: <span class="lbl">Check at startup</span> (sprawdzanie przy starcie), kanał <span class="lbl">Stable</span> albo <span class="lbl">Beta</span>. Gdy jest nowsza wersja, ikona na pasku statusu świeci na pomarańczowo. Pobieranie i instalacja nie dzieją się same: zawsze zaczynasz je w zakładce <span class="lbl">Updates</span>.</p>
 <div class="tip"><b>Układ STM32</b>
 Pomocniczy procesor ma własne oprogramowanie, dostarczane razem z firmware. Gdy jest nowsza wersja, CrossPad sam zaproponuje jej instalację na ekranie.</div>
 </section>

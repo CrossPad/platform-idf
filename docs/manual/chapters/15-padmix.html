@@ -18,7 +18,7 @@
 <p><b>MODE → pad 12 „DAW”.</b> CrossPad staje się kontrolerem programu muzycznego na komputerze: <b>FL Studio, Ableton Live (11 i nowsze) albo REAPER</b>. Pady grają instrument w programie, z siłą uderzenia i naciskiem, program koloruje pady, a ekran pokazuje nazwę programu, trzy wiersze informacji (np. kanał, pattern, tempo), transport i rytm.</p>
 
 <h3>Skrypt na komputerze</h3>
-<p>Każdy z tych programów potrzebuje małego skryptu CrossPad, który mówi mu, co pokazać na ekranie i jak pokolorować pady. <b>Skrypty nie są częścią firmware i na razie nie można ich pobrać ze strony</b>: dostaniesz je od zespołu CrossPad. Instalacja:</p>
+<p>Każdy z tych programów potrzebuje małego skryptu CrossPad, który mówi mu, co pokazać na ekranie i jak pokolorować pady. <b>Skrypty nie są częścią firmware</b>: pobierzesz je z publicznego repozytorium <b>github.com/CrossPad/crosspad-dawcontrol</b>, z folderu <b>host/</b>. Instalacja:</p>
 <ul>
   <li><b>FL Studio:</b> w folderze <span class="lbl">Dokumenty/Image-Line/FL Studio/Settings/Hardware/</span> utwórz folder <span class="lbl">CrossPad</span> i włóż do niego plik <span class="lbl">device_CrossPad.py</span>. Uruchom FL z podłączonym CrossPadem: zwykle sam wykrywa kontroler. Jeśli nie: Options › MIDI Settings, port CrossPad jako wejście i wyjście, typ kontrolera „CrossPad”, ten sam numer portu.</li>
   <li><b>Ableton Live (11 i nowsze):</b> folder <span class="lbl">CrossPad</span> skopiuj do <span class="lbl">User Library/Remote Scripts/</span>, potem w Settings › Link, Tempo &amp; MIDI wybierz Control Surface „CrossPad” i port „Crosspad” (nie „CrossPad MIDI+Serial”).</li>
