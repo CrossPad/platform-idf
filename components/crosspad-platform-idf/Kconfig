@@ -1,0 +1,19 @@
+menu "CrossPad sampler engines"
+
+    config CROSSPAD_SAMPLER_MARCEL
+        bool "Build the prebuilt sample streamer beside the native engine"
+        default n
+        help
+            The native engine (crosspad-core src/sampler, SamplerEnginePort.cpp)
+            plays every sampler kit. This option builds the prebuilt streamer
+            (components/ml_sample_stream_player_lib, main/sample_player_port.cpp's
+            library glue, engine_handoff's start/stop, MarcelSampleNode) back in,
+            with its own "Sampler" mixer channel and the native engine on
+            "Sampler2", so the two can be A/B'd with SMPL_ENGINE native|marcel.
+
+            Off (the default) the image is ~25 kB of code smaller, the arena
+            belongs to the native engine from boot, the native engine's mixer
+            channel is "Sampler" in the slot the prebuilt one used to have, and
+            SMPL_ENGINE answers that only the native engine exists.
+
+endmenu

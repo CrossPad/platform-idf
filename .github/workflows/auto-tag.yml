@@ -1,0 +1,113 @@
+name: Auto tag
+
+# After a bump merge's main.yml push run is green: the next vX.Y.Z-rcN, created
+# with the bot token so the tag build starts. Spec: "Exact rules: Auto-tag".
+on:
+  workflow_run:
+    workflows: ["Build ESP-IDF Project"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "commit on main to tag (skips the bump-merge and green-run rules; must still be on main and untagged)"
+        required: true
+
+permissions:
+  packages: read
+  contents: read
+
+jobs:
+  tag:
+    concurrency:
+      group: auto-tag
+      cancel-in-progress: false
+    if: >-
+      vars.AUTO_TAG == 'on' && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success'))
+    # Holds the bot's private key: the secrets runner, like app-bump's reconcile job.
+    runs-on: ${{ vars.CI_SECRETS_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    environment: crosspad-bot
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.CROSSPAD_BOT_APP_ID }}
+          private-key: ${{ secrets.CROSSPAD_BOT_PRIVATE_KEY }}
+          owner: CrossPad
+          repositories: platform-idf
+          permission-contents: write
+          permission-pull-requests: read
+      - name: Tag
+        shell: bash
+        env:
+          BOT_TOKEN: ${{ steps.token.outputs.token }}
+          AUTO_TAG: ${{ vars.AUTO_TAG }}
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+          EVENT_NAME: ${{ github.event_name }}
+          SHA_INPUT: ${{ inputs.sha }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: "*"
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            python3 tools/auto_tag.py --repo "$GITHUB_REPOSITORY" --sha "$SHA_INPUT" --manual
+          else
+            python3 tools/auto_tag.py --repo "$GITHUB_REPOSITORY" --sha "$RUN_SHA" --event "$GITHUB_EVENT_PATH"
+          fi
+      - name: Alert
+        if: failure()
+        shell: bash
+        env:
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+          SHA_INPUT: ${{ inputs.sha }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          python3 tools/ci_alert.py "auto-tag failed" "a step of the tag job failed for ${SHA_INPUT:-$RUN_SHA}"
+
+  # Failure visibility for the unattended chain (no bot token, no environment, a
+  # read-only token): a red or timed-out push run on main is reported whether or
+  # not AUTO_TAG is on; a cancelled run only when it was a bump merge that
+  # Auto tag will therefore never see green. A run red only on the artifact
+  # storage quota stays quiet (actions/checks: read its jobs' annotations).
+  watch:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out' ||
+      github.event.workflow_run.conclusion == 'cancelled')
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      packages: read
+      contents: read
+      pull-requests: read
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Watch
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AUTO_TAG: ${{ vars.AUTO_TAG }}
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+        run: python3 tools/auto_tag.py --repo "$GITHUB_REPOSITORY" --event "$GITHUB_EVENT_PATH" --watch

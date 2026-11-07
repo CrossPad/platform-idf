@@ -1,0 +1,22 @@
+# This file was generated using idf.py save-defconfig. It can be edited manually.
+# Espressif IoT Development Framework (ESP-IDF) Project Minimal Configuration
+#
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+CONFIG_PARTITION_TABLE_CUSTOM=y
+
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+
+# Enable SPIRAM for WiFi/LWIP buffers to save internal RAM
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY=y
+
+# Skip PSRAM memtest at boot — HW known good, saves ~hundreds of ms
+CONFIG_SPIRAM_MEMTEST=n
+
+# Draw buffer: 320×30×2 = 19KB (DMA-capable in SRAM)
+CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=30

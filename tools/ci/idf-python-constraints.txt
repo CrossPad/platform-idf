@@ -1,0 +1,66 @@
+# Exact Python env of ESP-IDF v5.5.5 as validated by every release so far:
+# `pip freeze --all` of /opt/esp/python_env/idf5.5_py3.12_env in
+# espressif/idf:v5.5.5@sha256:a9231d0697ab8f7517cc072e93b7c83e04907bfbfba80b6440d7dbbf90665cf2
+# (2026-07-17). Used as IDF's constraints file, so install-python-env installs
+# exactly these versions instead of whatever dl.espressif.com publishes today.
+annotated-types==0.7.0
+argcomplete==3.7.0
+bitarray==3.9.0
+bitstring==4.4.0
+certifi==2026.6.17
+cffi==2.1.0
+charset-normalizer==3.4.9
+click==8.1.8
+colorama==0.4.6
+construct==2.10.70
+cryptography==44.0.3
+ecdsa==0.19.2
+esp-coredump==1.16.0
+esp-idf-diag==0.2.0
+esp-idf-kconfig==2.5.4
+esp-idf-monitor==1.9.0
+esp-idf-size==1.7.1
+esp-pylib==1.1.2
+esp_idf_nvs_partition_gen==0.1.9
+esp_idf_panic_decoder==1.5.0
+esptool==4.12.0
+freertos-gdb==1.0.4
+idf-component-manager==2.5.0
+idna==3.18
+intelhex==2.3.0
+jsonref==1.1.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+packaging==26.2
+pathvalidate==3.3.1
+pip==26.1.2
+psutil==7.2.2
+pyclang==0.7.0
+pycparser==3.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+pydantic_core==2.46.4
+pyelftools==0.33
+pygdbmi==0.11.0.0
+Pygments==2.20.0
+pyparsing==3.2.5
+pyserial==3.5
+python-dotenv==1.2.2
+PyYAML==6.0.3
+reedsolo==1.7.0
+requests==2.34.2
+requests-file==3.0.1
+requests-toolbelt==1.0.0
+rich==15.0.0
+rich-click==1.9.8
+ruamel.yaml==0.19.1
+setuptools==83.0.0
+six==1.17.0
+tibs==0.5.7
+tqdm==4.68.4
+tree-sitter==0.26.0
+tree-sitter-c==0.24.2
+truststore==0.10.4
+typing-inspection==0.4.2
+typing_extensions==4.16.0
+urllib3==1.26.20

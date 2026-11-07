@@ -1,0 +1,27 @@
+{
+  "name": "ml_sample_stream_player_lib",
+  "version": "1.1.0",
+  "keywords": "ml_sample_stream_player_lib, ESP32",
+  "description": "Sample Stream Player library",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/marcel-licence/"
+  },
+  "authors":
+  [
+    {
+        "name": "Marcel Licence",
+        "email": "marcel.licence.o@gmail.com",
+        "maintainer": true
+    }
+  ],
+  "build": {
+    "flags": [
+        "-lcrosspad_ply"
+    ]
+  },
+  "frameworks": "arduino",
+  "platforms": "raspberrypi, espressif8266, espressif32, ststm32",
+  "libArchive": true
+}

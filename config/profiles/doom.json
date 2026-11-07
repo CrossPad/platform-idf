@@ -1,0 +1,17 @@
+{
+  "name": "doom",
+  "display_name": "DOOM",
+  "icon": "icons/doom.png",
+  "description": "DOOM's shareware episode on the pads, the encoder and the panel, with its music. Quit Game goes back; pad 16 held at boot starts the main firmware.",
+  "platform": "esp-idf",
+  "features": {},
+  "standalone": "Doom",
+  "top_bar": false,
+  "sample_engine": false,
+  "apps": {
+    "doom": {
+      "track": "pinned",
+      "commit": "791aef0b38a8bcb93b13ac649cc557c5ccfff356"
+    }
+  }
+}

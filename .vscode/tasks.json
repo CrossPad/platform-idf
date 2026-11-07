@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CrossPad: CP Tools",
+      "type": "shell",
+      "command": "${config:idf.pythonBinPath}",
+      "args": ["-c", "from app_manager import core, ESP_IDF_CONFIG; core.tui_main(ESP_IDF_CONFIG)"],
+      "options": {
+        "env": { "PYTHONPATH": "${workspaceFolder}/tools", "PYTHONIOENCODING": "utf-8" }
+      },
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "CrossPad: OTA Flash",
+      "type": "shell",
+      "command": "${config:idf.pythonBinPath}",
+      "args": ["tools/ota_flash.py"],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

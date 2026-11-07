@@ -1,0 +1,48 @@
+<section class="chapter">
+<h1 id="slicer">Slicer: z pętli kit</h1>
+<p><b>MODE → pad 6 „Slicer”.</b> Slicer tnie pętlę (np. break perkusyjny albo fragment płyty) na maksymalnie 16 części, po jednej na pad, i zapisuje je jako kit.</p>
+
+<h2>Górny rząd</h2>
+<figure class="shot"><img src="img/slicer.png" alt=""><figcaption>Slicer przed wyborem nagrania</figcaption></figure>
+
+<ul>
+  <li><span class="lbl">◀</span> i nazwa pliku: stuknięcie nazwy wybiera nagranie z karty.</li>
+  <li>Tryb cięcia:
+    <ul>
+      <li><span class="lbl">HITS</span>: cięcie na każdym uderzeniu, wartość obok to czułość <span class="lbl">SENS</span> 0–100;</li>
+      <li><span class="lbl">EQUAL</span>: N równych części (2–16);</li>
+      <li><span class="lbl">FREE</span>: cięcie na ucho. Ciemny pad uruchamia pętlę i tnie ją w chwili uderzenia; świecący pad gra od swojego cięcia.</li>
+    </ul>
+  </li>
+  <li><span class="lbl">PITCH</span> −12…+12 półtonów (jak gramofon: wyżej znaczy szybciej). Słychać go w odsłuchu, na padach i w zapisanym kicie.</li>
+  <li><span class="lbl">▶</span> cała pętla w kółko.</li>
+</ul>
+<p>Poza trybem FREE każdy pad gra swój kawałek („slice”), w kolorze, który dostanie w kicie.</p>
+
+<h2>Dolny rząd</h2>
+<table>
+<tr><th style="width:18%">Klawisz</th><th>Co robi</th></tr>
+<tr><td><span class="lbl">SEL</span></td><td>Wybór kawałka: kręć, każdy jest od razu słyszany.</td></tr>
+<tr><td><span class="lbl">MOVE</span></td><td>Przesuwa początek wybranego kawałka: najpierw zgrubnie, potem co milisekundę z powiększeniem.</td></tr>
+<tr><td><span class="lbl">+</span> · <span class="lbl">DEL</span></td><td>Dzieli kawałek na dwa / łączy go z poprzednim.</td></tr>
+<tr><td><span class="lbl">ATK</span></td><td>Narastanie (atak) każdego kawałka, 0–500 ms: łagodny początek zamiast twardego wejścia.</td></tr>
+<tr><td><span class="lbl">SNAP</span></td><td>Domyślnie włączony. Każde cięcie trafia w przejście sygnału przez zero tuż przed uderzeniem, więc kawałki nie trzaskają, a atak uderzenia zostaje.</td></tr>
+<tr><td><span class="lbl">FX</span></td><td>Okno efektów: <span class="lbl">PITCH</span> z zachowaną długością, <span class="lbl">LOW PASS</span>, <span class="lbl">HIGH PASS</span>, <span class="lbl">NORMALIZE</span> (do −0,3 dB), <span class="lbl">LISTEN</span>, <span class="lbl">APPLY</span>. APPLY zapisuje kopię pliku z efektami; cięcia zostają na swoich miejscach. W trakcie przeliczania nad przebiegiem widać ramkę <span class="lbl">PROCESSING n%</span>.</td></tr>
+<tr><td><span class="lbl">KIT</span></td><td>Zapis kitu. Najpierw pytanie o rodzaj, potem o nazwę (niżej).</td></tr>
+</table>
+
+<h2>Zapis kitu: User kit czy Slice kit</h2>
+<table>
+<tr><th style="width:20%">Wybór</th><th>Co powstaje</th></tr>
+<tr><td><span class="lbl">User kit</span></td><td>Twój kit w liście <b>PERF</b>: każdy kawałek wycięty do osobnego pliku WAV, z PITCH i ATK wpisanymi w plik. Gra jak każdy kit, a w Samplerze możesz dalej edytować każdy pad osobno.</td></tr>
+<tr><td><span class="lbl">Slice kit</span></td><td>Kit w liście <b>SLICE</b>: jedna pętla, a każdy pad gra jej fragment. PITCH i ATK są grane na żywo. Gra jednym głosem, jak klasyczny sampler z pociętym breakiem.</td></tr>
+</table>
+
+<ol class="steps">
+  <li>Nagraj pętlę w Recorderze (np. z <span class="lbl">LINE 1/2</span>), ustaw <span class="lbl">START</span> i <span class="lbl">END</span>, naciśnij <span class="lbl">SLICE ▸</span>.</li>
+  <li>Wybierz <span class="lbl">HITS</span> albo <span class="lbl">EQUAL</span>; popraw cięcia przez <span class="lbl">SEL</span>, <span class="lbl">MOVE</span>, <span class="lbl">+</span>, <span class="lbl">DEL</span>.</li>
+  <li>Ustaw <span class="lbl">ATK</span>, w razie potrzeby <span class="lbl">FX</span>.</li>
+  <li><span class="lbl">KIT</span> → <span class="lbl">User kit</span> albo <span class="lbl">Slice kit</span> → nazwa. W trakcie zapisu widać <span class="lbl">SAVING KIT n%</span>; gotowy kit jest w przeglądarce kitów.</li>
+</ol>
+<p class="small">Gramofon podłączaj przez przedwzmacniacz gramofonowy (phono): wejścia liniowe CrossPada go nie zastąpią.</p>
+</section>

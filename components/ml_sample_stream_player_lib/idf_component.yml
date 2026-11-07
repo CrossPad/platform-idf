@@ -1,0 +1,6 @@
+version: "1.0.0"
+description: "My ESP-IDF compatible library"
+url: "https://github.com/yourname/my_library"
+
+dependencies:
+  idf: ">=5.0"

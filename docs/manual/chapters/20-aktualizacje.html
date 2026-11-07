@@ -1,0 +1,37 @@
+<section class="chapter">
+<h1 id="aktualizacje">Aktualizacje</h1>
+<p><b>MODE → pad 15 „Update”</b> otwiera aplikację <b>Firmware</b>. CrossPad ma dwa miejsca na oprogramowanie, sloty <b>A</b> i <b>B</b>. Na kafelku znaczek <span class="lbl">▶A</span> (albo <span class="lbl">▶B</span>) pokazuje, z którego slotu CrossPad właśnie działa. Nowa wersja zawsze trafia do drugiego, wolnego slotu, więc poprzednia zostaje nietknięta.</p>
+
+<h2>Zakładki</h2>
+<figure class="shot"><img src="img/firmware.png" alt=""><figcaption>Aplikacja Firmware, zakładka Library</figcaption></figure>
+
+<table>
+<tr><th style="width:18%">Zakładka</th><th>Co zawiera</th></tr>
+<tr><td><span class="lbl">Library</span></td><td>Wersje firmware zapisane na karcie i to, co jest w slotach A i B.</td></tr>
+<tr><td><span class="lbl">Store</span></td><td>Katalog wersji do pobrania (Official i Community), przez Wi-Fi.</td></tr>
+<tr><td><span class="lbl">Updates</span></td><td>Sprawdzanie nowszej wersji; <span class="lbl">Check now</span> sprawdza od razu.</td></tr>
+</table>
+<p>Kafelek otwiera kartę wersji z opisem i przyciskami: <span class="lbl">Download</span>, <span class="lbl">Install</span>, <span class="lbl">Install and run</span>, <span class="lbl">Run</span>, <span class="lbl">Pin</span>/<span class="lbl">Unpin</span> (przypięta wersja nie zostanie usunięta przy porządkach), <span class="lbl">Delete</span>. Wersje Community pochodzą od społeczności i pokazują ostrzeżenie.</p>
+
+<div class="warn"><b>Katalog online jeszcze nie działa</b>
+W pierwszym wydaniu firmware katalog wersji na crosspad.app nie jest jeszcze uruchomiony: <span class="lbl">Store</span> pokaże, że sklep jest niedostępny, a <span class="lbl">Check now</span> zakończy się błędem. Wi-Fi jest też domyślnie wyłączone (Settings › WiFi › <span class="lbl">WiFi allowed</span>). Przy wczytanym kicie CrossPad może zaproponować restart w trybie sieciowym, bo Wi-Fi potrzebuje pamięci; wybierz wtedy <span class="lbl">Cancel</span>, jeśli nie chcesz restartu.</div>
+
+<h2>Nowa wersja z karty</h2>
+<p>Tak instalujesz wersję, którą dostaniesz jako paczkę (folder z plikami firmware):</p>
+<ol class="steps">
+  <li>Settings › USB › <span class="lbl">SD card as USB drive</span> › <span class="lbl">Start</span>: CrossPad uruchomi się ponownie i karta pojawi się w komputerze jako dysk (rozdział <a href="#komputer">CrossPad i komputer</a>).</li>
+  <li>Skopiuj folder paczki do <span class="lbl">crosspad/firmware/</span> na karcie, wysuń dysk w komputerze i na CrossPadzie wybierz <span class="lbl">Exit and restart</span>.</li>
+  <li>Aplikacja Firmware › <span class="lbl">Library</span>: stuknij kafelek nowej wersji i wybierz <span class="lbl">Install</span> albo <span class="lbl">Install and run</span>.</li>
+</ol>
+
+<h2>Bezpieczna aktualizacja</h2>
+<ul>
+  <li>Każda wersja firmware ma własne ustawienia.</li>
+  <li>Jeśli nowa wersja nie uruchomi się poprawnie, CrossPad sam wraca do poprzedniego slotu. Jego kafelek mówi wtedy <i>did not start last time</i> i ma przycisk <span class="lbl">Try this slot again</span>.</li>
+  <li>Przez pierwsze ok. 10 sekund po uruchomieniu nowej wersji nie wyłączaj CrossPada: w tym czasie wersja potwierdza, że działa.</li>
+  <li>Aktualizuj z naładowaną baterią albo z podłączoną ładowarką.</li>
+</ul>
+<p>Settings › Updates: <span class="lbl">Check at startup</span> (sprawdzanie przy starcie), kanał <span class="lbl">Stable</span> albo <span class="lbl">Beta</span>. Gdy katalog online zacznie działać, nowsza wersja zapali na pomarańczowo ikonę na pasku statusu.</p>
+<div class="tip"><b>Układ STM32</b>
+Pomocniczy procesor ma własne oprogramowanie, dostarczane razem z firmware. Gdy jest nowsza wersja, CrossPad sam zaproponuje jej instalację na ekranie.</div>
+</section>

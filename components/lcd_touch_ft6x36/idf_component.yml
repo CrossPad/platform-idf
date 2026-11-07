@@ -1,0 +1,8 @@
+dependencies:
+  esp_lcd_touch:
+    public: true
+    version: ^1.0.0
+  idf: '>=5.3.0'
+  
+description: ESP LCD Touch FT6x36 - touch controller FT6x36
+version: 1.0.0

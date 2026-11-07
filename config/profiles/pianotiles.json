@@ -1,0 +1,17 @@
+{
+  "name": "pianotiles",
+  "display_name": "Piano Tiles",
+  "icon": "icons/pianotiles.png",
+  "description": "Piano Tiles: six classic tunes played tile by tile on the pads, which light what comes. Five levels a song, best scores kept. Quit in the pause menu goes back.",
+  "platform": "esp-idf",
+  "features": {},
+  "standalone": "PianoTiles",
+  "top_bar": false,
+  "sample_engine": false,
+  "apps": {
+    "pianotiles": {
+      "track": "pinned",
+      "commit": "125665c7980e021d11759bf88fda6aaf06ce098e"
+    }
+  }
+}

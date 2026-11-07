@@ -1,0 +1,8 @@
+# The HIL suite (tools/hil_*.py) is now the crosspad-hil package.
+# It is not on PyPI yet, so it installs from git — the same form the installer
+# and the docs use (https://crosspad.app/docs/reference/facts/, hil.install_cmd):
+#   pip install -r tools/requirements-hil.txt
+# From a local checkout (what you want while both repos move together):
+#   pip install -e "../crosspad-hil[all]"
+# Once it is published this line becomes: crosspad-hil[all]
+crosspad-hil[all] @ git+https://github.com/CrossPad/crosspad-hil

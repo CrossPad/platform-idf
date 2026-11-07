@@ -1,0 +1,86 @@
+<section class="chapter">
+<h1 id="technologia">Jak działa CrossPad</h1>
+
+<p>Ten rozdział nie jest potrzebny do grania, ale tłumaczy, skąd biorą się zachowania opisane dalej: dlaczego naraz słychać tylko dwa wejścia, czemu kit zmienia się bez przerwy w muzyce i co dokładnie nagrywa komputer.</p>
+
+<h2>Dwa procesory</h2>
+<ul>
+  <li><b>ESP32-S3</b> (dwa rdzenie, 240 MHz, 8 MB pamięci PSRAM, 16 MB flash) prowadzi ekran, aplikacje, silnik dźwięku, mikser, sekwencer, USB, Bluetooth i Wi-Fi. Jeden rdzeń zajmuje się głównie dźwiękiem, drugi ekranem i resztą, więc przewijanie listy nie zakłóca grania.</li>
+  <li><b>STM32</b> skanuje 16 padów (siła uderzenia i nacisk), steruje zasilaniem i ładowaniem baterii, obsługuje gniazda MIDI IN/OUT i drugi port USB. Działa także wtedy, gdy główny procesor śpi, dlatego przycisk zasilania zawsze odpowiada.</li>
+</ul>
+
+<h2>Droga dźwięku</h2>
+<p>Każdy dźwięk w CrossPadzie przechodzi przez jeden mikser. Źródła to aplikacje i wejścia, wyjścia to gniazda i komputer:</p>
+
+<svg class="diagram" viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica Neue, Arial, sans-serif" font-size="12">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5d646d"/></marker></defs>
+  <text x="10" y="18" font-weight="700" fill="#16181B">Źródła</text>
+  <g fill="#20242A">
+    <rect x="10" y="28" width="170" height="26" rx="5"/><rect x="10" y="60" width="170" height="26" rx="5"/>
+    <rect x="10" y="92" width="170" height="26" rx="5"/><rect x="10" y="124" width="170" height="26" rx="5"/>
+    <rect x="10" y="156" width="170" height="26" rx="5"/><rect x="10" y="188" width="170" height="26" rx="5"/>
+  </g>
+  <g fill="#E8EAED">
+    <text x="20" y="46">Pady → Sampler</text><text x="20" y="78">Pitch Play → Pitched</text>
+    <text x="20" y="110">Utwór (Arrange) → Song</text><text x="20" y="142">Metronom → Click</text>
+    <text x="20" y="174">Odsłuch plików → Preview</text><text x="20" y="206">Komputer → USB</text>
+  </g>
+  <rect x="10" y="226" width="170" height="64" rx="5" fill="#2C3138"/>
+  <text x="20" y="244" fill="#E8EAED">Wejścia: Mic, Line 1/2,</text>
+  <text x="20" y="260" fill="#E8EAED">Line 3/4 → 2 przetworniki</text>
+  <text x="20" y="278" fill="#00FF88">para wybierana w Mikserze</text>
+  <rect x="250" y="70" width="150" height="170" rx="8" fill="#00FF88"/>
+  <text x="325" y="120" text-anchor="middle" font-weight="700" font-size="15" fill="#06120C">MIKSER</text>
+  <text x="325" y="146" text-anchor="middle" fill="#06120C">poziom · panorama</text>
+  <text x="325" y="164" text-anchor="middle" fill="#06120C">MUTE · SOLO</text>
+  <text x="325" y="182" text-anchor="middle" fill="#06120C">ROUTE: wysyłki</text>
+  <text x="325" y="200" text-anchor="middle" fill="#06120C">na każde wyjście</text>
+  <g stroke="#5d646d" stroke-width="1.5" fill="none" marker-end="url(#ar)">
+    <path d="M180,41 L250,110"/><path d="M180,73 L250,125"/><path d="M180,105 L250,140"/>
+    <path d="M180,137 L250,155"/><path d="M180,169 L250,170"/><path d="M180,201 L250,185"/><path d="M180,258 L250,215"/>
+    <path d="M400,110 L460,62"/><path d="M400,155 L460,155"/><path d="M400,200 L460,248"/>
+  </g>
+  <text x="460" y="18" font-weight="700" fill="#16181B">Wyjścia</text>
+  <g fill="#20242A"><rect x="460" y="36" width="170" height="52" rx="5"/><rect x="460" y="129" width="170" height="52" rx="5"/><rect x="460" y="222" width="170" height="52" rx="5"/></g>
+  <text x="470" y="56" fill="#E8EAED" font-weight="700">Out 1/2 · Phones</text><text x="470" y="74" fill="#9aa1aa">słuchawki + głośniki</text>
+  <text x="470" y="149" fill="#E8EAED" font-weight="700">Out 3/4 · Line out</text><text x="470" y="167" fill="#9aa1aa">wyjście liniowe</text>
+  <text x="470" y="242" fill="#E8EAED" font-weight="700">USB</text><text x="470" y="260" fill="#9aa1aa">to, co nagrywa komputer</text>
+</svg>
+
+<ul>
+  <li><b>Trzy wejścia, dwa przetworniki.</b> CrossPad ma dwa kodeki audio ES8388, a każdy z nich zamienia na cyfrowy jeden sygnał stereo naraz. Dlatego z trzech wejść (Mic, Line 1/2, Line 3/4) słychać jednocześnie dwa. Którą parę, wybierasz w Mikserze (zakładka <span class="lbl">IN</span>), a Recorder nazywa swoje źródła dokładnie tak, jak para je ustawia.</li>
+  <li><b>Każde wyjście ma własny tor.</b> Kodek 0 gra na słuchawki i głośniki (Out 1/2), kodek 1 na wyjście liniowe (Out 3/4). Na karcie <span class="lbl">ROUTE</span> każde źródło ma osobny suwak wysyłki na każde wyjście, więc np. metronom może grać tylko w słuchawkach.</li>
+  <li><b>Komputer nagrywa szynę USB.</b> To, co program muzyczny dostaje z CrossPada, jest trzecim wyjściem miksera: przy każdym starcie to, co wyślesz na <span class="lbl">USB</span> w ROUTE. Dźwięk z komputera wraca do miksera jako źródło <span class="lbl">USB</span>, więc słyszysz go w słuchawkach razem z padami.</li>
+  <li><b>Jakość.</b> Silnik i mikser pracują w 44,1 kHz (48 kHz do wyboru w Settings › Audio), pliki są 16-bitowe stereo. Mikser liczy w liczbach zmiennoprzecinkowych, a każde wyjście ma ogranicznik, który chroni przed przesterowaniem.</li>
+</ul>
+
+<h2>Silnik sampli</h2>
+<ul>
+  <li><b>Granie prosto z karty.</b> Z każdego sampla w pamięci leży tylko początek (ok. 64 kB), reszta jest doczytywana z karty microSD w trakcie grania. Dzięki temu sample mogą być długie (całe pętle, wokale, nagrania), a kit z szesnastoma długimi plikami nie zapełnia pamięci.</li>
+  <li><b>Zmiana kitu bez przerwy.</b> Nowy kit wczytuje się pad po padzie w tle. To, co właśnie gra, kończy się na starym dźwięku, a uderzenie w pad, który akurat się wczytuje, zostaje odegrane zaraz po wczytaniu.</li>
+  <li><b>Głosy.</b> Kilkanaście dźwięków może brzmieć naraz. Kity perkusyjne (DRUMS) grają do 12 głosów, a instrument w Pitch Play do 4, bo każdy jego głos przestraja sampel w czasie rzeczywistym.</li>
+  <li><b>Pamięć.</b> 8 MB PSRAM dzielą między siebie silniki dźwięku i ekran; pasek stanu pokazuje wolną pamięć jako <span class="lbl">PS</span>. Silnik bierze tyle, ile potrzebuje bieżący kit, i oddaje resztę po kilku sekundach ciszy.</li>
+</ul>
+
+<h2>Czas, tempo i utwory</h2>
+<ul>
+  <li><b>Jedno tempo dla wszystkiego.</b> Sequencer, Arrange, metronom i zegar MIDI biorą tempo z pola <span class="lbl">BPM</span> na pasku transportu. Gdy komputer wysyła zegar MIDI, CrossPad idzie za nim (w Sequencerze pole tempa robi się niebieskie i nie da się go wtedy zmienić), a po sekundzie bez zegara wraca do własnego tempa.</li>
+  <li><b>Nuty, nie dźwięk.</b> Sequencer zapisuje uderzenia padów jako nuty z siłą uderzenia, więc pattern można zagrać innym kitem albo przesunąć w czasie (kwantyzacja, swing) bez utraty jakości.</li>
+  <li><b>Zamrażanie ścieżek.</b> Utwór w Arrange może mieć do 8 ścieżek, a jeden silnik sampli gra tylko jeden kit naraz. Ścieżki, które nie są uzbrojone (<span class="lbl">ARM</span>), CrossPad zgrywa w tle do plików WAV na karcie, kilka razy szybciej niż w czasie rzeczywistym, i odtwarza je jak nagrania. Zmiana nut, kitu albo tempa ścieżki unieważnia takie zgranie i robi je od nowa.</li>
+  <li><b>Rozciąganie czasu.</b> Nagranie w Arrange można dopasować do tempa utworu bez zmiany wysokości dźwięku; CrossPad liczy to w tle i pokazuje postęp na ekranie.</li>
+</ul>
+
+<h2>Karta, pliki i aktualizacje</h2>
+<ul>
+  <li><b>Wszystko jest plikiem.</b> Kity to foldery z plikiem <span class="lbl">kit.json</span> i samplami WAV, utwory to foldery projektów, nagrania to zwykłe pliki WAV. Kartę można przeczytać w komputerze albo wystawić jako dysk USB bez wyjmowania (rozdział <a href="#komputer">CrossPad i komputer</a>). Nazwy plików i kitów mogą zawierać polskie litery.</li>
+  <li><b>Dwa miejsca na firmware.</b> Pamięć ma dwa sloty, A i B. Nowa wersja trafia do slotu, który nie pracuje; jeśli po aktualizacji nie uruchomi się poprawnie, CrossPad sam wraca do poprzedniej. Poprzednią wersję można też włączyć ręcznie w aplikacji Firmware.</li>
+  <li><b>Wi-Fi na żądanie.</b> Wi-Fi włącza się tylko wtedy, gdy coś go potrzebuje (np. zakładka Store w aplikacji Firmware), i wyłącza się samo 30 sekund później, oddając pamięć silnikowi dźwięku.</li>
+</ul>
+
+<h2>Łączność i czujniki</h2>
+<ul>
+  <li><b>USB Audio Class 2 i USB MIDI.</b> macOS i Linux widzą CrossPada jako kartę dźwiękową „Crosspad Audio” i urządzenie MIDI bez instalowania sterowników (Windows 10/11 ma taki sterownik wbudowany, ale nie był testowany). CrossPad sam rozpoznaje, czy rozmawia z macOS, czy z Linuksem, i dopasowuje do niego zegar dźwięku.</li>
+  <li><b>MIDI wszędzie:</b> USB, Bluetooth LE MIDI i klasyczne gniazda MIDI IN/OUT (jack 3,5 mm, typ A lub B). Każde z nich trafia do tych samych padów i aplikacji.</li>
+  <li><b>Czujnik ruchu</b> rozpoznaje stuknięcia w obudowę, podwójne stuknięcia, przechylenie i spadek; silniczek wibracji potwierdza niektóre akcje.</li>
+</ul>
+</section>

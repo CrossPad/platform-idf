@@ -1,0 +1,186 @@
+name: CI image
+
+# tools/ci/Dockerfile is the one image the CI of every CrossPad repository runs
+# in (platform-idf, CrossPad_STM32_r2, crosspad-core, crosspad-gui,
+# crosspad-hil): one ESP-IDF, one Arm toolchain, one cmake, one Python set.
+# This builds it, runs its self-test offline and publishes it as
+#   ghcr.io/crosspad/crosspad-ci:<IDF_VERSION>-<CI_IMAGE_REV>   (e.g. v5.5.5-1)
+#
+# Two jobs, and a run only ever has one of them:
+# - test: a pull request that changes tools/ci/ or this file, or a manual run
+#   on any branch but main. Builds and self-tests a throwaway image with a
+#   read-only token, where the build jobs run (repository variable CI_RUNNER,
+#   GitHub's runner when unset). On a self-hosted runner the job removes the
+#   image and prunes the BuildKit cache after itself.
+# - publish: main only, on a push that changes tools/ci/ or by hand. The one
+#   job with packages: write. A published tag is never overwritten: a change to
+#   tools/ci/ needs a new CI_IMAGE_REV, and every consumer moves to it -- by
+#   the digest the job summary prints -- in a reviewed commit of its own.
+#   It runs where every job holding a secret or a write token runs: on
+#   GitHub's runner, or on the runner the repository variable
+#   CI_SECRETS_RUNNER names, never on the runners that run pull requests'
+#   jobs. Other jobs pull the image from the registry by digest.
+# Both jobs run the docker CLI directly on the runner, not in a container.
+# The registry login goes to a DOCKER_CONFIG directory under runner.temp,
+# which the last step removes.
+# The package is private; each consumer repository needs Read under the
+# package's "Manage Actions access".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/ci/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/ci/**'
+      - '.github/workflows/ci-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel a publish half-way.
+concurrency:
+  group: ci-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    env:
+      IMAGE: crosspad-ci:test
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/ci
+          persist-credentials: false
+
+      - name: Build
+        run: |
+          docker build --pull --no-cache \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "$IMAGE" tools/ci
+          docker image ls "$IMAGE"
+
+      # Offline: everything a build needs must already be in the image.
+      - name: Self-test
+        run: docker run --rm --network none "$IMAGE" /opt/crosspad-ci/smoke.sh
+
+      # Self-hosted only: GitHub's runner is thrown away anyway.
+      - name: Clean up
+        if: always() && vars.CI_RUNNER
+        run: |
+          docker image rm -f "$IMAGE" || true
+          docker builder prune -f || true
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_SECRETS_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/ci
+          persist-credentials: false
+
+      # The registry login lives only in this directory, removed by the last
+      # step, whatever the runner's own ~/.docker holds.
+      - name: Private Docker config
+        env:
+          CONFIG_DIR: ${{ runner.temp }}/docker-config
+        run: |
+          set -eu
+          mkdir -p "$CONFIG_DIR"
+          chmod 700 "$CONFIG_DIR"
+          echo "DOCKER_CONFIG=$CONFIG_DIR" >> "$GITHUB_ENV"
+
+      - name: Image name
+        id: ref
+        run: |
+          set -eu
+          idf=$(sed -n 's/^ARG IDF_VERSION=//p' tools/ci/Dockerfile)
+          rev=$(sed -n 's/^ARG CI_IMAGE_REV=//p' tools/ci/Dockerfile)
+          test -n "$idf" && test -n "$rev"
+          echo "image=ghcr.io/crosspad/crosspad-ci:$idf-$rev" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to ghcr.io
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      # Only a registry that says the tag is not there lets the job go on:
+      # "manifest unknown" / "not found" for a missing tag or package, or
+      # "denied" (GHCR's answer for a package nobody may read yet; were it a
+      # real lack of access, the push below would be denied the same way and
+      # overwrite nothing). A timeout, a 5xx or anything else stops here.
+      - name: Refuse to overwrite a published tag
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+        run: |
+          set -u
+          if out=$(docker manifest inspect "$IMAGE" 2>&1); then
+            echo "::error::$IMAGE is already published -- bump CI_IMAGE_REV in tools/ci/Dockerfile"
+            exit 1
+          fi
+          case "$out" in
+            *"manifest unknown"*|*"no such manifest"*|*"not found"*|*"name unknown"*|*denied*)
+              echo "$IMAGE is not published yet ($out)" ;;
+            *)
+              echo "::error::cannot tell whether $IMAGE is published: $out"
+              exit 1 ;;
+          esac
+
+      - name: Build
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+        run: |
+          docker build --pull --no-cache \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "$IMAGE" tools/ci
+          docker image ls "$IMAGE"
+
+      - name: Self-test
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+        run: docker run --rm --network none "$IMAGE" /opt/crosspad-ci/smoke.sh
+
+      # Consumers pin the digest, not the tag: GHCR lets a tag be moved. The
+      # summary carries the sed that pins it in a consumer's workflows.
+      - name: Push
+        env:
+          IMAGE: ${{ steps.ref.outputs.image }}
+        run: |
+          set -eu
+          docker push "$IMAGE"
+          ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE")
+          digest=${ref#*@}
+          case "$digest" in sha256:*) ;; *) echo "::error::no digest for $IMAGE ($ref)"; exit 1 ;; esac
+          size=$(docker image inspect --format '{{.Size}}' "$IMAGE")
+          re=$(printf '%s' "$IMAGE" | sed 's/[.]/\\./g')
+          {
+            echo "### $IMAGE"
+            echo "- digest: \`$digest\`"
+            echo "- size: $((size / 1048576)) MiB"
+            echo "- pin it in each consumer repository (from its root):"
+            printf '```\nsed -i -E '\''s#(%s)(@sha256:[0-9a-f]{64})?([^0-9]|$)#\\1@%s\\3#'\'' .github/workflows/*.yml\n```\n' "$re" "$digest"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log out
+        if: always()
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker-config
+        run: |
+          docker logout ghcr.io || true
+          rm -rf "$DOCKER_CONFIG"

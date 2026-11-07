@@ -1,0 +1,34 @@
+# Doxyfile for CrossPad (ESP-IDF)
+
+PROJECT_NAME           = "CrossPad (ESP-IDF)"
+PROJECT_BRIEF          = "ESP32-S3 interactive pad controller"
+OUTPUT_DIRECTORY       = docs/doxygen
+
+# Input
+INPUT                  = main/ components/crosspad-platform-idf/
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.hpp *.c *.cpp
+EXCLUDE                = main/app/app_registry_init.cpp
+EXCLUDE_PATTERNS       = */build/* */managed_components/* */.pio/*
+
+# Parsing
+JAVADOC_AUTOBRIEF      = YES
+BUILTIN_STL_SUPPORT    = YES
+PREDEFINED             = USE_LVGL=1 ESP_PLATFORM
+
+# Extraction
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+SORT_MEMBERS_CTORS_1ST = YES
+
+# HTML output
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_COLORSTYLE        = DARK
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = YES
+SEARCHENGINE           = YES
+SOURCE_BROWSER         = YES
+
+# Diagrams
+HAVE_DOT               = NO

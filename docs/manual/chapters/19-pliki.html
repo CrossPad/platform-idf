@@ -1,0 +1,22 @@
+<section class="chapter">
+<h1 id="pliki">Karta microSD i pliki</h1>
+<p>Wszystko, co tworzysz, jest na karcie microSD. Najwygodniej przenosisz pliki trybem dysku USB (rozdział <a href="#komputer">CrossPad i komputer</a>) albo w czytniku kart.</p>
+<table>
+<tr><th style="width:36%">Folder na karcie</th><th>Co w nim jest</th></tr>
+<tr><td><span class="lbl">/crosspad/kits/</span></td><td>Kity do grania (lista PERF), także twoje User kity ze Slicera.</td></tr>
+<tr><td><span class="lbl">/crosspad/drums/</span></td><td>Zestawy perkusyjne (lista DRUMS).</td></tr>
+<tr><td><span class="lbl">/crosspad/slicer/</span></td><td>Slice kity ze Slicera (lista SLICE).</td></tr>
+<tr><td><span class="lbl">/crosspad/recordings/</span></td><td>Nagrania z Recordera (rec_001.wav, …), ich kopie z efektami i pętle zapisane w Recorderze i Slicerze (loop_001.wav, …).</td></tr>
+<tr><td><span class="lbl">/crosspad/pitchplay/</span></td><td>Instrumenty zapisane w Pitch Play.</td></tr>
+<tr><td><span class="lbl">/crosspad/mixer/</span></td><td>Zapisane presety Miksera.</td></tr>
+<tr><td><span class="lbl">/crosspad/firmware/</span></td><td>Biblioteka firmware (aplikacja Firmware). Każda wersja w osobnym folderze.</td></tr>
+<tr><td><span class="lbl">/SONGS/&lt;nazwa&gt;/</span></td><td>Utwory z Arrange: aranżacja, sceny, nagrane klipy, eksport miksu &lt;nazwa&gt;.wav.</td></tr>
+</table>
+
+<h2>Format kitu</h2>
+<p>Kit to folder z plikiem <span class="lbl">kit.json</span> (nazwa, autor, tempo, ustawienia padów) i podfolderem <span class="lbl">SAMPLES/</span> z plikami WAV. Sample powinny mieć <b>44,1 kHz, 16 bitów</b>, mono albo stereo. Nowe kity skopiowane na kartę pojawiają się w przeglądarce po ponownym uruchomieniu CrossPada.</p>
+<div class="tip"><b>Nazwy z polskimi znakami</b>
+CrossPad obsługuje polskie litery w nazwach kitów i folderów.</div>
+<div class="warn"><b>Nie wyjmuj karty w trakcie zapisu</b>
+Nagrywanie, zapis kitu, bounce i eksport piszą na kartę. Wyjęcie karty w tym czasie może uszkodzić plik.</div>
+</section>

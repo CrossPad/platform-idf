@@ -1,0 +1,27 @@
+<section class="chapter">
+<h1 id="midi">MIDI</h1>
+<p>CrossPad wysyła i odbiera MIDI na trzy sposoby naraz: przez USB, Bluetooth LE i klasyczne gniazda MIDI (jack 3,5 mm).</p>
+
+<table>
+<tr><th style="width:22%">Połączenie</th><th>Jak używać</th></tr>
+<tr><td><b>USB MIDI</b></td><td>Działa w obu trybach USB. Pady wysyłają nuty z siłą uderzenia i naciskiem (aftertouch), CrossPad odbiera nuty i zegar.</td></tr>
+<tr><td><b>Bluetooth LE MIDI</b></td><td>Settings › BLE MIDI: <span class="lbl">Enabled</span> (domyślnie wyłączone), <span class="lbl">Role</span>: Server (CrossPad widoczny dla komputera, tabletu, telefonu) albo Host (CrossPad sam łączy się z urządzeniem: <span class="lbl">Find devices</span> › <span class="lbl">Scan</span> › <span class="lbl">Connect</span>). <span class="lbl">Send transpose</span> przesuwa nuty padów, np. pod Drum Rack albo FPC.</td></tr>
+<tr><td><b>MIDI IN / OUT (jack)</b></td><td>Syntezatory, automaty, inne kontrolery. Typ wyjścia ustaw zgodnie z przejściówką: Settings › MIDI › <span class="lbl">MIDI Out Type</span> = <b>Type A</b> albo <b>Type B</b>. Co trafia na gniazda i skąd, ustawiasz w Settings › MIDI (Routing).</td></tr>
+</table>
+<div class="tip"><b>Bluetooth i Wi-Fi nie działają naraz</b>
+Gdy pracuje Wi-Fi, Bluetooth czeka; CrossPad pokazuje <i>BLE starts when WiFi stops</i>.</div>
+
+<h2>Zegar MIDI i tempo</h2>
+<ul>
+  <li>Gdy program na komputerze wysyła zegar MIDI przez USB, CrossPad podąża za jego tempem, a Start i Stop z komputera startują i zatrzymują odtwarzanie. Pole BPM jest wtedy niedostępne do edycji.</li>
+  <li>Po sekundzie ciszy z komputera CrossPad sam generuje zegar w swoim tempie (z ostatnim tempem komputera).</li>
+  <li>Zegar CrossPada idzie na Bluetooth i na wyjście MIDI OUT, więc możesz nim synchronizować automat perkusyjny albo syntezator. Do komputera zegar nie wraca.</li>
+</ul>
+
+<h2>Ustawienia MIDI w skrócie</h2>
+<ul>
+  <li><b>Keypad Routing:</b> czy pady wysyłają na BLE, na USB i czy wysyłają CC.</li>
+  <li><b>Routing gniazd:</b> MIDI IN → przelot na MIDI OUT (Thru), MIDI IN → USB, USB → MIDI OUT, CrossPad → MIDI OUT.</li>
+  <li><b>Pad MIDI Output</b> (Settings › Pads &amp; LEDs) i <b>Motion MIDI</b>: komunikaty MIDI z przechyłu i obrotu CrossPada.</li>
+</ul>
+</section>

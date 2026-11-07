@@ -1,0 +1,57 @@
+<section class="chapter">
+<h1 id="mixer">Mixer: wejścia, wyjścia, routing</h1>
+<p><b>MODE → pad 11 „Mixer”.</b> Mikser decyduje, co słychać na słuchawkach i wyjściu liniowym i co trafia do komputera przez USB. Pady cały czas grają kit, więc każdą zmianę słychać od razu. Ustawienia zapisują się same przy wyjściu z aplikacji.</p>
+
+<h2>Zakładki</h2>
+<figure class="shot"><img src="img/mixer.png" alt=""><figcaption>Mixer, zakładka SOURCES</figcaption></figure>
+
+<table>
+<tr><th style="width:18%">Zakładka</th><th>Co zawiera</th></tr>
+<tr><td><span class="lbl">IN</span></td><td>Wejścia: Mic, Line 1/2, Line 3/4 i USB in (dźwięk z komputera). Pod nazwą widać wzmocnienie (gain). <span class="lbl">MON</span> wysyła wejście na słyszalne wyjścia albo je stamtąd zdejmuje. Przycisk <span class="lbl">PAIR</span> z nazwą bieżącej pary przełącza pary wejść (niżej).</td></tr>
+<tr><td><span class="lbl">SOURCES</span></td><td>Źródła wewnętrzne: Sampler, Pitched (Pitch Play), Click (metronom), Song, Preview (odsłuch w przeglądarce). Przyciski <span class="lbl">M</span> (wycisz) i <span class="lbl">S</span> (solo).</td></tr>
+<tr><td><span class="lbl">OUT</span></td><td>Wyjścia, każde z własnym poziomem: Speakers i Phones (Out 1/2), Line out (Out 3/4) oraz USB. <span class="lbl">M</span> wycisza wyjście, <span class="lbl">LIM</span> świeci, gdy pracuje ogranicznik.</td></tr>
+<tr><td><span class="lbl">ROUTE</span></td><td>Macierz <b>SEND TO</b>: wiersz na każdy kanał, kolumna na każde wyjście (Phones 1/2, Line out 3/4, USB). W każdej komórce suwak z poziomem albo „off”.</td></tr>
+<tr><td><span class="lbl">PRESETS</span></td><td>Gotowe ustawienia i własne zapisy (niżej).</td></tr>
+</table>
+
+<h2>Paski i sterowanie</h2>
+<ul>
+  <li>Każdy pasek ma nazwę, suwak z miernikiem, wartość i dwa przyciski. Na ekranie mieści się pięć pasków, resztę przewijasz w bok.</li>
+  <li>Klawisze na dole: <span class="lbl">LEVEL</span> / <span class="lbl">PAN</span> przełączają suwaki między głośnością a panoramą, <span class="lbl">RESET</span> przywraca 0 dB albo środek.</li>
+  <li><b>Enkoder</b> dociera do każdego elementu: obrót przesuwa wybór po zakładkach, paskach i klawiszach; kliknięcie na suwaku zaczyna zmianę, obrót zmienia, kliknięcie kończy. W ROUTE obrót zmienia obramowaną wysyłkę o 5.</li>
+  <li><b>Stuknięcie nazwy kanału</b> otwiera jego okno: Gain (Mic 0 … +48 dB co 3 dB, linie −24 … +24 dB), Monitor (off / 1/2 / 3/4 / both), Pan i suwaki wysyłek do Phones 1/2, Line out 3/4 i USB. <span class="lbl">✓ Done</span> zamyka.</li>
+  <li>W zakładce OUT paski nazywają się <span class="lbl">Speakers</span>, <span class="lbl">Phones</span>, <span class="lbl">Line out</span> i <span class="lbl">USB</span> (pod nazwą widać gniazdo: Out 1/2, Out 3/4). Stuknięcie nazwy otwiera korektor: Low (160 Hz), Mid (1,2 kHz), High (5 kHz), ±12 dB, oraz <span class="lbl">FLAT</span>. Speakers i Phones mają jeden wspólny korektor Out 1/2, Line out własny; USB korektora nie ma.</li>
+</ul>
+
+<h2>Para wejść</h2>
+<figure class="shot"><img src="img/mixer_in.png" alt=""><figcaption>Zakładka IN: wejścia i para wejść (prawy dolny róg)</figcaption></figure>
+
+<p>CrossPad słyszy naraz dwa z trzech wejść. Przycisk <span class="lbl">PAIR</span> w zakładce IN przy każdym naciśnięciu przechodzi do następnej pary: <span class="lbl">Mic + 1/2</span> (domyślnie), <span class="lbl">Mic + 3/4</span>, <span class="lbl">1/2 + 3/4</span>. Wejście spoza pary jest przygaszone z opisem „not in pair”, a jego ustawienia są zapamiętane. Recorder pokazuje nazwy wejść z wybranej pary.</p>
+
+<h2>Co nagrywa komputer (szyna USB)</h2>
+<figure class="shot"><img src="img/mixer_route.png" alt=""><figcaption>Zakładka ROUTE: wysyłki na Phones, Line out i USB</figcaption></figure>
+
+<p>Komputer nagrywa z CrossPada <b>dokładnie to, co trafia do kolumny USB w ROUTE</b>, łącznie z wejściami. Metronom i dźwięk z samego komputera domyślnie do USB nie trafiają. Dodatkowe wzmocnienie tej szyny ustawisz w Settings › USB › <span class="lbl">DAW Output dB</span>. W tym samym miejscu, w sekcji dla zaawansowanych, <span class="lbl">Recording Source</span> może do restartu nagrywać zamiast tego wprost mikrofony albo wejście liniowe, tak jak przyciski w DAW Control.</p>
+<div class="warn"><b>RESET w ROUTE</b>
+<span class="lbl">RESET</span> wysyła wszystko na słyszalne wyjścia na 0 dB i <b>nic do USB</b>. Po nim komputer nic nie nagrywa, dopóki znowu nie ustawisz wysyłek do USB. <span class="lbl">CLEAR</span> wyłącza wszystkie wysyłki wybranego wiersza.</div>
+
+<h2>Presety</h2>
+<p>Sześć miejsc. Trzy gotowe punkty startowe: <span class="lbl">STREAM</span> (pady, utwór i wejścia do USB, np. do transmisji), <span class="lbl">BEATS</span> (wszystko na wyjścia, do USB tylko pady, wejścia wyłączone), <span class="lbl">SAMPLING</span> (do nagrywania sampli, bez metronomu). Miejsca <span class="lbl">PRESET 4–6</span> są na twoje ustawienia. <span class="lbl">LOAD</span> wczytuje, <span class="lbl">SAVE AS</span> zapisuje pod nazwą (potrzebna karta SD), <span class="lbl">UNDO</span> wraca do stanu sprzed ostatniego LOAD.</p>
+
+<h2>Typowe ustawienia</h2>
+<h3>Mikrofon do komputera</h3>
+<ol class="steps">
+  <li>Settings › USB › <span class="lbl">Mode</span> = MIDI + Audio.</li>
+  <li>Mixer › <span class="lbl">IN</span> › stuknij Mic i ustaw Gain.</li>
+  <li><span class="lbl">ROUTE</span>: w wierszu Mic podnieś suwak w kolumnie USB.</li>
+  <li>W programie na komputerze wybierz wejście „Crosspad Audio”.</li>
+</ol>
+<h3>Odsłuch wejścia liniowego w słuchawkach</h3>
+<ol class="steps">
+  <li>Podłącz źródło do Line 1/2 i sprawdź, czy para je obejmuje (np. Mic + 1/2).</li>
+  <li><span class="lbl">IN</span> › stuknij Line 1/2, ustaw Gain i Monitor „1/2”.</li>
+  <li>Głośność ustaw suwakiem Phones w zakładce <span class="lbl">OUT</span>.</li>
+</ol>
+<div class="warn"><b>Sprzężenie</b>
+Mikrofony są tuż przy głośnikach. Wysłanie Mic na Out 1/2 przy włączonych głośnikach albo słuchawkach trzymanych przy obudowie może wywołać pisk. Wtedy wyłącz głośniki albo zdejmij to wysłanie.</div>
+</section>

@@ -1,0 +1,607 @@
+name: Build ESP-IDF Project
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'Doxyfile'
+      - '.github/workflows/docs.yml'
+  # No paths-ignore here: main requires "build (v2)" and
+  # bump-gate, and a pull request the trigger skipped never reported them, so
+  # a change to Markdown or docs/ alone could not be merged. The changes job
+  # decides what such a PR runs instead.
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      revs:
+        description: "Board revisions to build (v1 is off by default: nobody runs it any more)"
+        default: "v2"
+        required: false
+
+# A push on top of a still-running build supersedes it; a tag build is never
+# cancelled by a later branch push.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+# Optional self-hosted runner: with the repository variable CI_RUNNER set to
+# `self-hosted` (tools/ci_runner.py on), every job runs there and ccache
+# survives between runs. Unset it (`... off`) when that runner goes offline,
+# or the jobs queue forever: GitHub never falls back from a self-hosted label
+# to a hosted runner.
+# The release job is the exception: it holds the signing key and a write
+# token, so it runs on GitHub's runner, or where the repository variable
+# CI_SECRETS_RUNNER points (see there).
+# Every job runs in ghcr.io/crosspad/crosspad-ci (tools/ci/Dockerfile, built
+# and published by ci-image.yml): ESP-IDF v5.5.5 for esp32s3 only, the same
+# image the other CrossPad repositories build in. It is pinned here by tag and
+# digest (GHCR lets a tag be moved, not a digest), so a release tag always
+# builds in exactly the image its commit names.
+# Read-only by default (plus pulling the image); the release job alone may write.
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  # Whether there is anything to build: false only for a pull request whose
+  # every file is Markdown or under docs/ (what paths-ignore used to skip).
+  # The file list comes from the API, so no checkout on the runner's host.
+  changes:
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.c.outputs.code }}
+    steps:
+      - id: c
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.setOutput('code', 'true');
+              return;
+            }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            // A rename counts by both paths (src/x.cpp -> docs/x.md removes
+            // code), and a list the API cut short (3000 files at most) or
+            // that disagrees with the PR's own count builds everything.
+            const isDocs = (p) => p.endsWith('.md') || p.startsWith('docs/');
+            const complete = files.length > 0 &&
+              files.length === context.payload.pull_request.changed_files;
+            const docsOnly = complete && files.every((f) =>
+              isDocs(f.filename) && (!f.previous_filename || isDocs(f.previous_filename)));
+            core.setOutput('code', docsOnly ? 'false' : 'true');
+
+  # The required build checks for a pull request with nothing to build. A
+  # skipped matrix job reports under its unexpanded name, so with code to
+  # build this job never answers for "build (v2)".
+  build-docs:
+    needs: changes
+    if: needs.changes.outputs.code == 'false'
+    name: build (${{ matrix.rev }})
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    strategy:
+      matrix:
+        rev: [v2]
+    steps:
+      - run: echo "Only Markdown or docs/ changed; nothing to build."
+
+  # Which kits to build. A tag (a release), a manual run and a pull request
+  # that touches config/profiles build every kit; any other push only the
+  # default kit. Only v2 unless a manual run names more (input revs). tools/ci_matrix.py refuses a profile whose name
+  # cannot be a kit id before anything compiles.
+  matrix:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    # Same container as build: on the self-hosted runner the build leaves
+    # root-owned files (build_*) in the shared workspace, and a
+    # checkout on the host cannot clean them.
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      cells: ${{ steps.m.outputs.matrix }}
+    steps:
+      # Submodules for crosspad-gui's font generator: tools/ci_matrix.py checks
+      # profile text against the glyph range it lists (tools/fw_text.py). The
+      # build job's token; without it (a fork) the run's own, which reaches
+      # public submodules.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          submodules: true
+          token: ${{ secrets.SUBMODULE_PAT || github.token }}
+
+      # Official kits build what their profile pins, and a pin must equal the
+      # gitlink beside it (tools/app_bump.py; spec 2026-10-10 release
+      # automation). A human who moves a gitlink runs `tools/app_bump.py pin <id>`.
+      - name: Kit pins match the gitlinks
+        shell: bash
+        run: python3 tools/app_bump.py check
+      - id: m
+        shell: bash
+        env:
+          REVS: ${{ github.event.inputs.revs }}
+        run: |
+          all=""
+          if [[ "${GITHUB_REF}" == refs/tags/v* || "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
+            all="--all"
+          elif [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then
+            # A git failure must not read as "no profile change" (that would
+            # silently skip the lite kit): fail the step instead. No pipe, so the
+            # exit status is git's own.
+            changed=$(git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" -- config/profiles) ||
+              { echo "::error::git diff against origin/${GITHUB_BASE_REF} failed"; exit 1; }
+            if [[ -n "$changed" ]]; then all="--all"; fi
+          fi
+          python3 tools/ci_matrix.py $all --revs "${REVS:-v2}" --github-output
+
+  build:
+    needs: matrix
+    # The default kit keeps the check names the main-branch ruleset requires
+    # ("build (v2)"); other kits, and a manual run's v1, add their name.
+    name: build (${{ matrix.rev }}${{ matrix.kit != 'full' && format(', {0}', matrix.kit) || '' }})
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      # The cache volume (ccache, IDF components, pip for littlefs-python, all
+      # under /cache) is one for pushes to main, one for everything else. A
+      # release tag builds from scratch: its volume is mounted away from
+      # /cache (`volumes` is a list, it cannot be left out for one kind of
+      # run), and ccache is off (IDF_CCACHE_ENABLE below). The signing key
+      # never reaches these jobs (release). On a hosted runner the volume
+      # starts empty.
+      volumes:
+        - crosspad-ci-cache-${{ github.event.repository.name }}-${{ startsWith(github.ref, 'refs/tags/v') && 'release' || github.ref == 'refs/heads/main' && 'trusted' || 'untrusted' }}:${{ startsWith(github.ref, 'refs/tags/v') && '/unused' || '/cache' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.cells) }}
+    env:
+      IDF_CCACHE_ENABLE: ${{ startsWith(github.ref, 'refs/tags/v') && '0' || '1' }}
+      CCACHE_DIR: /cache/ccache
+      # A self-hosted runner keeps one cache for every cell and kit; on a
+      # hosted runner it travels through GitHub's cache, so it stays smaller.
+      CCACHE_MAXSIZE: ${{ vars.CI_RUNNER && '2G' || '500M' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_PAT || github.token }}
+
+      # ~1950 compilation units; most of them are IDF and LVGL and do not
+      # change between commits. The key is per revision and kit (different
+      # sdkconfig, pinout, app set and flags); the restore prefixes let any
+      # earlier cache of the same revision seed a build.
+      # On a self-hosted runner ccache lives in the cache volume; GitHub's
+      # cache only for hosted runners. A tag uses neither.
+      - name: Compiler cache
+        if: ${{ !vars.CI_RUNNER && !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.rev }}-${{ matrix.kit }}-${{ hashFiles(format('sdkconfig.{0}', matrix.rev), 'sdkconfig.defaults', 'dependencies.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.rev }}-${{ matrix.kit }}-${{ hashFiles(format('sdkconfig.{0}', matrix.rev), 'sdkconfig.defaults', 'dependencies.lock') }}-
+            ccache-${{ matrix.rev }}-${{ matrix.kit }}-
+            ccache-${{ matrix.rev }}-
+
+      # The IDF component cache is one per runner, inside the shared volume:
+      # the component manager keeps a git-sourced component as one repository
+      # it checks out from, and two cells configuring at once in one shared
+      # cache take the same index.lock. A runner runs one job at
+      # a time, so no directory has two writers; ccache stays shared, it is
+      # built for that. For the same reason an index.lock found here at the
+      # start of a job is one a cancelled job left behind, and every later job
+      # on that runner would fail on it until it is removed.
+      - name: Component cache per runner
+        shell: bash
+        run: |
+          dir="/cache/idf-components/${RUNNER_NAME//[^A-Za-z0-9_-]/_}"
+          [[ -d $dir ]] && find "$dir" -maxdepth 2 -name index.lock -print -delete
+          echo "IDF_COMPONENT_CACHE_PATH=$dir" >> "$GITHUB_ENV"
+
+      - name: Pin the app manager core
+        shell: bash
+        run: |
+          ref=$(< tools/app_manager.core-ref)
+          ref=${ref//[[:space:]]/}
+          [[ $ref =~ ^[0-9a-f]{40}$ ]] || { echo "::error::tools/app_manager.core-ref must hold one 40-hex crosspad-apps sha, got '$ref'"; exit 1; }
+          echo "CROSSPAD_APPS_CORE_REF=$ref" >> "$GITHUB_ENV"
+
+      # The same app manager a developer runs, so a CI kit is exactly what
+      # `idf.py app-profile apply <kit>` gives locally. In CI apps.json is
+      # empty, so --remove-extra removes nothing: the submodules stay on disk,
+      # CMake picks up every components/crosspad-* it finds, and the kit is
+      # chosen by -DCROSSPAD_FW_KIT, not by what profile apply leaves checked out.
+      - name: Apply the kit's profile (${{ matrix.profile }})
+        shell: bash
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: "*"
+        run: python3 tools/app_manager.py profile apply "${{ matrix.profile }}" --remove-extra
+
+      # Every pinned app's `requires` holds for the core/gui this cell builds
+      # with (tools/deps_resolve.py; spec 2026-10-11 deps resolver). Other apps
+      # stay on disk (see above), so check reads only the apps the profile names.
+      - name: Dependency ranges hold (${{ matrix.profile }})
+        if: matrix.tier == 'official'
+        shell: bash
+        run: python3 tools/deps_resolve.py check --profile "${{ matrix.profile }}"
+
+      # A tag pins the version: applying a profile dirties the tree, and the
+      # image would otherwise call itself "<tag>-dirty", a version no catalog
+      # entry names.
+      - name: Build (rev ${{ matrix.rev }}, kit ${{ matrix.kit }})
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          if [ "$IDF_CCACHE_ENABLE" = 1 ] && ! command -v ccache >/dev/null; then
+            echo "::warning::ccache not in the image, building without it"; export IDF_CCACHE_ENABLE=0
+          fi
+          ver=()
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then ver=(-DPROJECT_VER="${GITHUB_REF_NAME}"); fi
+          idf.py -B build_${{ matrix.rev }} -DSDKCONFIG=sdkconfig.${{ matrix.rev }} -DCROSSPAD_FW_KIT=${{ matrix.kit }} "${ver[@]}" build
+
+      # The image is the pins: what profile apply left in components/ must be
+      # exactly what the official profile pins (a silent branch checkout would
+      # otherwise ship code no PR built). Every official build, not only tags.
+      - name: Built components are the kit's pins (rev ${{ matrix.rev }}, kit ${{ matrix.kit }})
+        if: matrix.tier == 'official'
+        shell: bash
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: "*"
+        run: |
+          git submodule status > "$RUNNER_TEMP/components-${{ matrix.rev }}-${{ matrix.kit }}.txt"
+          python3 tools/app_bump.py assert-built --profile "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/components-${{ matrix.rev }}-${{ matrix.kit }}.txt"
+
+      # What this cell was built from, for the release's components list
+      # (tools/ci_release_assets.py): a branch-tracked app in the profile is
+      # past the tag's gitlinks by now, so the release job's own clean tag
+      # checkout cannot say. As root on a workspace made under another uid,
+      # git needs the trust passed to every submodule it enters.
+      - name: Record the components built (rev ${{ matrix.rev }}, kit ${{ matrix.kit }})
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: "*"
+        run: git submodule status > build_${{ matrix.rev }}/components.txt
+
+      - name: Size report
+        if: always()
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          {
+            echo "### rev ${{ matrix.rev }}, kit ${{ matrix.kit }} — image size"
+            echo '```'
+            idf.py -B build_${{ matrix.rev }} size 2>/dev/null | sed -n '/Total image size/,$p'
+            echo '```'
+            echo "ccache: $(ccache -s 2>/dev/null | grep -E 'Hits:|Misses:' | tr -s ' ' | paste -sd ' ')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # assets.bin travels here too: app OTA never touches that partition, so
+      # a release needs it beside the app image (tools/fs_transfer.py assets);
+      # assets_id.txt lets the release job prove the pair belongs together
+      # (tools/make_fw_package.py). Two steps, one per kind of push, and only
+      # ever one of them runs. A branch push keeps the images and nothing else
+      # for three days; the ELF and the map are 15 MB of the 17, and every push
+      # keeping them for the default ninety days is what filled the org's
+      # Actions storage until CI could no longer upload anything at all.
+      # On a pull request the images are a convenience and the check is the
+      # build: an upload the org's full Actions storage refuses ("Artifact
+      # storage quota has been hit", recalculated only every 6-12 hours) must
+      # not turn a cell that compiled red -- the ruleset would not let even an
+      # admin merge such a PR. A branch push and a tag stay
+      # strict: the release job needs what they upload.
+      - name: Archive build output artifacts (rev ${{ matrix.rev }}, kit ${{ matrix.kit }})
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ matrix.rev }}-${{ matrix.kit }}
+          retention-days: 3
+          path: |
+            build_${{ matrix.rev }}/bootloader/bootloader.bin
+            build_${{ matrix.rev }}/partition_table/partition-table.bin
+            build_${{ matrix.rev }}/CrossPad.bin
+            build_${{ matrix.rev }}/assets.bin
+            build_${{ matrix.rev }}/assets_id.txt
+            build_${{ matrix.rev }}/flash_args
+
+      # A tag is a release: the whole set, and the release job copies the ELF
+      # out of it.
+      - name: Archive build output artifacts with debug files (rev ${{ matrix.rev }}, kit ${{ matrix.kit }})
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ matrix.rev }}-${{ matrix.kit }}
+          path: |
+            build_${{ matrix.rev }}/bootloader/bootloader.bin
+            build_${{ matrix.rev }}/partition_table/partition-table.bin
+            build_${{ matrix.rev }}/CrossPad.bin
+            build_${{ matrix.rev }}/CrossPad.elf
+            build_${{ matrix.rev }}/CrossPad.map
+            build_${{ matrix.rev }}/assets.bin
+            build_${{ matrix.rev }}/assets_id.txt
+            build_${{ matrix.rev }}/components.txt
+            build_${{ matrix.rev }}/flash_args
+
+  # Required check (ruleset). Passes at once for any PR that is not the bot's
+  # auto/app-bump; for that one it enforces the auto-merge rules (spec, "Exact
+  # rules: Auto-merge"): only official apps' gitlinks and their pins move, one
+  # verified commit by the bot at the head sha of this event, every matrix cell
+  # green. It runs the BASE branch's tools/bump_gate.py; the PR's tree is only
+  # read by git (diff, show), never checked out or executed. No secrets, a
+  # read-only token.
+  # On pull_request this file comes from the PR, so the gate is only as strong as
+  # who may change the branch: it relies on the auto/app-bump branch ruleset (only
+  # crosspad-bot may update it) and on the bot's App having no workflows permission.
+  # Red on the PR that introduces it: the base branch has no tools/bump_gate.py yet,
+  # so every PR from the time of that PR's own run fails this job until it merges.
+  # Expected; add bump-gate to the required checks only after that merge.
+  bump-gate:
+    timeout-minutes: 10
+    needs: [matrix, build]
+    # Not always(): a cancelled run is not judged. A failed matrix or build (build then
+    # skipped) still runs the gate, which fails a bot PR on any result but success.
+    if: "!cancelled() && github.event_name == 'pull_request'"
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      packages: read
+      contents: read
+      pull-requests: read
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: "*"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+
+      # Objects only, and only for the bump PR (a person's PR never needs it). A
+      # stale ref is dropped first and a failed fetch fails the job: the script
+      # judges the event's head sha and needs that commit here.
+      - name: Fetch the PR head
+        if: github.event.pull_request.head.ref == 'auto/app-bump'
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git update-ref -d refs/remotes/pr/head
+          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+
+      - name: Bump PR rules
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: python3 tools/bump_gate.py --event "$GITHUB_EVENT_PATH" --build-result "$BUILD_RESULT"
+
+  # A tag produces a draft release with every kit's signed packages and the
+  # default kit under the old names. Draft, not published: publishing is what
+  # the Discord announcer listens for, the release notes are written by a
+  # person, and crosspad.app's device catalog lists published releases only.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [matrix, build]
+    # Signs on GitHub's runner, or on the runner CI_SECRETS_RUNNER names;
+    # unset it and signing moves to an ephemeral hosted runner with no other
+    # change.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_SECRETS_RUNNER || 'ubuntu-latest' }}
+    environment: firmware-release
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+      packages: read
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+    steps:
+      # For main/stm32_fw/stm32_fw.bin, main/fw_sign_pubkey.h and tools/;
+      # the app images come from the build job's artifacts. Full history for
+      # the provenance check.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      # Git in this job runs as the container's root on a workspace checkout
+      # created under another uid ("dubious ownership"); the checkout action
+      # trusts it only for its own calls.
+      - name: Trust the workspace
+        shell: bash
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Before anything references FW_SIGNING_KEY: a tag on a commit that is
+      # not on main is never signed, whoever pushed it.
+      # git only until the commit is proven on main: the checkout is the tag's
+      # own code, so no repo script runs before that.
+      - name: Provenance (the tag is on main)
+        shell: bash
+        run: |
+          commit=$(git rev-parse "$GITHUB_SHA^{commit}")
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$commit" origin/main || { echo "::error::$commit is not on main"; exit 1; }
+          python3 tools/fw_semver.py check "$GITHUB_REF_NAME"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+
+      # The private key exists only in the FW_SIGNING_KEY secret of the
+      # firmware-release environment (tags v*), added by a maintainer
+      # (docs/subsystems/firmware-updates.md "Keys"). It is written
+      # to a file, used and removed inside this one step: a trap, not a later
+      # step, so a self-hosted runner whose job dies here keeps no key on disk.
+      - name: Release files
+        shell: bash
+        env:
+          MATRIX: ${{ needs.matrix.outputs.cells }}
+          FW_SIGNING_KEY: ${{ secrets.FW_SIGNING_KEY }}
+        run: |
+          set -e
+          if [ -z "$FW_SIGNING_KEY" ]; then
+            echo "::error::FW_SIGNING_KEY is not set -- a maintainer adds it (docs/subsystems/firmware-updates.md)"
+            exit 1
+          fi
+          umask 077
+          key=$(mktemp /dev/shm/fw_sign.XXXXXX)
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$FW_SIGNING_KEY" > "$key"
+          tag="${GITHUB_REF_NAME}"
+          python3 tools/ci_release_assets.py --tag "$tag" --dist dist --out out \
+            --matrix "$MATRIX" --key "$key"
+          rm -f "$key"
+          # The STM32 image is revision-independent and the companion offers it
+          # on its own (crosspad.app/api/firmware); the copy inside assets.bin
+          # is what the device offers after a reboot.
+          cp main/stm32_fw/stm32_fw.bin "out/CrossPad-$tag-stm32_fw.bin"
+          (cd out && sha256sum * > SHA256SUMS.txt)
+          ls -l out
+
+      - name: Draft release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: out/*
+
+      # out/ holds exactly what Draft release uploaded; a failure here stops
+      # the job before Publish.
+      - name: Verify the upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/ci_publish_release.py verify --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --out out
+
+      # rc tags only, AUTO_PUBLISH=on; a stable stays a draft for a human.
+      # publish re-verifies against out/ before it changes anything.
+      - name: Publish an rc
+        id: publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTO_PUBLISH: ${{ vars.AUTO_PUBLISH }}
+        run: python3 tools/ci_publish_release.py publish --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --out out
+
+      - name: Alert
+        if: failure()
+        shell: bash
+        env:
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+        run: |
+          python3 tools/ci_alert.py "release failed: $GITHUB_REF_NAME" "a step of the release job failed"
+
+  # A red tag build stops before release: the unattended chain (auto-tag, then
+  # the draft and publish) would otherwise end in silence. Read-only, no
+  # environment: the webhook is a repository secret.
+  tag-alert:
+    timeout-minutes: 5
+    needs: [matrix, build]
+    if: failure() && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_SECRETS_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      packages: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Alert
+        shell: bash
+        env:
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+        run: |
+          python3 tools/ci_alert.py "tag build red: $GITHUB_REF_NAME" "matrix or build failed; no release was drafted"
+
+  # After an auto-published rc: superseded releases back to draft (never
+  # deleted). RETENTION=dry-run prints the plan only; unset skips. --keep is
+  # the tag just published, so a hotfix rc in an older minor line is never
+  # unpublished right after its own publish. --apply needs RETENTION=on and a
+  # v* tag ref (this run is the release's own run).
+  retention:
+    timeout-minutes: 10
+    needs: [release]
+    if: needs.release.outputs.published == 'true' && vars.RETENTION != ''
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      packages: read
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Retention
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RETENTION: ${{ vars.RETENTION }}
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+        run: |
+          mode=""
+          if [ "$RETENTION" = "on" ] && [[ "$GITHUB_REF" == refs/tags/v* ]]; then mode="--apply"; fi
+          python3 tools/release_retention.py --repo "$GITHUB_REPOSITORY" --keep "$GITHUB_REF_NAME" $mode \
+            || { python3 tools/ci_alert.py "retention refused: $GITHUB_REF_NAME" "see the run's summary"; exit 1; }
+
+  catalog-check:
+    timeout-minutes: 20
+    needs: [matrix, release, retention]
+    if: always() && needs.release.outputs.published == 'true'
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: crosspad.app lists the tag and the newest stable
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX: ${{ needs.matrix.outputs.cells }}
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+        run: python3 tools/catalog_check.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --matrix "$MATRIX"

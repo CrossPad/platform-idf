@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "platform": "esp-idf",
+  "features": {},
+  "apps": {
+    "instructions": {
+      "track": "pinned",
+      "commit": "3b6e4985c19e48fcd0d69a552f027b8a9cb9b462"
+    },
+    "sampler": {
+      "track": "registry"
+    },
+    "mixer": {
+      "track": "registry"
+    },
+    "dawcontrol": {
+      "track": "registry"
+    },
+    "arrange": {
+      "track": "registry"
+    },
+    "pad-mixer": {
+      "track": "registry"
+    },
+    "sequencer": {
+      "track": "registry"
+    },
+    "song": {
+      "track": "registry"
+    },
+    "recorder": {
+      "track": "registry"
+    },
+    "slicer": {
+      "track": "registry"
+    }
+  }
+}

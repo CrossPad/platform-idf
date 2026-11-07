@@ -1,0 +1,16 @@
+{
+  "name": "lite",
+  "display_name": "CrossPad Lite",
+  "icon": "icons/lite.png",
+  "description": "Only the Sampler, with global pad tuning: the smallest firmware.",
+  "platform": "esp-idf",
+  "features": {
+    "CROSSPAD_PAD_CONFIG_LEVEL": "CROSSPAD_PAD_CONFIG_GLOBAL",
+    "FEAT_PAD_EDITOR": false,
+    "FEAT_SETTINGS_BACKUP": false,
+    "FEAT_PERF_STATS": false
+  },
+  "apps": {
+    "sampler": { "track": "pinned", "commit": "efca418219e69272ffdaea933016ced16a609321" }
+  }
+}

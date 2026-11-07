@@ -1,0 +1,61 @@
+<section class="chapter">
+<h1 id="arrange">Arrange: utwór na ścieżkach</h1>
+<p><b>MODE → pad 4 „Arrange”.</b> Arrange to główne miejsce pracy nad utworem: oś czasu z maksymalnie ośmioma ścieżkami. <b>Ścieżki audio</b> trzymają nagrania (mikrofon, wejścia, pady, komputer), <b>ścieżki kitów</b> trzymają nuty grane kitem (PERF, DRUMS, SLICE) albo instrumentem Pitch Play. Na ekranie widać cztery ścieżki naraz, resztę przewijasz.</p>
+<p class="small">Ograniczenia: najwyżej 8 ścieżek, w tym jedna ścieżka Pitch Play. Każda ścieżka kitu zajmuje jedną z 8 scen Sequencera; gdy wszystkie są zajęte, CrossPad poprosi o zgranie (bounce) jednej z nich.</p>
+
+<h2>Górny rząd</h2>
+<figure class="shot"><img src="img/arrange.png" alt=""><figcaption>Arrange: cztery ścieżki utworu</figcaption></figure>
+
+<table>
+<tr><th style="width:24%">Klawisz</th><th>Co robi</th></tr>
+<tr><td>nazwa utworu</td><td>Lista <b>Songs</b>: <span class="lbl">+ NEW</span> nowy utwór, pozostałe utwory do otwarcia. Kliknięcie otwartego utworu daje jego ustawienia: tempo, nazwa, <span class="lbl">Export mix to WAV</span>, <span class="lbl">Export to Ableton Live</span>, usunięcie utworu.</td></tr>
+<tr><td><span class="lbl">MIX</span></td><td>Pulpit: dla każdej ścieżki PAN, suwak głośności w dB, miernik z pamięcią szczytu, <span class="lbl">M</span> (wycisz) i <span class="lbl">S</span> (solo). Stuknięcie wartości PAN ustawia środek, stuknięcie dB ustawia 0 dB.</td></tr>
+<tr><td><span class="lbl">→</span></td><td>Widok podąża za kursorem odtwarzania.</td></tr>
+<tr><td><span class="lbl">EDIT</span></td><td>Menu edycji (niżej). Przytrzymanie EDIT cofa ostatnią zmianę (undo).</td></tr>
+<tr><td><span class="lbl">SYNC</span></td><td>Sekwencer gra razem z utworem.</td></tr>
+<tr><td><span class="lbl">1/16</span></td><td>Kwantyzacja nagrań nut, jak w Sequencerze.</td></tr>
+<tr><td><span class="lbl">LOOP</span></td><td>Zapętla zaznaczony region, a gdy regionu nie ma, cały utwór.</td></tr>
+<tr><td><span class="lbl">ZOOM</span></td><td>Trzy poziomy przybliżenia osi czasu.</td></tr>
+</table>
+
+<h2>Ścieżki</h2>
+<ul>
+  <li><span class="lbl">+ ADD TRACK</span> (pod ostatnią ścieżką): <span class="lbl">AUDIO</span> tworzy ścieżkę audio, od razu uzbrojoną, z wejściem MIC. <span class="lbl">KITS</span> daje do wyboru PERF, DRUMS, SLICE (kit z przeglądarki) albo PITCH PLAY.</li>
+  <li>Nagłówek ścieżki: numer, <span class="lbl">S</span>, <span class="lbl">M</span>, kropka ARM i nazwa. <b>Stuknięcie</b> otwiera menu ścieżki, <b>przytrzymanie</b> od razu ją wycisza.</li>
+  <li>Menu ścieżki: kit albo instrument, <span class="lbl">Arm for REC</span>, wejście (dla audio: MIC, LINE, MIC+LINE, USB, PADS, odsłuch Monitor ON/OFF), <span class="lbl">Bounce</span> (nuty ścieżki kitu do audio), <span class="lbl">Stretch</span> (jak klip audio reaguje na zmianę tempa: OFF / Stretch / Repitch), Mute, Solo, Rename, Colour, Duplicate, przesuwanie w górę i w dół, Delete.</li>
+  <li><b>Na żywo gra tylko uzbrojona (ARM) ścieżka kitu.</b> Pozostałe ścieżki kitów CrossPad sam „zamraża” do pliku po zatrzymaniu (płatek śniegu, napis <i>FREEZING TRACK n</i>) i gra ich nagranie. Przełączenie ARM na inną ścieżkę kitu najpierw zamraża poprzednią, potem wczytuje nowy kit.</li>
+</ul>
+
+<h2>Bloki</h2>
+<ul>
+  <li>Stuknięcie bloku (albo kliknięcie enkoderem) daje klawisze <span class="lbl">MOVE</span> <span class="lbl">DUP</span> <span class="lbl">DEL</span> <span class="lbl">CLIP EDIT</span>.</li>
+  <li><span class="lbl">MOVE</span>: pierwszy klik przesuwa blok o takty, drugi między ścieżkami, trzeci kończy. Blok możesz też przytrzymać i przeciągnąć palcem.</li>
+  <li><span class="lbl">DUP</span> wstawia kopię zaraz za blokiem, <span class="lbl">DEL</span> usuwa blok.</li>
+  <li><span class="lbl">CLIP EDIT</span>: blok kitu otwiera się w Sequencerze, blok audio w Recorderze (przycinanie, FX).</li>
+  <li>Linijka nad ścieżkami: stuknięcie ustawia kursor, przytrzymanie i przeciągnięcie zaznacza region pętli.</li>
+</ul>
+
+<h2>Menu EDIT</h2>
+<p>Undo / Redo, nagranie bloku od nowa, dodanie klipu z biblioteki, <b>elementy</b> (aranżacja wewnątrz bloku: nowy element, element z biblioteki, element z regionu), przecięcie ścieżki w takcie, ustawienie regionu pętli. Z zaznaczonym regionem: kopiuj, wklej, podwój, wstaw puste takty, usuń region. Do tego łączenie ścieżek i długość utworu.</p>
+
+<h2>Nagrywanie</h2>
+<ul>
+  <li><b>Ścieżka kitu (uzbrojona):</b> <span class="lbl">REC</span> przy zatrzymaniu (z odliczaniem) nagrywa nowy blok nut, <span class="lbl">DUB</span> dogrywa do bloków pod kursorem. W trakcie gry REC/DUB wchodzi w nagrywanie od miejsca kursora. Nagranie kończysz przyciskiem STOP; kursor wraca wtedy na takt 1. Z <span class="lbl">LOOP</span> nagranie krąży po regionie.</li>
+  <li><b>Ścieżka audio:</b> <span class="lbl">REC</span> przy zatrzymaniu startuje po odliczaniu, w trakcie gry od następnego taktu. Bez LOOP nagranie zastępuje to, co było pod nim na tej ścieżce, a plik WAV zostaje też w folderze nagrań. Z <span class="lbl">LOOP</span> każde pełne przejście staje się osobnym klipem, a na ścieżce zostaje ostatnie. Ścieżki audio nie mają DUB.</li>
+  <li><span class="lbl">STOP</span> zatrzymuje w miejscu, drugi STOP wraca na takt 1. Przy zatrzymanym utworze obrót pola pozycji na pasku transportu przesuwa miejsce startu o takt.</li>
+</ul>
+<ol class="steps">
+  <li><span class="lbl">+ ADD TRACK</span> → <span class="lbl">AUDIO</span>. W menu ścieżki wybierz wejście, np. LINE.</li>
+  <li>Ustaw kursor stuknięciem w linijkę.</li>
+  <li><span class="lbl">REC</span> → odliczanie → graj → <span class="lbl">STOP</span>.</li>
+</ol>
+
+<h2>Zapis i eksport</h2>
+<ul>
+  <li>Utwór zapisuje się sam, na karcie w folderze <span class="lbl">/SONGS/&lt;nazwa&gt;/</span>: aranżacja, sceny Sequencera należące do utworu i nagrane klipy.</li>
+  <li><b>Export mix to WAV</b> (nazwa utworu → ustawienia): CrossPad zamraża ścieżki i zapisuje cały miks jako <span class="lbl">&lt;nazwa&gt;.wav</span> w folderze utworu. Plik skopiujesz na komputer przez tryb karty jako dysk USB (rozdział <a href="#pliki">Karta microSD i pliki</a>).</li>
+  <li><b>Export to Ableton Live</b> przygotowuje utwór do otwarcia w Ableton Live.</li>
+</ul>
+<div class="tip"><b>Karta SD jest potrzebna</b>
+Bez karty microSD nie nagrasz ścieżek audio, nie zgrasz sceny (BOUNCE) i nie zapiszesz utworu.</div>
+</section>

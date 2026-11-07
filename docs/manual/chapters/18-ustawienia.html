@@ -1,0 +1,27 @@
+<section class="chapter">
+<h1 id="ustawienia">Ustawienia</h1>
+<div class="shots2"><figure class="shot"><img src="img/settings.png" alt=""><figcaption>Settings: kategorie</figcaption></figure><figure class="shot"><img src="img/settings_audio.png" alt=""><figcaption>Settings › Audio</figcaption></figure></div>
+
+<p><b>MODE → pad 16 „Setup”.</b> Ustawienia są podzielone na kategorie. Wybierasz je enkoderem albo dotykiem; przycisk zasilania cofa o poziom.</p>
+<table>
+<tr><th style="width:22%">Kategoria</th><th>Najważniejsze opcje</th></tr>
+<tr><td><b>Display</b></td><td><span class="lbl">Brightness</span>, <span class="lbl">Theme Color</span> (kolor motywu), <span class="lbl">Home screen</span> (mapa padów / siatka ikon / lista), <span class="lbl">Touch Sensitivity</span>, <span class="lbl">Quick Settings Drawer</span> (szuflada włączona / wyłączona), <span class="lbl">Perf Stats</span>.</td></tr>
+<tr><td><b>Audio</b></td><td><span class="lbl">Sample Rate</span>: zostaw 44100, w tej częstotliwości są wszystkie kity. 48000 i 96000 są na liście, ale kity grają wtedy w złej wysokości. Zmiana działa po restarcie. <span class="lbl">Output Volume</span>: <span class="lbl">Speakers (auto on play)</span> (wyłączone = głośniki milczą), poziomy Speakers, Phones i Line out.</td></tr>
+<tr><td><b>USB</b></td><td><span class="lbl">Mode</span> (MIDI + Audio / MIDI + Serial), <span class="lbl">Ask before USB serial</span>, <span class="lbl">SD card as USB drive</span>, <span class="lbl">DAW Output dB</span>.</td></tr>
+<tr><td><b>USB host</b></td><td><span class="lbl">Computer</span>: Auto (zalecane), macOS, Linux.</td></tr>
+<tr><td><b>Pads &amp; LEDs</b></td><td><span class="lbl">RGB Brightness</span>, <span class="lbl">Pad MIDI Output</span>.</td></tr>
+<tr><td><b>Analog / Velocity</b></td><td>Czułość padów: krzywa (<span class="lbl">Linear</span>, <span class="lbl">Exp Soft</span>, <span class="lbl">Exp Hard</span>), próg (<span class="lbl">Floor</span>), <span class="lbl">Hit window</span>, nacisk jako CC, strojenie każdego padu osobno (<span class="lbl">Per-Pad Tuning</span>).</td></tr>
+<tr><td><b>Vibration</b></td><td>Wibracje: włączenie, przy dotyku, wibracje z dźwięku.</td></tr>
+<tr><td><b>MIDI</b></td><td>Routing padów i gniazd MIDI, <span class="lbl">MIDI Out Type</span> (Type A / Type B), kanał i przesunięcie nut.</td></tr>
+<tr><td><b>Motion MIDI</b></td><td>MIDI z ruchu: przechył i obrót CrossPada.</td></tr>
+<tr><td><b>BLE MIDI</b></td><td>Bluetooth MIDI (rozdział <a href="#midi">MIDI</a>).</td></tr>
+<tr><td><b>WiFi</b></td><td><span class="lbl">WiFi allowed</span>, wyszukiwanie sieci (<span class="lbl">Find networks</span> › <span class="lbl">Scan</span>), test połączenia. Domyślnie wyłączone. Gdy jest dozwolone, włącza się tylko na czas, gdy jest potrzebne, i wyłącza 30 s później. Wyjątek: CrossPad połączony z kontem (<span class="lbl">Link this CrossPad</span>) z włączonym <span class="lbl">Remote management</span> trzyma Wi-Fi cały czas, a Bluetooth MIDI jest wtedy wyłączone.</td></tr>
+<tr><td><b>Backup (SD)</b></td><td><span class="lbl">Export</span> i <span class="lbl">Import</span> ustawień na kartę.</td></tr>
+<tr><td><b>Updates</b></td><td><span class="lbl">Check at startup</span>, kanał (<span class="lbl">Stable</span> / <span class="lbl">Beta</span>), <span class="lbl">Check now</span>. Wymaga katalogu online, który w pierwszym wydaniu jeszcze nie działa (rozdział <a href="#aktualizacje">Aktualizacje</a>).</td></tr>
+<tr><td><b>Info</b></td><td>Wersje oprogramowania, numer seryjny, adres MAC.</td></tr>
+<tr><td><b>System</b></td><td><span class="lbl">Dim After</span>, <span class="lbl">Sleep After</span>, <span class="lbl">Auto Sleep</span>, <span class="lbl">Power Long-Press</span> (czas przytrzymania do wyłączenia), <span class="lbl">USB Suspend Off</span> (domyślnie 30 s: gdy podłączony komputer zaśnie, CrossPad wyłącza się po tym czasie; <span class="lbl">Never</span> to wyłącza), <span class="lbl">Factory Reset</span>.</td></tr>
+<tr><td><b>Programming</b></td><td>Oprogramowanie pomocniczego procesora STM32 (<span class="lbl">Co-processor</span>): wersja działająca i dołączona, aktualizacja, tryb <span class="lbl">DFU Mode</span> dla serwisu.</td></tr>
+</table>
+<div class="warn"><b>Factory Reset</b>
+Ustawienia wracają do domyślnych (CrossPad pyta najpierw: <i>Factory reset?</i>). Zostają ustawienia USB, Motion MIDI i cała zawartość karty SD: kity, nagrania, utwory. Przed resetem możesz zrobić kopię ustawień w Backup (SD) › <span class="lbl">Export</span>.</div>
+</section>

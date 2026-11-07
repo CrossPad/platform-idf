@@ -1,0 +1,42 @@
+<section class="chapter">
+<h1 id="recorder">Recorder: nagrywanie</h1>
+<p><b>MODE → pad 5 „Record”.</b> Recorder nagrywa dźwięk na kartę: z mikrofonów, wejść liniowych, z padów (to, co grasz) albo z komputera przez USB. Z nagrania wycinasz pętlę, poprawiasz ją efektami i przekazujesz do Slicera albo na ścieżkę w Arrange.</p>
+
+<h2>Górny rząd</h2>
+<figure class="shot"><img src="img/recorder.png" alt=""><figcaption>Recorder przed nagraniem</figcaption></figure>
+
+<ul>
+  <li><span class="lbl">◀</span> wyjście.</li>
+  <li><b>Przycisk wejścia</b>: kolejne kliknięcia przełączają źródło nagrania. Najpierw dwa wejścia z pary ustawionej w Mikserze, np. <span class="lbl">MIC</span> i <span class="lbl">LINE 1/2</span> (para Mic + 1/2), <span class="lbl">MIC</span> i <span class="lbl">LINE 3/4</span>, albo <span class="lbl">LINE 3/4</span> i <span class="lbl">LINE 1/2</span>. Dalej <span class="lbl">PADS</span> (dźwięk padów), <span class="lbl">USB</span> (dźwięk z komputera, w trybie MIDI + Audio) i <span class="lbl">PITCH</span> (instrument Pitch Play; najpierw otwórz instrument w Pitch Play, inaczej ekran poprosi: <i>Open an instrument in Pitch Play first</i>). Gdy zmienisz parę w Mikserze, nazwy zmieniają się od razu.</li>
+  <li><span class="lbl">REC</span> / <span class="lbl">STOP</span> i czas nagrania. Mierniki L/P pokazują poziom wejścia cały czas, także przed nagraniem.</li>
+  <li><span class="lbl">FILES</span>: otwiera dowolny plik WAV z karty, folder po folderze.</li>
+  <li><b>Zębatka</b>: opcja <span class="lbl">Auto trim</span>. Włączona sama ustawia znaczniki początku i końca na dźwięku zaraz po nagraniu. Ustawienie zostaje po restarcie.</li>
+</ul>
+<p>Jedno nagranie trwa do 10 minut. Nagrania trafiają do <span class="lbl">/crosspad/recordings</span> (rec_001.wav, rec_002.wav, …).</p>
+
+<h2>Pętla z nagrania</h2>
+<ul>
+  <li><span class="lbl">START</span> / <span class="lbl">END</span>: pierwsze kliknięcie przesuwa znacznik zgrubnie, drugie co milisekundę z powiększeniem, trzecie kończy.</li>
+  <li>▶ odsłuch, przycisk pętli: odsłuch w kółko.</li>
+  <li><span class="lbl">1b</span> / <span class="lbl">2b</span> / <span class="lbl">4b</span> / <span class="lbl">8b</span>: ile taktów ma pętla; CrossPad pokazuje jej tempo w BPM.</li>
+  <li><span class="lbl">SAVE</span> zapisuje pętlę jako osobny plik, <span class="lbl">NORM</span> podnosi szczyt do −0,3 dB (jako kopię).</li>
+  <li><span class="lbl">SLICE ▸</span> przekazuje pętlę do Slicera.</li>
+</ul>
+
+<h2>FX</h2>
+<p>Okno FX: <span class="lbl">PITCH</span> w półtonach (z zachowaną długością albo jak taśma), <span class="lbl">LOW PASS</span>, <span class="lbl">HIGH PASS</span>, <span class="lbl">LISTEN</span> (odsłuch na żywo) i <span class="lbl">APPLY</span>, które zapisuje kopię pliku z efektami obok oryginału. Oryginał zostaje nietknięty.</p>
+
+<h2>Nagrywanie razem z utworem</h2>
+<ul>
+  <li><span class="lbl">SYNC</span>: <span class="lbl">REC</span> odtwarza otwarty utwór od taktu <span class="lbl">FROM</span>, a nagranie jest z nim zgrane w czasie.</li>
+  <li><span class="lbl">PRE</span>: odliczanie 1 albo 2 takty.</li>
+  <li><span class="lbl">▸ ARR</span>: kładzie zaznaczoną pętlę na ścieżce w Arrange (wybierasz ścieżkę i takt).</li>
+</ul>
+
+<ol class="steps">
+  <li>W Mikserze sprawdź parę wejść (np. Mic + 1/2) i wzmocnienie wejścia.</li>
+  <li>W Recorderze wybierz wejście, np. <span class="lbl">LINE 1/2</span>, i sprawdź poziom na miernikach.</li>
+  <li><span class="lbl">REC</span>, graj, <span class="lbl">STOP</span>.</li>
+  <li>Ustaw <span class="lbl">START</span> i <span class="lbl">END</span>, posłuchaj pętli, potem <span class="lbl">SLICE ▸</span> albo <span class="lbl">▸ ARR</span>.</li>
+</ol>
+</section>

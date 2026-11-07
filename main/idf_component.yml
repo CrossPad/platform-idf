@@ -1,0 +1,49 @@
+## IDF Component Manager Manifest File
+dependencies:
+  idf: ^5.0
+  espressif/esp_tinyusb: ^1.7.6
+  # Held at 0.19: 0.21 sends UAC2 feedback as 4-byte 16.16 even on full speed
+  # and dropped CFG_TUD_AUDIO_ENABLE_FEEDBACK_FORMAT_CORRECTION. macOS answers
+  # every such packet with a babble error on EP 0x82 and CoreAudio cannot hold
+  # the stream (a DAW or a call app starts and stops it every 50 ms).
+  # dependencies.lock is not in git, so without this a fresh resolve takes the
+  # newest -- which is how 0.21 arrived unnoticed. main/CMakeLists.txt refuses
+  # to build against a TinyUSB without the switch.
+  espressif/tinyusb: "~0.19.0"
+  lvgl/lvgl: 9.3.0
+  espressif/cmake_utilities: 0.*
+  espressif/esp_diagnostics: ^1.2.3
+  espressif/esp_lcd_touch: ^1.1.2
+  bblanchon/ArduinoJson: ^7.4.2
+  espressif/led_strip: ^2.5.4
+  joltwallet/littlefs: ~1.19.1
+  espressif/esp_delta_ota: "^1.1.4"
+  espressif/esp-dsp: "^1.6.2"
+
+  espressif/esp-now:
+    git: https://github.com/espressif/esp-now.git
+    version: 774f87199a073281fa33e7ab3274d1088b3c4900
+    rules:
+      - if: target in ["esp32s3"]
+  # local
+  arduino_midi_library:
+    path: ../components/arduino_midi_library
+  stm32_hal:
+    version: '*'
+    path: ../components/stm32_hal
+    rules:
+      - if: target in ["esp32s3"]
+# Board support packages
+  crosspad:
+    path: ../components/bsp/crosspad
+    rules:
+      - if: target in ["esp32s3"]
+  espressif/esp32_p4_function_ev_board: 
+    version: ^5.0.1
+    rules:
+      - if:  target in ["esp32p4"]
+      
+  # espressif/esp_bsp_devkit: 
+  #   version: ^3.0.0~2
+  #   rules:
+  #     - if:  target in ["esp32", "esp32s3"]

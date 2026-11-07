@@ -1,0 +1,61 @@
+@page { size: A4; margin: 18mm 16mm 18mm 16mm;
+  @bottom-center { content: counter(page); font: 9pt 'Helvetica Neue', Arial, sans-serif; color: #7B828B; } }
+@page :first { margin: 0; @bottom-center { content: none; } }
+:root { --ink:#16181B; --panel:#20242A; --mint:#00FF88; --lime:#C6FF47; --dim:#5d646d; --line:#d9dde2; --soft:#f3f5f7; --red:#FF5C5C; }
+* { box-sizing: border-box; }
+html { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; color: var(--ink); line-height: 1.45; }
+body { margin: 0; }
+h1 { font-size: 20pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 3px solid var(--mint); break-after: avoid; }
+h2 { font-size: 13pt; margin: 6mm 0 2mm; break-after: avoid; }
+h3 { font-size: 11pt; margin: 4mm 0 1.5mm; break-after: avoid; color: #2b3036; }
+p { margin: 0 0 2.2mm; }
+ul, ol { margin: 0 0 2.5mm; padding-left: 5mm; }
+li { margin-bottom: 0.8mm; }
+.chapter { break-before: page; }
+.lbl { font-family: 'Menlo', 'Courier New', monospace; font-size: 8.8pt; background: var(--soft); border: 1px solid var(--line); border-radius: 3px; padding: 0 1.2mm; white-space: nowrap; }
+table { border-collapse: collapse; width: 100%; margin: 1mm 0 3mm; font-size: 9.2pt; }
+tr { break-inside: avoid; }
+thead, tr:first-child { break-after: avoid; }
+th, td { border-bottom: 1px solid var(--line); padding: 1.3mm 2mm; text-align: left; vertical-align: top; }
+th { background: var(--soft); font-weight: 600; }
+.tip, .warn { border-left: 3px solid var(--mint); background: #effdf6; padding: 2mm 3mm; margin: 2mm 0 3mm; break-inside: avoid; }
+.warn { border-left-color: var(--red); background: #fff2f2; }
+.tip b:first-child, .warn b:first-child { display: block; margin-bottom: 0.5mm; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+.steps { counter-reset: s; list-style: none; padding-left: 0; }
+.steps li { counter-increment: s; position: relative; padding-left: 8mm; margin-bottom: 1.5mm; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 0.2mm; width: 5mm; height: 5mm; border-radius: 50%; background: var(--ink); color: var(--mint); font-size: 8pt; font-weight: 700; text-align: center; line-height: 5mm; }
+
+/* cover */
+.cover { height: 297mm; background: var(--ink); color: #E8EAED; padding: 28mm 22mm; position: relative; }
+.cover .brand { font-size: 44pt; font-weight: 800; letter-spacing: -1px; color: #fff; }
+.cover .brand span { color: var(--mint); }
+.cover .sub { font-size: 18pt; margin-top: 4mm; color: #E8EAED; }
+.cover .meta { position: absolute; bottom: 24mm; left: 22mm; right: 22mm; font-size: 10pt; color: #9aa1aa; border-top: 1px solid #2c3138; padding-top: 4mm; }
+.cover .grid { margin-top: 26mm; display: grid; grid-template-columns: repeat(4, 22mm); gap: 4mm; }
+.cover .grid div { height: 22mm; border-radius: 4mm; }
+
+/* pad map */
+.padmap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; width: 120mm; margin: 2mm 0 4mm; }
+.padmap div { border-radius: 2.5mm; background: var(--panel); color: #E8EAED; padding: 2mm; min-height: 15mm; font-size: 9pt; }
+.padmap div b { display: block; font-size: 10pt; }
+.padmap div i { font-style: normal; color: #9aa1aa; font-size: 8pt; }
+.padmap .n { float: right; color: #7B828B; font-size: 8pt; }
+
+/* transport bar */
+.tbar { break-before: avoid; display: flex; gap: 1mm; background: var(--mint); padding: 1.2mm; border-radius: 2mm; margin: 2mm 0 1mm; }
+.tbar div { flex: 1; background: #00DC76; border-radius: 1.5mm; text-align: center; font-size: 7.5pt; font-weight: 700; color: #06120C; padding: 1.5mm 0; }
+.tbar div small { display: block; font-weight: 400; font-size: 6.5pt; }
+.toc { columns: 2; column-gap: 8mm; }
+.toc div { break-inside: avoid; margin-bottom: 1mm; }
+.small { font-size: 8.5pt; color: var(--dim); }
+
+/* screenshots (320x240, taken on the board with SCREENSHOT) */
+.shot { float: right; width: 66mm; margin: 0.5mm 0 3mm 5mm; break-inside: avoid; }
+.shot img { width: 100%; display: block; border-radius: 2mm; border: 1px solid #2c3138; }
+.shot figcaption { font-size: 7.8pt; color: var(--dim); margin-top: 1mm; line-height: 1.3; }
+.shots2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 2mm 0 4mm; }
+.shots2 .shot { float: none; width: auto; margin: 0; }
+h1, h2 { clear: both; }
+table, .tip, .warn { clear: both; }
+.diagram { width: 100%; height: auto; margin: 1mm 0 4mm; break-inside: avoid; }

@@ -1,0 +1,51 @@
+[submodule "components/crosspad-core"]
+	path = components/crosspad-core
+	url = https://github.com/CrossPad/crosspad-core.git
+[submodule "components/crosspad-gui"]
+	path = components/crosspad-gui
+	url = https://github.com/CrossPad/crosspad-gui.git
+[submodule "components/crosspad-instructions"]
+	path = components/crosspad-instructions
+	url = https://github.com/CrossPad/crosspad-instructions.git
+[submodule "components/crosspad-sampler"]
+	path = components/crosspad-sampler
+	url = https://github.com/CrossPad/crosspad-sampler.git
+[submodule "components/crosspad-mixer"]
+	path = components/crosspad-mixer
+	url = https://github.com/CrossPad/crosspad-mixer.git
+[submodule "components/crosspad-dawcontrol"]
+	path = components/crosspad-dawcontrol
+	url = https://github.com/CrossPad/crosspad-dawcontrol.git
+[submodule "components/crosspad-arrange"]
+	path = components/crosspad-arrange
+	url = https://github.com/CrossPad/crosspad-arrange.git
+[submodule "components/crosspad-pad-mixer"]
+	path = components/crosspad-pad-mixer
+	url = https://github.com/CrossPad/crosspad-pad-mixer.git
+[submodule "components/crosspad-song"]
+	path = components/crosspad-song
+	url = https://github.com/CrossPad/crosspad-song.git
+[submodule "components/crosspad-sequencer"]
+	path = components/crosspad-sequencer
+	url = https://github.com/CrossPad/crosspad-pattern-seq.git
+[submodule "components/crosspad-recorder"]
+	path = components/crosspad-recorder
+	url = https://github.com/CrossPad/crosspad-recorder.git
+[submodule "components/crosspad-slicer"]
+	path = components/crosspad-slicer
+	url = https://github.com/CrossPad/crosspad-slicer.git
+[submodule "components/crosspad-pitchplay"]
+	path = components/crosspad-pitchplay
+	url = https://github.com/CrossPad/crosspad-pitchplay.git
+[submodule "components/crosspad-doom"]
+	path = components/crosspad-doom
+	url = https://github.com/CrossPad/crosspad-doom.git
+[submodule "components/crosspad-pong"]
+	path = components/crosspad-pong
+	url = https://github.com/CrossPad/crosspad-pong.git
+[submodule "components/crosspad-pianotiles"]
+	path = components/crosspad-pianotiles
+	url = https://github.com/CrossPad/crosspad-pianotiles.git
+[submodule "components/crosspad-sdr"]
+	path = components/crosspad-sdr
+	url = https://github.com/CrossPad/crosspad-sdr.git

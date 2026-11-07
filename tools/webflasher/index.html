@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CrossPad flasher</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 15px/1.45 system-ui, sans-serif; background: #111; color: #eee; margin: 0; padding: 16px; max-width: 640px; margin-inline: auto; }
+  h1 { font-size: 1.3em; margin: 0 0 4px; }
+  h2 { font-size: 1.05em; margin: 0 0 8px; }
+  section { background: #1b1b1b; border: 1px solid #2c2c2c; border-radius: 10px; padding: 14px; margin: 14px 0; }
+  p, li { color: #bbb; }
+  .small { font-size: .85em; }
+  label { display: block; margin: 8px 0 4px; color: #ddd; }
+  input[type=file] { width: 100%; color: #ccc; }
+  button { font: inherit; padding: 10px 14px; border-radius: 8px; border: 0; background: #3b82f6; color: #fff; margin: 6px 6px 0 0; }
+  button.secondary { background: #333; }
+  button:disabled { opacity: .45; }
+  progress { width: 100%; height: 14px; margin-top: 8px; }
+  pre#log { background: #000; color: #9f9; font: 12px/1.35 ui-monospace, monospace; padding: 10px; border-radius: 8px; height: 180px; overflow: auto; white-space: pre-wrap; margin: 0; }
+  .warn { color: #fbbf24; }
+  .err { color: #f87171; }
+  .ok { color: #4ade80; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: #ddd; }
+  code { background: #000; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>CrossPad flasher</h1>
+<p class="small">Flashes the ESP32-S3 and the STM32 straight from the browser — a phone is enough.
+Needs Chrome (desktop, or Android via WebUSB). No iOS: Safari has neither Web Serial nor WebUSB.
+Get the firmware files from the release you want and pick them below.</p>
+<p id="support" class="small warn"></p>
+
+<section>
+  <h2>1 · ESP32 — normal update (device is running)</h2>
+  <p class="small">The CrossPad shows up as <b>Crosspad</b> (USB CDC). Sends the app over OTA; the device asks on its screen unless auto-accept is on, then restarts. The <code>assets</code> partition is not part of this — use step 2 when the STM32 image or the icons changed.</p>
+  <label>CrossPad.bin</label><input type="file" id="ota-file" accept=".bin">
+  <button id="ota-go" disabled>Update over OTA</button>
+</section>
+
+<section>
+  <h2>2 · ESP32 — recovery (app does not start)</h2>
+  <p class="small">Talks to the ESP32 ROM bootloader through the STM32 bridge (<b>CrossPad MIDI+Serial</b>). Writes every partition you pick; only the app is required. Wipes the OTA selection back to the first slot when <code>ota_data_initial.bin</code> is included.</p>
+  <label>bootloader.bin — 0x0</label><input type="file" id="esp-bootloader" accept=".bin">
+  <label>partition-table.bin — 0x8000</label><input type="file" id="esp-ptable" accept=".bin">
+  <label>ota_data_initial.bin — 0x10000</label><input type="file" id="esp-otadata" accept=".bin">
+  <label>CrossPad.bin — 0x20000 (required)</label><input type="file" id="esp-app" accept=".bin">
+  <label>assets.bin — 0x720000 (icons + bundled STM32 image)</label><input type="file" id="esp-assets" accept=".bin">
+  <button id="esp-go" disabled>Flash ESP32</button>
+</section>
+
+<section>
+  <h2>3 · STM32 — firmware over USB DFU</h2>
+  <p class="small">The STM32 must be in DFU mode: press <b>Enter DFU</b> while the CrossPad is running, or hold <b>pad 1</b> while plugging the USB cable in. A dead STM32: short SWCLK to 3V3 on the SWD header while plugging in. It enumerates as <b>STM Device in DFU Mode</b>.
+  Page 0 is erased first and written last, like the desktop tool: an interrupted flash lands back in DFU on the next power cycle instead of a brick.</p>
+  <label>CrossPad_STM32_r20.bin</label><input type="file" id="stm-file" accept=".bin">
+  <button id="stm-dfu" class="secondary">Enter DFU (via the running CrossPad)</button>
+  <button id="stm-go" disabled>Flash STM32</button>
+</section>
+
+<section>
+  <h2>Log</h2>
+  <progress id="bar" max="100" value="0"></progress>
+  <pre id="log"></pre>
+</section>
+
+<details>
+  <summary>Which file is which</summary>
+  <ul class="small">
+    <li><b>CrossPad.bin</b>, <b>bootloader.bin</b>, <b>partition-table.bin</b>, <b>ota_data_initial.bin</b>, <b>assets.bin</b> — an ESP-IDF build of platform-idf (<code>build/</code>).</li>
+    <li><b>CrossPad_STM32_r20.bin</b> — a build of CrossPad_STM32_r2 (<code>build/Debug/</code>). The same file is bundled in <code>assets.bin</code>; a running CrossPad flashes it into the STM32 by itself after step 1 or 2, so step 3 is only for an STM32 that cannot be reached that way.</li>
+  </ul>
+</details>
+
+<script src="dfu.js"></script>
+<script src="dfuse.js"></script>
+<script type="module">
+import { ESPLoader, Transport } from "https://cdn.jsdelivr.net/npm/esptool-js@0.6.1/+esm";
+import { serial as polyfill } from "https://cdn.jsdelivr.net/npm/web-serial-polyfill@1.0.15/+esm";
+
+const ESP_VID = 0x303A, ESP_PID = 0x3456;        // CrossPad CDC (TinyUSB)
+const STM_VID = 0x0483, STM_BRIDGE_PID = 0x5740; // STM32 bridge VCP (esptool-compatible)
+const STM_DFU_PID = 0xDF11;
+const OTA_CHUNK = 4096;
+const STM_FLASH_BASE = 0x08000000, STM_PAGE = 2048, STM_NVM_PAGE = 63;
+const STM_DFU_XFER = 1024;   // wTransferSize of the G0 ROM DFU functional descriptor
+
+const $ = id => document.getElementById(id);
+const logEl = $("log"), bar = $("bar");
+function log(msg, cls) {
+  const line = document.createElement("span");
+  if (cls) line.className = cls;
+  line.textContent = msg + "\n";
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function progress(done, total) { bar.value = total ? Math.round(done * 100 / total) : 0; }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const readFile = input => input.files[0] ? input.files[0].arrayBuffer() : Promise.resolve(null);
+
+// ── serial: Web Serial where it exists, WebUSB polyfill on Android ───────
+const haveSerial = "serial" in navigator, haveUsb = "usb" in navigator;
+$("support").textContent =
+  haveSerial ? "" :
+  haveUsb ? "No Web Serial here — using WebUSB (Android Chrome). Accept the USB permission dialogs." :
+  "This browser has neither Web Serial nor WebUSB. Use Chrome on a PC or an Android phone.";
+
+async function requestPort(vid, pid) {
+  if (haveSerial) return navigator.serial.requestPort({ filters: [{ usbVendorId: vid, usbProductId: pid }] });
+  if (haveUsb) return polyfill.requestPort({ filters: [{ vendorId: vid, productId: pid }] });
+  throw new Error("no serial API in this browser");
+}
+
+/* Line-oriented reader over a Web Serial port for the CDC protocol. */
+class LineReader {
+  constructor(port) { this.reader = port.readable.getReader(); this.buf = ""; this.dec = new TextDecoder(); }
+  async line(timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const nl = this.buf.indexOf("\n");
+      if (nl >= 0) { const l = this.buf.slice(0, nl).replace(/\r$/, ""); this.buf = this.buf.slice(nl + 1); return l; }
+      const left = deadline - Date.now();
+      if (left <= 0) return null;
+      const t = setTimeout(() => this.reader.cancel(), left);
+      const { value, done } = await this.reader.read().finally(() => clearTimeout(t));
+      if (done || !value) return null;
+      this.buf += this.dec.decode(value, { stream: true });
+    }
+  }
+  release() { try { this.reader.releaseLock(); } catch (_) {} }
+}
+
+async function withCdc(fn) {
+  const port = await requestPort(ESP_VID, ESP_PID);
+  await port.open({ baudRate: 115200 });
+  const writer = port.writable.getWriter();
+  const rx = new LineReader(port);
+  try { return await fn(writer, rx); }
+  finally { rx.release(); writer.releaseLock(); await port.close().catch(() => {}); }
+}
+
+// ── 1 · ESP OTA over CDC (tools/ota_flash.py protocol) ───────────────────
+$("ota-file").onchange = () => $("ota-go").disabled = !$("ota-file").files[0];
+$("ota-go").onclick = async () => {
+  const data = new Uint8Array(await readFile($("ota-file")));
+  // esp_app_desc_t sits at 0x20: version string is 32 bytes at 0x30
+  const version = new TextDecoder().decode(data.slice(0x30, 0x50)).split("\0")[0] || "unknown";
+  log(`OTA: ${data.length} bytes, version ${version}`);
+  try {
+    await withCdc(async (writer, rx) => {
+      await writer.write(new TextEncoder().encode(`OTA_BEGIN ${data.length} ${version}\n`));
+      let r = await rx.line(15000);
+      if (r === "OTA_WAIT") { log("device is asking on its screen — confirm there", "warn"); r = await rx.line(65000); }
+      if (r !== "OTA_READY") throw new Error(`expected OTA_READY, got '${r}'`);
+      let sent = 0;
+      while (sent < data.length) {
+        const chunk = data.slice(sent, sent + OTA_CHUNK);
+        await writer.write(chunk);
+        sent += chunk.length;
+        for (;;) {
+          const l = await rx.line(10000);
+          if (l === null) throw new Error(`no reply after ${sent}/${data.length} bytes`);
+          if (l.startsWith("OK ")) break;
+          if (l === "OTA_OK") { sent = data.length; break; }
+          if (l.startsWith("OTA_ERROR")) throw new Error(l);
+        }
+        progress(sent, data.length);
+      }
+      for (;;) {
+        const l = await rx.line(30000);
+        if (l === "OTA_OK") break;
+        if (l === null || l.startsWith("OTA_ERROR")) throw new Error(l ?? "no final reply");
+      }
+    });
+    log("OTA done — the CrossPad restarts into the new firmware.", "ok");
+  } catch (e) { log("OTA failed: " + (e.message ?? e), "err"); }
+};
+
+// ── 2 · ESP recovery through the STM bridge (esptool-js) ─────────────────
+const espSlots = [["esp-bootloader", 0x0], ["esp-ptable", 0x8000], ["esp-otadata", 0x10000], ["esp-app", 0x20000], ["esp-assets", 0x720000]];
+$("esp-app").onchange = () => $("esp-go").disabled = !$("esp-app").files[0];
+$("esp-go").onclick = async () => {
+  const fileArray = [];
+  for (const [id, address] of espSlots) {
+    const buf = await readFile($(id));
+    if (buf) fileArray.push({ data: new Uint8Array(buf), address });
+  }
+  log(`ESP32: ${fileArray.length} image(s): ` + fileArray.map(f => "0x" + f.address.toString(16)).join(", "));
+  let transport;
+  try {
+    const port = await requestPort(STM_VID, STM_BRIDGE_PID);
+    transport = new Transport(port, true);
+    const terminal = { clean() {}, writeLine: l => log(l), write: s => log(s) };
+    const loader = new ESPLoader({ transport, baudrate: 460800, terminal });
+    const chip = await loader.main();       // classic reset: the STM bridge turns DTR/RTS into EN/IO0
+    log(`connected: ${chip}`);
+    const total = fileArray.reduce((n, f) => n + f.data.length, 0);
+    let before = 0;
+    await loader.writeFlash({
+      fileArray, flashMode: "dio", flashFreq: "80m", flashSize: "16MB", eraseAll: false, compress: true,
+      reportProgress: (i, written, size) => {
+        if (i > 0) before = fileArray.slice(0, i).reduce((n, f) => n + f.data.length, 0);
+        progress(before + written, total);
+      },
+    });
+    await loader.after("hard_reset");
+    log("ESP32 flashed and reset.", "ok");
+  } catch (e) { log("ESP32 flash failed: " + (e.message ?? e), "err"); }
+  finally { if (transport) await transport.disconnect().catch(() => {}); }
+};
+
+// ── 3 · STM32 over USB DFU (DfuSe) ────────────────────────────────────────
+$("stm-file").onchange = () => $("stm-go").disabled = !$("stm-file").files[0];
+$("stm-dfu").onclick = async () => {
+  try {
+    await withCdc(async (writer, rx) => {
+      await writer.write(new TextEncoder().encode("STM_DFU\n"));
+      const r = await rx.line(3000);
+      log(r === "OK" ? "STM32 dropping into DFU — wait for it to re-enumerate, then Flash STM32." : `reply: ${r}`, r === "OK" ? "ok" : "warn");
+    });
+  } catch (e) { log("could not reach the CrossPad: " + (e.message ?? e), "err"); }
+};
+
+/* One DfuSe write pass: erase the range, then SET_ADDRESS + DNLOAD per chunk.
+ * No manifestation here — that is the jump into the app, and it must come
+ * only once page 0 is back. */
+async function dfuseWrite(dev, addr, data, onProgress) {
+  await dev.erase(addr, data.byteLength);
+  let sent = 0;
+  while (sent < data.byteLength) {
+    // The G0 ROM's wTransferSize is 1024; a 2048-byte DNLOAD wedges it.
+    const n = Math.min(STM_DFU_XFER, data.byteLength - sent);
+    await dev.dfuseCommand(dfuse.SET_ADDRESS, addr + sent, 4);
+    const written = await dev.download(data.slice(sent, sent + n), 2);
+    const st = await dev.poll_until_idle(dfu.dfuDNLOAD_IDLE);
+    if (st.status !== dfu.STATUS_OK) throw new Error(`DFU download failed state=${st.state} status=${st.status}`);
+    sent += written;
+    onProgress(sent);
+  }
+}
+
+$("stm-go").onclick = async () => {
+  const image = await readFile($("stm-file"));
+  const size = image.byteLength;
+  if (size < 0x110 || new DataView(image).getUint32(0x100, true) !== 0x57465043) {
+    log("not a CrossPad STM32 image (no CPFW descriptor at 0x100)", "err"); return;
+  }
+  if (size > STM_NVM_PAGE * STM_PAGE) { log("image would overwrite the STM32 NVM page", "err"); return; }
+  const d = new DataView(image);
+  const pcb = d.getUint8(0x108);
+  log(`STM32 image v${d.getUint8(0x104)}.${d.getUint8(0x105)} proto 0x${d.getUint16(0x106, true).toString(16).padStart(4, "0")}, for PCB ${pcb ? "r" + pcb : "(unknown)"}, ${size} bytes — make sure that is your board`);
+  let dev;
+  try {
+    const usb = await navigator.usb.requestDevice({ filters: [{ vendorId: STM_VID, productId: STM_DFU_PID }] });
+    const ifaces = dfu.findDeviceDfuInterfaces(usb);
+    const flash = ifaces.find(i => /Internal Flash/i.test(i.name)) ?? ifaces[0];
+    if (!flash) throw new Error("no DFU interface on that device");
+    dev = new dfuse.Device(usb, flash);
+    dev.logInfo = m => log(m); dev.logWarning = m => log(m, "warn"); dev.logError = m => log(m, "err");
+    dev.logDebug = () => {}; dev.logProgress = () => {};
+    await dev.open();
+    if (!dev.memoryInfo) throw new Error("no DfuSe memory map on the interface");
+    await dev.clearStatus().catch(() => {});
+    const status = await dev.getStatus();
+    if (status.state === dfu.dfuERROR) await dev.clearStatus();
+
+    const tail = image.slice(STM_PAGE), page0 = image.slice(0, STM_PAGE);
+    log("erasing page 0 first — an interrupted flash comes back up in DFU");
+    await dev.erase(STM_FLASH_BASE, STM_PAGE);
+    log("writing pages 1.. " + Math.ceil(size / STM_PAGE));
+    await dfuseWrite(dev, STM_FLASH_BASE + STM_PAGE, tail, n => progress(n, size));
+    log("writing page 0");
+    for (let off = 0; off < page0.byteLength; off += STM_DFU_XFER) {
+      await dev.dfuseCommand(dfuse.SET_ADDRESS, STM_FLASH_BASE + off, 4);
+      const piece = page0.slice(off, off + STM_DFU_XFER);
+      const w = await dev.download(piece, 2);
+      const st = await dev.poll_until_idle(dfu.dfuDNLOAD_IDLE);
+      if (st.status !== dfu.STATUS_OK || w !== piece.byteLength) throw new Error("page 0 write failed");
+    }
+    progress(size, size);
+    log("starting the new firmware");
+    await dev.dfuseCommand(dfuse.SET_ADDRESS, STM_FLASH_BASE, 4);
+    await dev.download(new ArrayBuffer(0), 0);
+    await dev.poll_until(s => s === dfu.dfuMANIFEST).catch(() => {});
+    log("STM32 flashed; it resets itself into the new firmware.", "ok");
+  } catch (e) { log("STM32 flash failed: " + (e.message ?? e), "err"); }
+  finally { if (dev) await dev.close().catch(() => {}); }
+};
+</script>
+</body>
+</html>

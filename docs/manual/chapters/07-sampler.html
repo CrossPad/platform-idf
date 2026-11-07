@@ -1,0 +1,56 @@
+<section class="chapter">
+<h1 id="sampler">Sampler: granie kitem</h1>
+<p><b>MODE → pad 1 „Sampler”.</b> Sampler gra wczytany kit na padach. Każdy pad możesz przyciąć, przestroić, przefiltrować, ustawić mu tryb grania albo nagrać na niego dźwięk prosto z wejścia.</p>
+
+<h2>Ekran główny</h2>
+<figure class="shot"><img src="img/sampler.png" alt=""><figcaption>Sampler z wczytanym kitem</figcaption></figure>
+
+<ul>
+  <li><b>Góra:</b> kafelek <span class="lbl">PAD n</span> w kolorze ostatnio uderzonego padu i przycisk z nazwą kitu, który otwiera przeglądarkę kitów.</li>
+  <li><b>Lewa strona:</b> siatka 4×4 w kolorach kitu. Grający pad świeci pełnym kolorem, ostatnio uderzony ma białą ramkę. Znaczek <span class="lbl">H</span> to tryb HOLD, strzałki to LOOP. Stuknięcie padu na ekranie też go gra.</li>
+  <li><b>Prawa strona:</b> plik ostatniego padu, jego przebieg z markerami początku i końca, czas i wskaźnik poziomu (zielony, od −6 dB bursztynowy, od −1 dB czerwony). Stuknięcie przebiegu przełącza widok: plik → oscyloskop → historia poziomu → widmo (SPECTRUM).</li>
+  <li><b>Dół:</b>
+    <ul>
+      <li><span class="lbl">FULL LEVEL</span>: gdy świeci, każde uderzenie gra z pełną siłą.</li>
+      <li><span class="lbl">16 LEVELS</span>: ostatnio uderzony pad rozkłada się na wszystkie 16 padów. Najpierw <span class="lbl">16 LEVELS: PAD n</span> (16 głośności, od cichego padu 1 do pełnego padu 16), potem <span class="lbl">16 PITCH: PAD n</span> (pad 1 gra oryginalną wysokość, każdy kolejny pół tonu wyżej, pad 16 o 15 półtonów). Kolejne naciśnięcie wyłącza.</li>
+      <li><span class="lbl">EDIT &gt;</span>: edytor padu. Dla kitu melodycznego (PITCHED) otwiera edytor instrumentu, taki jak w Pitch Play.</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>Edytor padu</h2>
+<p>Edytor pokazuje pad uderzony ostatnio; uderzenie innego padu przełącza go na ten pad. Wartości zmieniasz enkoderem: kliknięcie zaczyna zmianę (przycisk świeci limonkowo), obrót zmienia, drugie kliknięcie kończy. Ustawienie, które właśnie zmieniasz, zostaje wybrane po uderzeniu kolejnego padu, więc szybko stroisz cały kit.</p>
+<table>
+<tr><th style="width:24%">Przycisk</th><th>Co robi</th></tr>
+<tr><td><span class="lbl">PAD n</span></td><td>Obrót zmienia kolor padu.</td></tr>
+<tr><td>plik</td><td>Wybór sampla z karty (start w <span class="lbl">/crosspad/kits</span>).</td></tr>
+<tr><td><span class="lbl">REC MODE</span></td><td>Nagrywanie na pad (niżej).</td></tr>
+<tr><td><span class="lbl">REV</span></td><td>Sampel od tyłu.</td></tr>
+<tr><td><span class="lbl">1-SHOT</span> / <span class="lbl">HOLD</span> / <span class="lbl">LOOP</span></td><td>Gra raz do końca / gra, dopóki trzymasz pad / gra w pętli.</td></tr>
+<tr><td>ikona kopii</td><td>Kopiowanie padu: naciśnij ją, uderz pad docelowy, potwierdź <span class="lbl">Copy</span>. Kopiuje sampel, przycięcie i ustawienia.</td></tr>
+<tr><td><span class="lbl">VOL</span> · <span class="lbl">PAN</span></td><td>Głośność 0–127, panorama L64 … C … R63.</td></tr>
+<tr><td><span class="lbl">PITCH</span></td><td>−12 … +12 półtonów (jak gramofon: wyżej znaczy też krócej).</td></tr>
+<tr><td><span class="lbl">HP</span> · <span class="lbl">LP</span></td><td>Filtry górno- i dolnoprzepustowy, 20 Hz–20 kHz; skrajna pozycja to <span class="lbl">OFF</span>.</td></tr>
+<tr><td><span class="lbl">CHOKE</span></td><td>Grupa 1–7: pad z grupy ucisza inne pady z tej samej grupy (np. hi-hat otwarty i zamknięty).</td></tr>
+<tr><td><span class="lbl">START</span> · <span class="lbl">END</span></td><td>Przycięcie: pierwsze kliknięcie przesuwa zgrubnie, drugie dokładnie (1 ms na ząbek, z powiększeniem), trzecie kończy.</td></tr>
+<tr><td>▶ · pętla</td><td>Odsłuch przyciętego fragmentu raz albo w kółko.</td></tr>
+<tr><td><span class="lbl">FULL</span></td><td>Przywraca cały plik.</td></tr>
+<tr><td><span class="lbl">NORM</span></td><td>Podnosi poziom do −0,3 dB jako kopię <span class="lbl">&lt;nazwa&gt;_norm.wav</span>; oryginał zostaje.</td></tr>
+<tr><td><span class="lbl">DEL</span></td><td>Zdejmuje sampel z padu (dwa kliknięcia).</td></tr>
+</table>
+<p>Gdy PITCH, filtry albo REV wymagają przeliczenia, nad przebiegiem pojawia się ramka <span class="lbl">PROCESSING n%</span>. CrossPad zapisuje wtedy obok sampla przetworzoną kopię; oryginalny plik zostaje nietknięty.</p>
+
+<h2>Nagrywanie na pad (REC MODE)</h2>
+<ol class="steps">
+  <li>W edytorze padu włącz <span class="lbl">REC MODE</span>: przycisk robi się czerwony, pady świecą na ciemnoczerwono i nie grają, nad przebiegiem jest miernik wejścia.</li>
+  <li>Wejście jest to, które ostatnio wybrałeś w Recorderze (mikrofon, linia, pady albo USB).</li>
+  <li>Przytrzymaj pad, na który chcesz nagrać. Nagranie trwa, dopóki trzymasz pad.</li>
+  <li>Puść pad: nagranie trafia na ten pad, przycięte do dźwięku.</li>
+</ol>
+
+<h2>Zapisywanie kitu</h2>
+<p>Zmiany słychać od razu, ale na kartę trafiają dopiero po zapisaniu. Gdy wychodzisz z Samplera przyciskiem zasilania, a kit ma zmiany, pojawia się okno <b>Unsaved changes</b> z listą zmienionych padów: <span class="lbl">Save</span> zapisuje, <span class="lbl">Discard</span> przywraca kit z karty, <span class="lbl">Cancel</span> wraca do pracy.</p>
+<div class="tip"><b>Zapisz przed zmianą kitu</b>
+Wczytanie innego kitu przez przycisk z nazwą kitu nie pyta o zapis. Najpierw wyjdź przyciskiem zasilania i wybierz <span class="lbl">Save</span>.</div>
+<p class="small">Pliki: WAV 44,1 kHz, 16 bitów, mono albo stereo, jeden sampel na pad. Kity perkusyjne (DRUMS) grają do 12 głosów naraz.</p>
+</section>

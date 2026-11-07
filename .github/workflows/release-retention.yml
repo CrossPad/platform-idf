@@ -1,0 +1,56 @@
+name: Release retention
+
+# By hand: a dry run by default; `apply` unpublishes superseded releases back
+# to draft (never deletes), but only while the repo variable RETENTION is `on`.
+# `dry-run` or unset: the plan is printed and nothing changes, whatever the
+# input says; so does a run that is not on main. After each auto-published rc
+# the same tool runs from main.yml's `retention` job. Spec: "Release retention".
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "unpublish (otherwise only print the plan); needs the repo variable RETENTION=on"
+        type: boolean
+        default: false
+      max:
+        description: "refuse to unpublish more than this many"
+        type: number
+        default: 10
+
+permissions:
+  packages: read
+  contents: read
+
+jobs:
+  retention:
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      packages: read
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Retention
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY: ${{ inputs.apply }}
+          MAX: ${{ inputs.max }}
+          RETENTION: ${{ vars.RETENTION }}
+          REF: ${{ github.ref }}
+        run: |
+          mode=""
+          if [ "$APPLY" = "true" ]; then
+            if [ "$RETENTION" != "on" ]; then
+              echo "::notice::apply was asked for, but the repo variable RETENTION is '${RETENTION:-unset}', not 'on': printing the plan only"
+            elif [ "$REF" != "refs/heads/main" ]; then
+              echo "::notice::apply was asked for, but this run is on '$REF', not refs/heads/main: printing the plan only"
+            else
+              mode="--apply"
+            fi
+          fi
+          python3 tools/release_retention.py --repo "$GITHUB_REPOSITORY" --max "${MAX:-10}" $mode

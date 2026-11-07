@@ -1,0 +1,50 @@
+name: Deploy API Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'main/**'
+      - 'components/crosspad-platform-idf/**'
+      - 'Doxyfile'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  packages: read   # pulls the CI image
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    # GitHub's runner even with CI_RUNNER set: this job deploys Pages with an
+    # OIDC token. CI_SECRETS_RUNNER, as for main.yml's release job.
+    runs-on: ${{ vars.CI_SECRETS_RUNNER || 'ubuntu-latest' }}
+    # The CI image (see main.yml): doxygen 1.16.1, as in crosspad-core.
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate docs
+        run: doxygen
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/doxygen/html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

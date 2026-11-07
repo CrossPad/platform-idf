@@ -1,0 +1,79 @@
+<section class="chapter">
+<h1 id="obsluga">Obsługa</h1>
+
+<h2>Enkoder, dotyk, przycisk zasilania</h2>
+<div class="cols">
+<div>
+<h3>Enkoder</h3>
+<ul>
+  <li><b>Obrót</b> przesuwa wybór (obwódkę) po przyciskach.</li>
+  <li><b>Kliknięcie</b> naciska wybrany przycisk.</li>
+  <li><b>Wartość</b> zmieniasz tak: kliknij (przycisk świeci), kręć, kliknij ponownie.</li>
+  <li>Na listach kliknięcie wybiera, a <b>przytrzymanie</b> wychodzi z listy do pozostałych przycisków.</li>
+</ul>
+<h3>Dotyk</h3>
+<ul>
+  <li>Stuknięcie wybiera, przeciągnięcie przewija, przeciągnięcie suwaka zmienia wartość.</li>
+  <li>Przesunięcie palcem w prawo cofa.</li>
+  <li>Przesunięcie w dół od górnej krawędzi otwiera szufladę szybkich ustawień.</li>
+</ul>
+</div>
+<div>
+<h3>Przycisk zasilania w trakcie pracy</h3>
+<ul>
+  <li><b>Krótkie wciśnięcie = wstecz</b>, zawsze o jeden krok: zamyka rozwiniętą listę, okno albo komunikat, kończy zmianę wartości, zamyka szufladę, w aplikacji cofa poziom, na końcu zamyka aplikację i wraca tam, skąd przyszedłeś. Na ekranie głównym nic nie robi.</li>
+  <li><b>Przytrzymanie ok. 0,5 s:</b> enkoder przeskakuje na przyciski paska transportu u góry ekranu, kolejne przytrzymanie wraca. Gdy u góry widać ikony statusu, otwiera i zamyka szufladę szybkich ustawień.</li>
+</ul>
+</div>
+</div>
+
+<h2>Mapa MODE</h2>
+<figure class="shot"><img src="img/home.png" alt=""><figcaption>Ekran główny w stylu listy (Settings › Display › Home screen)</figcaption></figure>
+
+<p>Ekran główny to mapa: jedna komórka na pad, ułożona jak pady. Aplikację otwierasz uderzeniem padu, stuknięciem komórki albo enkoderem. W aplikacji <span class="lbl">MODE</span> na pasku transportu przywołuje mapę; drugie stuknięcie MODE zostawia cię w aplikacji. Na mapie pady wybierają aplikacje i nie grają, a sekwencja i MIDI z komputera grają dalej.</p>
+<div class="padmap">
+  <div><span class="n">13</span><b>Kits</b><i>przeglądarka kitów</i></div>
+  <div><span class="n">14</span><b>Help</b><i>pomoc</i></div>
+  <div><span class="n">15</span><b>Update</b><i>Firmware</i></div>
+  <div><span class="n">16</span><b>Setup</b><i>ustawienia</i></div>
+  <div><span class="n">9</span><b>Pitch</b><i>Pitch Play</i></div>
+  <div><span class="n">10</span><b>Pad Mix</b><i>głośność padów</i></div>
+  <div><span class="n">11</span><b>Mixer</b><i>routing</i></div>
+  <div><span class="n">12</span><b>DAW</b><i>DAW Control</i></div>
+  <div><span class="n">5</span><b>Record</b><i>Recorder</i></div>
+  <div><span class="n">6</span><b>Slicer</b><i>cięcie</i></div>
+  <div style="background:#3a4048"><span class="n">7</span><i>—</i></div>
+  <div><span class="n">8</span><b>More</b><i>pozostałe, m.in. Power OFF</i></div>
+  <div style="background:#2b3a12"><span class="n">1</span><b>Sampler</b><i>granie kitem</i></div>
+  <div style="background:#2b3a12"><span class="n">2</span><b>Seq</b><i>rytmy</i></div>
+  <div style="background:#2b3a12"><span class="n">3</span><b>Song</b><i>utwór ze scen</i></div>
+  <div style="background:#2b3a12"><span class="n">4</span><b>Arrange</b><i>ścieżki</i></div>
+</div>
+<p>Wygląd ekranu głównego zmienisz w Settings › Display › <span class="lbl">Home screen</span>: mapa padów (domyślnie), siatka ikon albo lista. Przy siatce i liście <span class="lbl">MODE</span> wraca na ekran główny.</p>
+
+<h2>Pasek transportu</h2>
+<p>Pasek u góry ekranu jest widoczny w każdej aplikacji. Jest miętowy, w trakcie odliczania bursztynowy, a w trakcie nagrywania czerwony.</p>
+<div class="tbar">
+  <div>BPM<small>tempo</small></div><div>POS<small>pozycja</small></div><div>MODE<small>mapa</small></div><div>REC<small>nagraj</small></div><div>DUB<small>dogrywka</small></div><div>PLAY<small>start/stop</small></div><div>♩<small>metronom</small></div><div>CPU<small>głosy · bateria</small></div>
+</div>
+<table>
+<tr><th style="width:20%">Klawisz</th><th>Co robi</th></tr>
+<tr><td><span class="lbl">BPM</span></td><td>Stuknij albo kliknij, kręć (20–300, 1 BPM na ząbek), kliknij, żeby zatwierdzić. Gdy tempo podaje zegar MIDI z komputera, pola nie da się edytować.</td></tr>
+<tr><td>pozycja</td><td>Takt i miara oraz stan (STOP / COUNT / PLAY / REC / DUB). W Arrange, przy zatrzymaniu, obrót przesuwa miejsce startu.</td></tr>
+<tr><td>MODE (cztery kwadraty)</td><td>Mapa MODE.</td></tr>
+<tr><td>REC (czerwona kropka), <span class="lbl">DUB</span>, PLAY (trójkąt)</td><td>Nagrywanie, dogrywanie, start i stop. Dokładne znaczenie zależy od aplikacji (Sequencer, Arrange). Przytrzymanie PLAY zatrzymuje i wraca na początek.</td></tr>
+<tr><td>metronom</td><td>Stuknięcie włącza i wyłącza klik. Przytrzymanie otwiera okno <b>Metronome</b>: głośność, gęstość (1/4, 1/8, 1/16) i odliczanie (Count-in: Off, 1 bar, 2 bars).</td></tr>
+<tr><td>CPU · głosy · bateria</td><td>Obciążenie (bursztynowe od 75 %, czerwone od 90 %), liczba grających głosów i bateria. Stuknięcie albo przesunięcie paska w bok pokazuje pasek statusu z ikonami.</td></tr>
+</table>
+
+<h2>Szuflada szybkich ustawień</h2>
+<p>Przesuń palcem w dół od górnej krawędzi ekranu (albo przytrzymaj przycisk zasilania, gdy widać ikony statusu).</p>
+<table>
+<tr><th style="width:20%">Element</th><th>Co ustawia</th></tr>
+<tr><td><span class="lbl">Out 1</span></td><td>Poziom wyjścia liniowego (gniazdo Out 3/4).</td></tr>
+<tr><td><span class="lbl">Out 2</span></td><td>Poziom wbudowanych głośników.</td></tr>
+<tr><td><span class="lbl">Speaker</span></td><td>Przełącznik: włącza i wyłącza wbudowane głośniki.</td></tr>
+<tr><td><span class="lbl">Pads</span> · <span class="lbl">Screen</span></td><td>Jasność padów i ekranu.</td></tr>
+</table>
+<p class="small">Uwaga: w szufladzie numeracja „Out 1 / Out 2” jest inna niż nazwy gniazd w Mikserze, gdzie Out 1/2 to słuchawki, a Out 3/4 to wyjście liniowe. Opis wyżej podaje, co faktycznie ustawia każdy suwak. <b>Poziomu słuchawek nie ma w szufladzie</b>: ustawisz go w Settings › Audio › Output Volume › <span class="lbl">Phones</span> albo w Mikserze (OUT › Phones).</p>
+</section>

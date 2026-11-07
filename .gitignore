@@ -1,0 +1,54 @@
+build
+build_*/
+*/build
+managed_components
+.cproject
+.project
+.cache
+.vscode/*
+!.vscode/settings.template.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+sdkconfig.old
+__pycache__
+.devcontainer
+.github/copilot*
+.DS_Store
+sdkconfig
+.claude/settings.local.json
+.claude/settings.json
+.claude/scheduled_tasks.lock
+
+build_log.txt
+docs/generated/
+docs/doxygen/
+
+# Dev mode: symlinks to local repos (dev-mode.sh / submodule-mode.sh)
+# These paths are either real submodules OR symlinks — git tracks submodule pointer, not the symlink itself.
+# The .dev-mode-pins file records the commit SHA to restore when switching back.
+.dev-mode-pins
+*.sh
+!tools/ci/*.sh
+dependencies.lock
+app-registry.json
+tools/crosspad_app_manager.py
+apps.json
+factory/
+
+# App manager working data (backups, generated build flags)
+.crosspad/
+crosspad.local.json
+
+# HIL audio captures (tools/hil_sampler_record.py) - large binaries, per-run
+recordings/
+.claude/
+tools/.crosspad_app_manager.downloaded
+tools/crosspad_app_manager.py.prev
+docs/research/*
+
+# written by the CrossPad installer (crosspad-apps/install)
+/cptools
+/cptools.cmd
+/bin/
+/.venv/
+main/app/app_registry_init.cpp

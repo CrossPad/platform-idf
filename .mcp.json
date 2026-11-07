@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "crosspad": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${HOME}/.local/crosspad-mcp/node_modules/crosspad-mcp-server/dist/index.js"
+      ]
+    }
+  }
+}

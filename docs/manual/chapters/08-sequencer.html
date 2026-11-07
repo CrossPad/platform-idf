@@ -1,0 +1,57 @@
+<section class="chapter">
+<h1 id="sequencer">Sequencer: rytmy i pętle</h1>
+<p><b>MODE → pad 2 „Seq”.</b> Sequencer nagrywa to, co grasz na padach, jako pętlę: scenę o długości od 1 do 8 taktów. Scen jest do ośmiu (Seq 1–8). Pętla gra dalej, gdy wyjdziesz do innej aplikacji.</p>
+
+<h2>Ekran</h2>
+<figure class="shot"><img src="img/sequencer.png" alt=""><figcaption>Sequencer otwarty z utworu (ścieżka 1, blok 1)</figcaption></figure>
+
+<ul>
+  <li><b>Górny rząd:</b> <span class="lbl">◀</span> <span class="lbl">Seq 1/1</span> <span class="lbl">▶</span> <span class="lbl">−</span> <span class="lbl">+</span> <span class="lbl">4b</span> <span class="lbl">1/16</span> <span class="lbl">SWING 0%</span></li>
+  <li><b>Siatka:</b> 16 rzędów, po jednym na pad (pad 1 na dole). Każde uderzenie to znacznik, przytrzymana nuta ma „ogon”. Kursor pokazuje, gdzie jest odtwarzanie.</li>
+  <li><b>Dolny rząd:</b> <span class="lbl">◀ ARR</span> <span class="lbl">EDIT ▶</span> <span class="lbl">x2</span> <span class="lbl">/2</span> <span class="lbl">BOUNCE</span> <span class="lbl">ERASE</span> <span class="lbl">CLEAR</span></li>
+</ul>
+
+<h2>Górny rząd</h2>
+<table>
+<tr><th style="width:24%">Klawisz</th><th>Co robi</th></tr>
+<tr><td><span class="lbl">◀</span> <span class="lbl">▶</span></td><td>Poprzednia / następna scena. Zmiana czeka do końca pętli; do tego czasu napis jest bursztynowy, np. „Seq 1&gt;2”.</td></tr>
+<tr><td><span class="lbl">Seq n/m</span></td><td>Okno <b>SCENE</b>: tempo (<span class="lbl">BPM</span>), <span class="lbl">+ ADD</span> nowa pusta scena, <span class="lbl">− DEL</span> usuwa bieżącą (ostatniej nie można), <span class="lbl">PRE</span> odliczanie przed nagraniem, <span class="lbl">KIT</span> czym grają pady (kit albo instrument z Pitch Play), <span class="lbl">SYNC</span> start razem z utworem w Arrange, <span class="lbl">16 VEL</span> / <span class="lbl">16 PITCH</span> (jeden pad w 16 głośnościach albo 16 półtonach), <span class="lbl">Done</span>.</td></tr>
+<tr><td><span class="lbl">−</span> <span class="lbl">+</span> / <span class="lbl">4b</span></td><td>Długość sceny: 1, 2, 4 albo 8 taktów. <span class="lbl">4b</span> przełącza po kolei 1→2→4→8.</td></tr>
+<tr><td><span class="lbl">1/16</span></td><td>Kwantyzacja nagrania: 1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32 albo <span class="lbl">free</span> (bez wyrównania, napis bursztynowy).</td></tr>
+<tr><td><span class="lbl">SWING</span></td><td>Okno SWING: <span class="lbl">AMOUNT</span> 0–100, swing szesnastek albo ósemek, gotowe stopnie 50–75 jak w klasycznych samplerach. Swing należy do sceny (w utworze: do ścieżki); wyłączony przywraca nuty na prosto.</td></tr>
+</table>
+
+<h2>Nagrywanie</h2>
+<p>Nagrywanie prowadzisz z paska transportu na górze ekranu:</p>
+<ul>
+  <li>REC przy zatrzymaniu: start nagrania (z <span class="lbl">PRE</span> najpierw odliczanie). <b>W pierwszym przejściu pętli</b> nowe uderzenia zastępują stare. Gdy pętla wróci na początek, nagrywanie samo przechodzi w dogrywanie (<span class="lbl">DUB</span>): kolejne przejścia dokładają nuty do tego, co już zagrałeś.</li>
+  <li>Nagranie kończysz przyciskiem <span class="lbl">DUB</span> (pętla gra dalej), PLAY albo STOP. <b>Nie kończ go przyciskiem REC</b> po pierwszym przejściu: REC wtedy znowu włącza zastępowanie i następne przejście skasuje to, co nagrałeś.</li>
+  <li>REC w trakcie samego odtwarzania: wejście w nagrywanie (punch-in), z tymi samymi zasadami.</li>
+  <li><span class="lbl">DUB</span> w trakcie odtwarzania: dogrywanie na grającą pętlę, bez kasowania tego, co już jest. Ponowne <span class="lbl">DUB</span> kończy.</li>
+  <li>STOP: pierwszy zatrzymuje w miejscu (STOP, który kończy nagranie, od razu przewija na 1.1), drugi przewija na początek. Przytrzymanie PLAY zatrzymuje i wraca na 1.1.</li>
+</ul>
+<ol class="steps">
+  <li>MODE → Seq. Ustaw długość (np. <span class="lbl">2b</span>) i kwantyzację <span class="lbl">1/16</span>.</li>
+  <li>W oknie <span class="lbl">Seq 1/1</span> włącz <span class="lbl">PRE</span> i zamknij <span class="lbl">Done</span>.</li>
+  <li><span class="lbl">REC</span> → odliczanie → graj na padach.</li>
+  <li>Graj przez jedno przejście pętli; od drugiego dogrywasz kolejne warstwy. Skończ przyciskiem <span class="lbl">DUB</span> albo STOP.</li>
+</ol>
+
+<h2>Dolny rząd</h2>
+<table>
+<tr><th style="width:20%">Klawisz</th><th>Co robi</th></tr>
+<tr><td><span class="lbl">◀ ARR</span></td><td>Przejście do Arrange.</td></tr>
+<tr><td><span class="lbl">EDIT ▶</span></td><td>Otwiera Sampler (kit sceny) albo Pitch Play (instrument), żeby zmienić brzmienie padów.</td></tr>
+<tr><td><span class="lbl">x2</span></td><td>Podwaja scenę: kopiuje nuty na drugą połowę. Odmawia, gdy wyszłoby ponad 8 taktów albo 192 nuty.</td></tr>
+<tr><td><span class="lbl">/2</span></td><td>Zostawia pierwszą połowę sceny.</td></tr>
+<tr><td><span class="lbl">ERASE</span></td><td>Trzymaj i uderzaj w pady: każdy uderzony pad traci wszystkie swoje nuty w scenie.</td></tr>
+<tr><td><span class="lbl">CLEAR</span></td><td>Pierwsze naciśnięcie zmienia napis na <span class="lbl">SURE?</span>, drugie w ciągu 3 s czyści nuty sceny. Długość i swing zostają.</td></tr>
+<tr><td><span class="lbl">BOUNCE</span></td><td>Zgrywa scenę do pliku WAV i kładzie go na wybranej ścieżce w Arrange (pyta: <i>on which track?</i>). Potrzebna karta SD.</td></tr>
+</table>
+<div class="warn"><b>Uwaga w tej wersji: CLEAR w scenach 5–8</b>
+W pierwszym wydaniu <span class="lbl">CLEAR</span> użyty w scenach Seq 5–8 czyści nuty <b>wszystkich</b> scen, nie tylko bieżącej. W scenach 5–8 kasuj nuty przyciskiem <span class="lbl">ERASE</span>. Poprawka przyjdzie w aktualizacji.</div>
+
+<h2>Scena jako blok utworu</h2>
+<p>Gdy otwarty utwór ma uzbrojoną (<span class="lbl">ARM</span>) ścieżkę kitu, Sequencer pracuje na tej ścieżce: otwarty z MODE pokazuje blok pod kursorem utworu, a z Arrange (<span class="lbl">CLIP EDIT</span>) wybrany blok. Nazwa ma wtedy postać „T<i>ścieżka</i> B<i>blok</i>” (np. <span class="lbl">T1 B1</span>), edytujesz tylko ten blok, a zmiany wracają od razu do utworu. Strzałki scen, <span class="lbl">+ ADD</span> i <span class="lbl">− DEL</span> nic wtedy nie robią, a <span class="lbl">BOUNCE</span> odsyła do Arrange. Zwykłe sceny opisane wyżej są dostępne, gdy utwór nie ma takiej ścieżki.</p>
+<p class="small">Limity: 8 scen, do 8 taktów i 192 nut na scenę, tempo 20–300 BPM. Sceny zapisują się razem z utworem na karcie.</p>
+</section>

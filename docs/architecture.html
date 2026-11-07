@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CrossPad Architecture</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117; --bg2: #161b22; --bg3: #1c2128;
+      --border: #30363d; --border2: #21262d;
+      --fg: #e6edf3; --fg2: #8b949e;
+      --blue: #58a6ff; --green: #3fb950; --yellow: #d29922;
+      --red: #f85149; --purple: #bc8cff;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--fg); }
+    header {
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 14px 28px; display: flex; align-items: center; gap: 14px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    header h1 { font-size: 1.15rem; font-weight: 600; }
+    header h1 span { color: var(--blue); }
+    .header-badges { display: flex; gap: 8px; margin-left: auto; }
+    .badge {
+      font-size: 0.7rem; padding: 3px 8px; border-radius: 12px;
+      border: 1px solid var(--border); color: var(--fg2); background: var(--bg);
+    }
+    .tabs {
+      display: flex; gap: 2px; padding: 0 28px;
+      border-bottom: 1px solid var(--border); background: var(--bg);
+      overflow-x: auto; scrollbar-width: thin;
+    }
+    .tab {
+      padding: 11px 18px; cursor: pointer; font-size: 0.82rem; font-weight: 500;
+      color: var(--fg2); border-bottom: 2px solid transparent;
+      transition: all 0.12s; user-select: none; white-space: nowrap;
+    }
+    .tab:hover { color: var(--fg); }
+    .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+    .panel { padding: 28px; max-width: 1600px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+    .panel.hidden { display: none; }
+    .card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .card-header {
+      padding: 14px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .card-header h2 { font-size: 0.82rem; font-weight: 600; color: var(--fg); }
+    .card-header .tag {
+      font-size: 0.65rem; padding: 2px 7px; border-radius: 10px; font-weight: 500; border: 1px solid;
+    }
+    .tag-blue { color: var(--blue); border-color: #1f6feb55; background: #1f6feb15; }
+    .tag-green { color: var(--green); border-color: #3fb95055; background: #3fb95015; }
+    .tag-purple { color: var(--purple); border-color: #8957e555; background: #8957e515; }
+    .tag-yellow { color: var(--yellow); border-color: #d2992255; background: #d2992215; }
+    .card-body { padding: 20px; }
+    .mermaid-wrap {
+      overflow: hidden; height: 70vh; min-height: 400px; position: relative; cursor: grab;
+      border-radius: 4px; background: #0d111799;
+    }
+    .mermaid-wrap.dragging { cursor: grabbing; }
+    .mermaid-wrap .mermaid {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    }
+    .mermaid-wrap .mermaid svg {
+      /* SVG viewBox zoom — text stays vector-crisp at any scale */
+      shape-rendering: geometricPrecision;
+      text-rendering: optimizeLegibility;
+    }
+    .zoom-controls {
+      position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 10;
+    }
+    .zoom-btn {
+      width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg2); color: var(--fg2); font-size: 0.95rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: all 0.1s;
+      font-family: -apple-system, 'Segoe UI', sans-serif; line-height: 1;
+    }
+    .zoom-btn:hover { background: var(--bg3); color: var(--fg); border-color: var(--fg2); }
+    .zoom-label {
+      height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--fg2); font-size: 0.75rem;
+      display: flex; align-items: center; font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 14px 20px; border-top: 1px solid var(--border); }
+    .legend-item { display: flex; align-items: center; gap: 7px; font-size: 0.75rem; color: var(--fg2); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+    .tbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .tbl th {
+      text-align: left; padding: 10px 14px; color: var(--fg2); font-weight: 500;
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border); background: var(--bg3);
+    }
+    .tbl td { padding: 9px 14px; border-bottom: 1px solid var(--border2); }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl .mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.78rem; }
+    .tbl .c-blue { color: var(--blue); }
+    .tbl .c-green { color: var(--green); }
+    .tbl .c-muted { color: var(--fg2); }
+    .callout {
+      border-radius: 6px; padding: 12px 16px; font-size: 0.82rem;
+      display: flex; gap: 10px; align-items: flex-start; line-height: 1.5;
+    }
+    .callout code {
+      font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.78rem;
+      background: #ffffff12; padding: 1px 5px; border-radius: 3px;
+    }
+    .callout-danger  { background: #2d1117; border: 1px solid #f8514944; }
+    .callout-success { background: #1f2a0d; border: 1px solid #3fb95044; }
+    .callout-warn    { background: #2a1f0d; border: 1px solid #d2992244; }
+    .desc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .desc-grid { grid-template-columns: 1fr; } }
+    .desc-item { background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 14px 16px; }
+    .desc-item h3 { font-size: 0.78rem; color: var(--blue); margin-bottom: 4px; font-weight: 600; }
+    .desc-item p { font-size: 0.78rem; color: var(--fg2); line-height: 1.45; }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+    <rect width="24" height="24" rx="5" fill="#58a6ff" opacity="0.15"/>
+    <rect x="4" y="4" width="7" height="7" rx="1.5" fill="#58a6ff"/>
+    <rect x="13" y="4" width="7" height="7" rx="1.5" fill="#58a6ff"/>
+    <rect x="4" y="13" width="7" height="7" rx="1.5" fill="#58a6ff"/>
+    <rect x="13" y="13" width="7" height="7" rx="1.5" fill="#3fb950"/>
+  </svg>
+  <h1><span>CrossPad</span> Architecture</h1>
+  <div class="header-badges">
+    <span class="badge">ESP32-S3</span>
+    <span class="badge">ESP-IDF v5.5</span>
+    <span class="badge">LVGL v9.3</span>
+    <span class="badge">FreeRTOS</span>
+  </div>
+</header>
+
+<div class="tabs" id="tabs">
+  <div class="tab active" data-idx="0">Overview</div>
+  <div class="tab" data-idx="1">Boot Sequence</div>
+  <div class="tab" data-idx="2">Dependencies</div>
+  <div class="tab" data-idx="3">Data Flow</div>
+  <div class="tab" data-idx="4">Singletons</div>
+  <div class="tab" data-idx="5">App Registration</div>
+  <div class="tab" data-idx="6">FreeRTOS Tasks</div>
+</div>
+
+<!-- ══════ TAB 0 — OVERVIEW ══════ -->
+<div class="panel">
+  <div class="card">
+    <div class="card-header">
+      <h2>High-Level System Architecture</h2>
+      <span class="tag tag-blue">layered view</span>
+    </div>
+    <div class="card-body">
+      <div class="mermaid-wrap">
+        <div class="mermaid">
+graph TB
+    subgraph HW["HARDWARE  -  ESP32-S3"]
+        direction LR
+        LCD["ST7789 LCD"]
+        TOUCH["FT6x36 Touch"]
+        LEDS["WS2812B 16 RGB"]
+        AUDIO["ES8388 x2 Codec"]
+        IMU_HW["LSM6DSO IMU"]
+        STM32_HW["STM32 Co-proc"]
+        USB_HW["TinyUSB"]
+        ESPNOW_HW["ESP-NOW"]
+    end
+
+    subgraph BSP_LAYER["BSP  -  Hardware Drivers"]
+        direction LR
+        BSP_DISP["Display"]
+        BSP_AUDIO["Audio I2S"]
+        BSP_IMU["IMU"]
+        BSP_I2C["I2C Bus"]
+        BSP_SD["Storage"]
+    end
+
+    subgraph CORE["CROSSPAD-CORE  -  Portable Business Logic"]
+        direction LR
+        C_PAD["PadManager"]
+        C_LED["PadLedController"]
+        C_EVENT["EspEventBus"]
+        C_STM32["Stm32Manager"]
+        C_MIDI["MidiHandler"]
+        C_SETTINGS["Settings"]
+        C_APPREG["AppRegistry"]
+    end
+
+    subgraph PLATFORM["CROSSPAD-PLATFORM-IDF  -  ESP-IDF Adapters"]
+        direction LR
+        P_FACTORY["CrosspadPlatform"]
+        P_CLOCK["EspClock"]
+        P_LED["EspLedStrip"]
+        P_MIDI["EspMidiOutput"]
+        P_TRANS["EspStm32Transport"]
+    end
+
+    subgraph GUI["CROSSPAD-GUI  -  LVGL Framework"]
+        direction LR
+        G_BASE["AppBase"]
+        G_LAUNCH["Launcher"]
+        G_MAIN["MainScreen"]
+        G_THEME["Theme"]
+    end
+
+    subgraph APPSYS["APPLICATION SYSTEM  -  Lifecycle"]
+        direction LR
+        AS_MGR["AppManager"]
+        AS_APP["App Class"]
+    end
+
+    subgraph STM32_HAL["STM32_HAL  -  UART Interface"]
+        direction LR
+        SH_UART["stm32_uart"]
+        SH_BRIDGE["stm32_bridge"]
+    end
+
+    subgraph MAIN_APP["MAIN  -  Application Entry"]
+        direction LR
+        M_MAIN["main.cpp"]
+        M_DISPLAY["display.h"]
+        M_GUI["gui.cpp"]
+        M_MIDICB["midiCallbacks"]
+        subgraph APPS["Apps - Auto-Discovered"]
+            APP_COOP["coop"]
+            APP_EX["example"]
+            APP_UPD["update"]
+        end
+    end
+
+    LCD -->|SPI| BSP_DISP
+    TOUCH -->|I2C| BSP_I2C
+    AUDIO -->|I2S| BSP_AUDIO
+    IMU_HW -->|I2C| BSP_IMU
+    LEDS -->|RMT| P_LED
+    USB_HW -->|TinyUSB| M_MIDICB
+    STM32_HW -->|UART| SH_UART
+
+    P_FACTORY --> C_EVENT
+    P_FACTORY --> C_PAD
+    P_FACTORY --> C_LED
+    P_FACTORY --> C_STM32
+
+    SH_UART --> P_TRANS
+    P_TRANS --> C_STM32
+    SH_BRIDGE --> C_PAD
+
+    M_MAIN --> P_FACTORY
+    M_MAIN --> M_DISPLAY
+    M_DISPLAY --> M_GUI
+    M_GUI --> AS_MGR
+    M_DISPLAY --> C_APPREG
+    AS_MGR --> AS_APP
+    AS_APP --> G_BASE
+
+    APP_COOP --> AS_APP
+    APP_EX --> AS_APP
+    APP_UPD --> AS_APP
+
+    style HW fill:#1a2332,stroke:#3d6699,color:#79c0ff
+    style BSP_LAYER fill:#1c1a26,stroke:#6e40c9,color:#d2a8ff
+    style CORE fill:#0d2039,stroke:#1f6feb,color:#79c0ff
+    style PLATFORM fill:#152210,stroke:#3fb950,color:#7ee787
+    style GUI fill:#1f0d2a,stroke:#8957e5,color:#d2a8ff
+    style APPSYS fill:#261e0d,stroke:#d29922,color:#e3b341
+    style STM32_HAL fill:#250d1a,stroke:#f85149,color:#ff7b72
+    style MAIN_APP fill:#0f2618,stroke:#238636,color:#7ee787
+    style APPS fill:#0f2618,stroke:#238636,color:#7ee787
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#1f6feb"></div>crosspad-core (portable)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>ESP-IDF platform</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d29922"></div>ApplicationSystem</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#8957e5"></div>crosspad-gui / BSP</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f85149"></div>STM32 HAL</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3d6699"></div>Hardware</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Key Architectural Concepts</h2></div>
+    <div class="card-body">
+      <div class="desc-grid">
+        <div class="desc-item">
+          <h3>Portability via Interfaces</h3>
+          <p>Apps depend on crosspad-core interfaces (IEventBus, IMidiOutput, ILedStrip, IClock) — never on platform specifics. The same app code runs on ESP-IDF and Arduino.</p>
+        </div>
+        <div class="desc-item">
+          <h3>Singleton Factory Pattern</h3>
+          <p>CrosspadPlatform_Init() creates 12 singletons in strict dependency order. All accessed via crosspad::getXxx() namespace functions.</p>
+        </div>
+        <div class="desc-item">
+          <h3>Auto-Discovery Apps</h3>
+          <p>Apps live in main/app/ as folders or git submodules. CMake auto-discovers them at configure time. REGISTER_APP macro + code generation handles registration.</p>
+        </div>
+        <div class="desc-item">
+          <h3>Dual-Core FreeRTOS</h3>
+          <p>Core 0: LVGL rendering (16ms tick). Core 1: event bus, pad animation (10ms), UART loop, app_main. Tasks communicate via EventBus queues.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ TAB 1 — BOOT SEQUENCE ══════ -->
+<div class="panel">
+  <div class="card">
+    <div class="card-header">
+      <h2>Boot Sequence</h2>
+      <span class="tag tag-green">sequence</span>
+    </div>
+    <div class="card-body">
+      <div class="mermaid-wrap">
+        <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Main as main.cpp
+    participant NVS as NVS Settings
+    participant USB as USB Config
+    participant Plat as CrosspadPlatform
+    participant MIDI as midiCallbacks
+    participant BSP as BSP Drivers
+    participant LVGL as LVGLTask Core0
+    participant Reg as AppRegistry
+    participant Anim as AnimTask Core1
+
+    Note over Main: app_main runs on Core 1
+
+    Main->>NVS: NvsSettingsStore init
+    Main->>NVS: settings loadFrom store
+    Main->>USB: usb_config_manager_init
+
+    Note over Plat: Phase 2 - Platform Singletons
+    Main->>Plat: CrosspadPlatform_Init
+    Note over Plat: Creates 12 singletons in order
+    Plat-->>Main: All singletons ready
+
+    Note over Main: Phase 3 - Wiring
+    Main->>MIDI: midiCallbacks_init
+    Note over MIDI: Wire STM32MIDI and USB_MIDI
+    Main->>Plat: getPadManager begin
+    Main->>BSP: bsp_stm32_init UART
+    Main->>BSP: bsp_i2c_init bsp_imu_init
+
+    Note over Main: Phase 4 - Spawn Tasks
+    Main->>LVGL: xTaskCreate LVGLTask core0 prio4
+    Main->>Anim: xTaskCreate animTask prio3
+    Main->>Main: xTaskCreate uartLoop prio5
+
+    Note over LVGL: GUI Initialization on Core 0
+    LVGL->>LVGL: setupLVGL
+    LVGL->>LVGL: crosspad_gui bootstrap
+    LVGL->>Reg: InitializeAppRegistry
+    Reg->>Reg: AppRegistry_InitAll
+    LVGL->>LVGL: AddApps
+    LVGL->>LVGL: LoadMainScreen
+
+    loop Every 10ms
+        LVGL->>LVGL: lock - lv_timer_handler - unlock
+    end
+
+    loop Every 10ms
+        Anim->>Plat: getPadManager update
+    end
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ TAB 2 — DEPENDENCIES ══════ -->
+<div class="panel">
+  <div class="card">
+    <div class="card-header">
+      <h2>ESP-IDF Component Dependency Tree</h2>
+      <span class="tag tag-yellow">dependencies</span>
+    </div>
+    <div class="card-body">
+      <div class="mermaid-wrap">
+        <div class="mermaid">
+graph LR
+    subgraph APP["Application"]
+        MAIN["main"]
+    end
+
+    subgraph SUB["Git Submodules"]
+        CCORE["crosspad-core"]
+        CGUI["crosspad-gui"]
+    end
+
+    subgraph OWN["Project Components"]
+        CPIDF["crosspad-platform-idf"]
+        APPSYS["ApplicationSystem"]
+        STM32["stm32_hal"]
+        BSP["bsp crosspad"]
+    end
+
+    subgraph EXT["MIDI and USB"]
+        AMIDI["arduino_midi_library"]
+        TUSB_MIDI["midi_tinyusb_transport"]
+        UAC["usb_device_uac"]
+    end
+
+    subgraph STORE["Storage"]
+        NVS["nvs_flash"]
+        LFS["littlefs"]
+        FAT["fatfs"]
+    end
+
+    subgraph MGD["Managed Components"]
+        LVGL["lvgl v9.3"]
+        LVGL_PORT["esp_lvgl_port"]
+        CODEC["esp_codec_dev"]
+        AJSON["ArduinoJson"]
+    end
+
+    subgraph IDF["ESP-IDF Core"]
+        RTOS["freertos"]
+        EVT["esp_event"]
+        DRV["driver"]
+        TIMER["esp_timer"]
+        LEDST["led_strip"]
+    end
+
+    MAIN --> APPSYS
+    MAIN --> CPIDF
+    MAIN --> STM32
+    MAIN --> BSP
+    MAIN --> AMIDI
+    MAIN --> TUSB_MIDI
+    MAIN --> UAC
+    MAIN --> NVS
+    MAIN --> LFS
+    MAIN --> FAT
+    MAIN --> CGUI
+
+    APPSYS --> CGUI
+    APPSYS --> CPIDF
+    CGUI --> LVGL
+    CGUI --> CCORE
+    CGUI --> LVGL_PORT
+
+    CPIDF --> CCORE
+    CPIDF --> DRV
+    CPIDF --> TIMER
+    CPIDF --> LEDST
+    CPIDF --> BSP
+
+    STM32 --> CPIDF
+    STM32 --> AMIDI
+    STM32 --> CCORE
+
+    BSP --> DRV
+    BSP --> CODEC
+    BSP --> LVGL_PORT
+
+    CCORE --> RTOS
+    CCORE --> EVT
+    CCORE --> AJSON
+
+    LVGL_PORT --> LVGL
+    LVGL_PORT --> DRV
+
+    style CCORE fill:#0d2039,stroke:#1f6feb,color:#79c0ff
+    style CGUI fill:#1f0d2a,stroke:#8957e5,color:#d2a8ff
+    style CPIDF fill:#152210,stroke:#3fb950,color:#7ee787
+    style APPSYS fill:#261e0d,stroke:#d29922,color:#e3b341
+    style STM32 fill:#250d1a,stroke:#f85149,color:#ff7b72
+    style BSP fill:#1c1a26,stroke:#6e40c9,color:#d2a8ff
+    style MAIN fill:#0f2618,stroke:#238636,color:#7ee787
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ TAB 3 — DATA FLOW ══════ -->
+<div class="panel">
+  <div class="card">
+    <div class="card-header">
+      <h2>Data Flow - Hardware to UI</h2>
+      <span class="tag tag-purple">flow</span>
+    </div>
+    <div class="card-body">
+      <div class="mermaid-wrap">
+        <div class="mermaid">
+flowchart TB
+    subgraph INPUTS["INPUTS"]
+        IN_STM32["STM32 Co-proc"]
+        IN_USB["USB MIDI IN"]
+        IN_TOUCH["Touch FT6x36"]
+        IN_ENC["Rotary Encoder"]
+    end
+
+    subgraph PROTOCOL["PROTOCOL LAYER"]
+        PR_UART["stm32_uart"]
+        PR_SYSEX["SysExFramer"]
+        PR_DISPATCH["Stm32MessageHandler"]
+        PR_MIDIPARSE["MIDI parser"]
+    end
+
+    subgraph BUSINESS["BUSINESS LOGIC"]
+        BL_PAD["PadManager"]
+        BL_HANDLER["IPadLogicHandler"]
+        BL_EVENTS["EspEventBus"]
+        BL_MIDIIN["MidiInputHandler"]
+    end
+
+    subgraph LED_PIPE["LED PIPELINE"]
+        LED_CTRL["PadLedController"]
+        LED_ANIM["PadAnimator"]
+        LED_DRV["EspLedStrip RMT"]
+        LED_HW["WS2812B 16 LEDs"]
+    end
+
+    subgraph OUTPUTS["OUTPUTS"]
+        OUT_MIDI["EspMidiOutput"]
+        OUT_STM32["STM32 UART out"]
+        OUT_USB["USB MIDI OUT"]
+        OUT_HAP["Stm32CommandSender"]
+        OUT_LCD["ST7789 LCD"]
+    end
+
+    subgraph GUI_SYS["GUI - LVGL Core 0"]
+        GUI_INPUT["LVGL Input"]
+        GUI_LAUNCHER["App Launcher"]
+        GUI_CONTAINER["App Container"]
+        GUI_ACTIVE["Active App"]
+        GUI_STATUS["Status Bar"]
+    end
+
+    subgraph PERSIST["PERSISTENCE"]
+        P_NVS["NvsSettingsStore"]
+        P_SETTINGS["CrosspadSettings"]
+    end
+
+    IN_STM32 -->|UART 460800| PR_UART
+    PR_UART --> PR_SYSEX
+    PR_SYSEX --> PR_DISPATCH
+    PR_DISPATCH -->|pad events| BL_PAD
+    PR_DISPATCH -->|charger state| BL_EVENTS
+
+    IN_USB --> PR_MIDIPARSE
+    PR_MIDIPARSE --> BL_MIDIIN
+    BL_MIDIIN --> BL_PAD
+
+    IN_TOUCH -->|I2C| GUI_INPUT
+    IN_ENC --> GUI_INPUT
+    GUI_INPUT --> GUI_LAUNCHER
+    GUI_INPUT --> GUI_ACTIVE
+
+    BL_PAD --> BL_HANDLER
+    BL_HANDLER -->|trigger note| OUT_MIDI
+    BL_HANDLER -->|set color| LED_CTRL
+    BL_PAD --> BL_EVENTS
+
+    LED_CTRL --> LED_ANIM
+    LED_ANIM -->|100Hz| LED_DRV
+    LED_DRV --> LED_HW
+
+    OUT_MIDI --> OUT_STM32
+    OUT_MIDI --> OUT_USB
+
+    BL_EVENTS -->|PAD_PRESSED| GUI_ACTIVE
+    BL_EVENTS -->|APP_CHANGED| GUI_CONTAINER
+    BL_EVENTS -->|GUI_UPDATE| GUI_STATUS
+
+    GUI_LAUNCHER --> GUI_CONTAINER
+    GUI_CONTAINER --> GUI_ACTIVE
+    GUI_ACTIVE --> OUT_LCD
+    GUI_STATUS --> OUT_LCD
+
+    P_NVS --> P_SETTINGS
+    P_SETTINGS -.-> BL_PAD
+    P_SETTINGS -.-> GUI_ACTIVE
+
+    BL_PAD -.->|haptic| OUT_HAP
+    OUT_HAP -.-> IN_STM32
+
+    style INPUTS fill:#1a2332,stroke:#3d6699,color:#79c0ff
+    style PROTOCOL fill:#250d1a,stroke:#f85149,color:#ff7b72
+    style BUSINESS fill:#0d2039,stroke:#1f6feb,color:#79c0ff
+    style LED_PIPE fill:#152210,stroke:#3fb950,color:#7ee787
+    style OUTPUTS fill:#1c1a26,stroke:#6e40c9,color:#d2a8ff
+    style GUI_SYS fill:#1f0d2a,stroke:#8957e5,color:#d2a8ff
+    style PERSIST fill:#261e0d,stroke:#d29922,color:#e3b341
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#3d6699"></div>Hardware inputs</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f85149"></div>Protocol parsing</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1f6feb"></div>Business logic</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>LED pipeline</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#8957e5"></div>GUI / outputs</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d29922"></div>Persistence</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ TAB 4 — SINGLETONS ══════ -->
+<div class="panel">
+  <div class="card">
+    <div class="card-header">
+      <h2>Singleton Creation Order</h2>
+      <span class="tag tag-blue">factory</span>
+    </div>
+    <div class="card-body">
+      <div class="mermaid-wrap">
+        <div class="mermaid">
+graph TB
+    subgraph FACTORY["CrosspadPlatform - Singleton Factory"]
+        direction TB
+
+        subgraph S1["Phase 1 - Foundation"]
+            EB["EspEventBus"]
+            CLK["EspClock"]
+            MOUT["EspMidiOutput"]
+        end
+
+        subgraph S2["Phase 2 - LED System"]
+            LS["EspLedStrip"]
+            PLC["PadLedController"]
+            PA["PadAnimator"]
+        end
+
+        subgraph S3["Phase 3 - Pad Input"]
+            PM["PadManager"]
+        end
+
+        subgraph S4["Phase 4 - MIDI Input"]
+            MIH["MidiInputHandler"]
+        end
+
+        subgraph S5["Phase 5 - STM32 Protocol"]
+            EST["EspStm32Transport"]
+            SEF["SysExFramer"]
+            SMH["Stm32MessageHandler"]
+            SCS["Stm32CommandSender"]
+        end
+
+        subgraph S6["Phase 6 - Co-processor"]
+            SM["Stm32Manager"]
+        end
+
+        S1 --> S2
+        S2 --> S3
+        S3 --> S4
+        S4 --> S5
+        S5 --> S6
+
+        EB -.->|inject| PM
+        CLK -.->|inject| PM
+        MOUT -.->|inject| PM
+        LS -.->|inject| PLC
+        PLC -.->|callback| PA
+        PA -.->|inject| PM
+        EST -.->|inject| SEF
+        SEF -.->|inject| SMH
+        SEF -.->|inject| SCS
+        SMH -.->|inject| SM
+        SCS -.->|inject| SM
+    end
+
+    ACCESS["Runtime Access via crosspad namespace"]
+    FACTORY --> ACCESS
+
+    style FACTORY fill:#161b22,stroke:#30363d
+    style S1 fill:#0d2039,stroke:#1f6feb,color:#79c0ff
+    style S2 fill:#152210,stroke:#3fb950,color:#7ee787
+    style S3 fill:#0d2039,stroke:#1f6feb,color:#79c0ff
+    style S4 fill:#1c1a26,stroke:#6e40c9,color:#d2a8ff
+    style S5 fill:#250d1a,stroke:#f85149,color:#ff7b72
+    style S6 fill:#261e0d,stroke:#d29922,color:#e3b341
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Singleton Reference Table</h2></div>
+    <div class="card-body" style="padding:0">
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead>
+            <tr><th>Variable</th><th>Type</th><th>Interface</th><th>Accessor</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono c-blue">s_eventBus</td><td>EspEventBus</td><td class="c-green">IEventBus</td><td class="mono">getEventBus()</td><td class="c-muted">Thread-safe event dispatch (queue)</td></tr>
+            <tr><td class="mono c-blue">s_clock</td><td>EspClock</td><td class="c-green">IClock</td><td class="mono">getClock()</td><td class="c-muted">System time via esp_timer</td></tr>
+            <tr><td class="mono c-blue">s_midiOutput</td><td>EspMidiOutput</td><td class="c-green">IMidiOutput</td><td class="mono">getMidiOutput()</td><td class="c-muted">MIDI output - STM32 UART + USB</td></tr>
+            <tr><td class="mono c-blue">s_ledStrip</td><td>EspLedStrip</td><td class="c-green">ILedStrip</td><td class="mono">getLedStrip()</td><td class="c-muted">WS2812B via RMT driver</td></tr>
+            <tr><td class="mono c-blue">s_padLedController</td><td>PadLedController</td><td class="c-muted">-</td><td class="mono">getPadLedController()</td><td class="c-muted">Pad RGB color logic</td></tr>
+            <tr><td class="mono c-blue">s_padAnimator</td><td>PadAnimator</td><td class="c-muted">-</td><td class="mono">getPadAnimator()</td><td class="c-muted">LED animation state machine</td></tr>
+            <tr><td class="mono c-blue">s_padManager</td><td>PadManager</td><td class="c-muted">-</td><td class="mono">getPadManager()</td><td class="c-muted">Pad routing, note map, per-app logic</td></tr>
+            <tr><td class="mono c-blue">s_midiInputHandler</td><td>MidiInputHandler</td><td class="c-muted">-</td><td class="mono">getMidiInputHandler()</td><td class="c-muted">Route incoming MIDI to PadManager</td></tr>
+            <tr><td class="mono c-blue">s_stm32Transport</td><td>EspStm32Transport</td><td class="c-green">IStm32Transport</td><td class="mono">getStm32Transport()</td><td class="c-muted">UART_NUM_1 byte-level I/O</td></tr>
+            <tr><td class="mono c-blue">s_sysExFramer</td><td>SysExFramer</td><td class="c-muted">-</td><td class="mono">getSysExFramer()</td><td class="c-muted">SysEx frame/deframe for STM32</td></tr>
+            <tr><td class="mono c-blue">s_stm32MsgHandler</td><td>Stm32MessageHandler</td><td class="c-muted">-</td><td class="mono">getStm32MessageHandler()</td><td class="c-muted">Dispatch STM32 messages by type</td></tr>
+            <tr><td class="mono c-blue">s_stm32CommandSender</td><td>Stm32CommandSender</td><td class="c-muted">-</td><td class="mono">getStm32CommandSender()</td><td class="c-muted">Send brightness, vibration, DFU cmds</td></tr>
+            <tr><td class="mono c-blue">s_stm32Manager</td><td>Stm32Manager</td><td class="c-muted">-</td><td class="mono">getStm32Manager()</td><td class="c-muted">Co-processor state machine</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ TAB 5 — APP REGISTRATION ══════ -->
+<div class="panel">
+  <div class="card">
+    <div class="card-header">
+      <h2>App Registration Pipeline</h2>
+      <span class="tag tag-green">pipeline</span>
+    </div>
+    <div class="card-body">
+      <div class="mermaid-wrap">
+        <div class="mermaid">
+flowchart LR
+    subgraph AUTHOR["Developer"]
+        SRC["app source + CMakeLists"]
+        MACRO["REGISTER_APP macro"]
+        SRC --> MACRO
+    end
+
+    subgraph CMAKE["CMake Configure"]
+        GLOB["file GLOB scans app dirs"]
+        SCAN["generate_registry.cmake"]
+        GEN["app_registry_init.cpp"]
+        GLOB --> SCAN
+        SCAN --> GEN
+    end
+
+    subgraph BUILD["Build"]
+        COMPILE["Compile all sources"]
+    end
+
+    subgraph RUN["Runtime"]
+        INIT["AppRegistry_InitAll"]
+        FUNCS["register functions"]
+        REG["AppRegistry map"]
+        ADD["AddApps"]
+        UI["Launcher grid"]
+        LAUNCH["App create"]
+        INIT --> FUNCS
+        FUNCS --> REG
+        REG --> ADD
+        ADD --> UI
+        UI --> LAUNCH
+    end
+
+    MACRO --> GLOB
+    GEN --> COMPILE
+    COMPILE --> INIT
+
+    style AUTHOR fill:#0d2039,stroke:#1f6feb,color:#79c0ff
+    style CMAKE fill:#261e0d,stroke:#d29922,color:#e3b341
+    style BUILD fill:#152210,stroke:#3fb950,color:#7ee787
+    style RUN fill:#1f0d2a,stroke:#8957e5,color:#d2a8ff
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Critical Warnings</h2></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+      <div class="callout callout-danger">
+        <span style="color:var(--red);flex-shrink:0">&#x2716;</span>
+        <div><strong style="color:var(--red)">Never use static constructors</strong> &#8212; <code>static AppRegistrar</code> / <code>__attribute__((constructor))</code> silently fail on ESP-IDF. Even with <code>WHOLE_ARCHIVE</code>, apps won't register. Always use the <code>REGISTER_APP</code> macro.</div>
+      </div>
+      <div class="callout callout-success">
+        <span style="color:var(--green);flex-shrink:0">&#x2714;</span>
+        <div><strong style="color:var(--green)">Always run reconfigure</strong> &#8212; After adding a new app directory, <code>idf.py reconfigure</code> is required. A plain <code>idf.py build</code> will NOT re-run configure and the new app won't be discovered.</div>
+      </div>
+      <div class="callout callout-warn">
+        <span style="color:var(--yellow);flex-shrink:0">&#x26A0;</span>
+        <div><strong style="color:var(--yellow)">CMake variable scoping</strong> &#8212; In app CMakeLists.txt, use <code>set(MY_APP_SOURCES ...)</code> without <code>PARENT_SCOPE</code>. In the parent, aggregate with two separate <code>set()</code> calls.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ TAB 6 — FREERTOS TASKS ══════ -->
+<div class="panel">
+  <div class="card">
+    <div class="card-header">
+      <h2>FreeRTOS Task Map - Dual-Core Layout</h2>
+      <span class="tag tag-yellow">tasks</span>
+    </div>
+    <div class="card-body">
+      <div class="mermaid-wrap">
+        <div class="mermaid">
+graph LR
+    subgraph CORE0["CPU Core 0"]
+        T_LVGL["LVGLTask prio4 8K stack"]
+        T_EVENTS["crosspad_events prio4 2K"]
+    end
+
+    subgraph CORE1["CPU Core 1"]
+        T_MAIN["app_main init then exit"]
+        T_ANIM["animationTask prio3"]
+        T_UART["uartLoop prio5"]
+    end
+
+    subgraph SHARED["Shared Resources"]
+        S_LVGL["LVGL Mutex"]
+        S_QUEUE["Event Queue x64"]
+        S_PAD["Pad State atomic"]
+    end
+
+    T_LVGL -.->|lock unlock| S_LVGL
+    T_EVENTS -.->|dequeue| S_QUEUE
+    T_ANIM -.->|update pads| S_PAD
+    T_UART -.->|post events| S_QUEUE
+    T_ANIM -.->|lv_async_call| S_LVGL
+
+    style CORE0 fill:#0d2039,stroke:#1f6feb,color:#79c0ff
+    style CORE1 fill:#152210,stroke:#3fb950,color:#7ee787
+    style SHARED fill:#261e0d,stroke:#d29922,color:#e3b341
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#1f6feb"></div>Core 0 - UI and Events</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>Core 1 - Logic and IO</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d29922"></div>Shared sync primitives</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Inter-Task Communication</h2></div>
+    <div class="card-body">
+      <div class="desc-grid">
+        <div class="desc-item">
+          <h3>EventBus Queue</h3>
+          <p>64-entry FreeRTOS queue. UART task and PadManager post events. EventBus task dispatches to subscribers on Core 1. GUI subscribes via lv_async_call() for thread-safe LVGL updates.</p>
+        </div>
+        <div class="desc-item">
+          <h3>LVGL Mutex</h3>
+          <p>lvgl_port_lock() / lvgl_port_unlock() protect all LVGL API calls. LVGLTask holds the lock during lv_timer_handler(). Other tasks must acquire before touching UI objects.</p>
+        </div>
+        <div class="desc-item">
+          <h3>Pad State</h3>
+          <p>PadManager maintains pad colors and animation state. Animation task updates at 100Hz, writes to LED strip via RMT (non-blocking). Color changes are atomic uint32 writes.</p>
+        </div>
+        <div class="desc-item">
+          <h3>MIDI Callbacks</h3>
+          <p>UART loop parses MIDI from STM32 + USB. Callbacks fire on the UART task context. Heavy processing deferred to EventBus or PadManager for low-latency pad response.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 1. Init mermaid without auto-rendering
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0d1117',
+      primaryColor: '#1f6feb',
+      primaryTextColor: '#e6edf3',
+      primaryBorderColor: '#30363d',
+      lineColor: '#58a6ff',
+      secondaryColor: '#161b22',
+      tertiaryColor: '#0d1117',
+      nodeBorder: '#30363d',
+      clusterBkg: '#161b22',
+      clusterBorder: '#30363d',
+      titleColor: '#e6edf3',
+      edgeLabelBackground: '#0d1117',
+      fontFamily: "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif",
+      fontSize: '16px',
+      labelTextColor: '#e6edf3',
+      nodeTextColor: '#e6edf3',
+    },
+    flowchart: { curve: 'basis', padding: 24, nodeSpacing: 50, rankSpacing: 60, htmlLabels: true, wrappingWidth: 200 },
+    sequence: { actorMargin: 60, messageMargin: 40, mirrorActors: false, boxMargin: 12, messageFontSize: 15, actorFontSize: 16, noteFontSize: 14 },
+  });
+
+  // 2. Render all mermaid diagrams while ALL panels are visible, then set up viewBox zoom, then hide
+  (async () => {
+    await mermaid.run({ querySelector: '.mermaid' });
+
+    // Set up viewBox-based zoom on each diagram (SVG vector zoom — text stays crisp at any level)
+    document.querySelectorAll('.mermaid-wrap').forEach(wrap => {
+      const mermaidDiv = wrap.querySelector('.mermaid');
+      if (!mermaidDiv) return;
+      const svg = mermaidDiv.querySelector('svg');
+      if (!svg) return;
+
+      // Store original SVG bounding box as the full-extent viewBox
+      const bbox = svg.getBBox();
+      const pad = 30;
+      const fullVB = {
+        x: bbox.x - pad,
+        y: bbox.y - pad,
+        w: bbox.width + pad * 2,
+        h: bbox.height + pad * 2
+      };
+
+      // Configure SVG for responsive rendering
+      svg.setAttribute('viewBox', fullVB.x + ' ' + fullVB.y + ' ' + fullVB.w + ' ' + fullVB.h);
+      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      svg.removeAttribute('width');
+      svg.removeAttribute('height');
+      svg.style.width = '100%';
+      svg.style.height = '100%';
+
+      // Add zoom controls
+      const controls = document.createElement('div');
+      controls.className = 'zoom-controls';
+      controls.innerHTML =
+        '<button class="zoom-btn" data-action="in" title="Zoom in">+</button>' +
+        '<span class="zoom-label">Fit</span>' +
+        '<button class="zoom-btn" data-action="out" title="Zoom out">&minus;</button>' +
+        '<button class="zoom-btn" data-action="fit" title="Fit all">&#8596;</button>' +
+        '<button class="zoom-btn" data-action="reset" title="Reset 1:1">1:1</button>';
+      wrap.appendChild(controls);
+
+      // Zoom state — viewBox coordinates
+      let vb = { ...fullVB };
+      const label = controls.querySelector('.zoom-label');
+      const MIN_SCALE = 0.15, MAX_SCALE = 10;
+
+      function getZoomLevel() { return fullVB.w / vb.w; }
+
+      function isFitView() {
+        return Math.abs(vb.x - fullVB.x) < 1 && Math.abs(vb.y - fullVB.y) < 1 &&
+               Math.abs(vb.w - fullVB.w) < 1 && Math.abs(vb.h - fullVB.h) < 1;
+      }
+
+      function applyVB() {
+        svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);
+        if (isFitView()) {
+          label.textContent = 'Fit';
+        } else {
+          label.textContent = Math.round(getZoomLevel() * 100) + '%';
+        }
+      }
+
+      function zoomAt(factor, cx, cy) {
+        const newW = vb.w / factor;
+        const newH = vb.h / factor;
+        const newScale = fullVB.w / newW;
+        if (newScale < MIN_SCALE || newScale > MAX_SCALE) return;
+        const ratioX = (cx - vb.x) / vb.w;
+        const ratioY = (cy - vb.y) / vb.h;
+        vb.x = cx - ratioX * newW;
+        vb.y = cy - ratioY * newH;
+        vb.w = newW;
+        vb.h = newH;
+        applyVB();
+      }
+
+      function screenToSVG(clientX, clientY) {
+        const rect = svg.getBoundingClientRect();
+        const rx = (clientX - rect.left) / rect.width;
+        const ry = (clientY - rect.top) / rect.height;
+        return { x: vb.x + rx * vb.w, y: vb.y + ry * vb.h };
+      }
+
+      // Wheel zoom — toward cursor
+      wrap.addEventListener('wheel', e => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
+        const pt = screenToSVG(e.clientX, e.clientY);
+        zoomAt(factor, pt.x, pt.y);
+      }, { passive: false });
+
+      // Drag to pan
+      let dragging = false, dragStart = null, vbStart = null;
+      wrap.addEventListener('mousedown', e => {
+        if (e.target.closest('.zoom-controls')) return;
+        dragging = true;
+        wrap.classList.add('dragging');
+        dragStart = { x: e.clientX, y: e.clientY };
+        vbStart = { ...vb };
+        e.preventDefault();
+      });
+      window.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const rect = svg.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        const dx = (e.clientX - dragStart.x) / rect.width * vbStart.w;
+        const dy = (e.clientY - dragStart.y) / rect.height * vbStart.h;
+        vb.x = vbStart.x - dx;
+        vb.y = vbStart.y - dy;
+        applyVB();
+      });
+      window.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        wrap.classList.remove('dragging');
+      });
+
+      // Button controls
+      controls.addEventListener('click', e => {
+        const btn = e.target.closest('.zoom-btn');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const cx = vb.x + vb.w / 2;
+        const cy = vb.y + vb.h / 2;
+        if (action === 'in')    zoomAt(1.4, cx, cy);
+        if (action === 'out')   zoomAt(1 / 1.4, cx, cy);
+        if (action === 'fit')   { vb = { ...fullVB }; applyVB(); }
+        if (action === 'reset') { vb = { ...fullVB }; applyVB(); }
+      });
+
+      applyVB();
+    });
+
+    // Hide inactive panels
+    const panels = document.querySelectorAll('.panel');
+    panels.forEach((p, i) => { if (i !== 0) p.classList.add('hidden'); });
+  })();
+
+  // 3. Tab switching
+  document.getElementById('tabs').addEventListener('click', e => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    const idx = +tab.dataset.idx;
+    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+    document.querySelectorAll('.panel').forEach((p, i) => {
+      p.classList.toggle('hidden', i !== idx);
+    });
+  });
+</script>
+</body>
+</html>

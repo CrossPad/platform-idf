@@ -1,0 +1,37 @@
+<section class="chapter">
+<h1 id="padmix">Pad Mixer i DAW Control</h1>
+
+<h2>Pad Mixer</h2>
+<figure class="shot"><img src="img/padmixer.png" alt=""><figcaption>Pad Mixer: głośność każdego padu</figcaption></figure>
+
+<p><b>MODE → pad 10 „Pad Mix”.</b> Szesnaście suwaków głośności, po jednym na pad bieżącego kitu. Zmiany słychać od razu, także w grającej sekwencji.</p>
+<ul>
+  <li>Każdy pasek ma wartość, suwak, numer padu w jego kolorze i miernik szczytowy (żółty od −6 dB, czerwony po przesterowaniu).</li>
+  <li>Suwak przesuwasz palcem albo enkoderem: obrót wybiera pasek, kliknięcie zaczyna zmianę, obrót zmienia, kliknięcie kończy.</li>
+  <li>Uderzenie padu wybiera jego suwak.</li>
+  <li>Po zmianie kitu suwaki przestawiają się na nowy kit. Głośności padów to część kitu: zapisujesz je razem z kitem w Samplerze (okno Unsaved changes).</li>
+</ul>
+
+<h2 id="daw">DAW Control</h2>
+<figure class="shot"><img src="img/dawcontrol.png" alt=""><figcaption>DAW Control bez połączonego komputera</figcaption></figure>
+
+<p><b>MODE → pad 12 „DAW”.</b> CrossPad staje się kontrolerem programu muzycznego na komputerze: <b>FL Studio, Ableton Live (11 i nowsze) albo REAPER</b>. Pady grają instrument w programie, z siłą uderzenia i naciskiem, program koloruje pady, a ekran pokazuje nazwę programu, trzy wiersze informacji (np. kanał, pattern, tempo), transport i rytm.</p>
+
+<h3>Skrypt na komputerze</h3>
+<p>Każdy z tych programów potrzebuje małego skryptu CrossPad, który mówi mu, co pokazać na ekranie i jak pokolorować pady. <b>Skrypty nie są częścią firmware i na razie nie można ich pobrać ze strony</b>: dostaniesz je od zespołu CrossPad. Instalacja:</p>
+<ul>
+  <li><b>FL Studio:</b> w folderze <span class="lbl">Dokumenty/Image-Line/FL Studio/Settings/Hardware/</span> utwórz folder <span class="lbl">CrossPad</span> i włóż do niego plik <span class="lbl">device_CrossPad.py</span>. Uruchom FL z podłączonym CrossPadem: zwykle sam wykrywa kontroler. Jeśli nie: Options › MIDI Settings, port CrossPad jako wejście i wyjście, typ kontrolera „CrossPad”, ten sam numer portu.</li>
+  <li><b>Ableton Live (11 i nowsze):</b> folder <span class="lbl">CrossPad</span> skopiuj do <span class="lbl">User Library/Remote Scripts/</span>, potem w Settings › Link, Tempo &amp; MIDI wybierz Control Surface „CrossPad” i port „Crosspad” (nie „CrossPad MIDI+Serial”).</li>
+  <li><b>REAPER (macOS, Windows):</b> plik <span class="lbl">CrossPad.lua</span> włóż do folderu <span class="lbl">Scripts/CrossPad/</span> w katalogu zasobów REAPER-a (Options › Show REAPER resource path). Actions › Load ReaScript, wybierz plik i uruchom go. W Preferences › MIDI Devices włącz CrossPada jako wejście i wyjście. Skrypt działa, dopóki jest uruchomiony; żeby startował sam, dodaj go do <span class="lbl">__startup.lua</span>. Na Linuksie REAPER nie otworzy CrossPada bezpośrednio.</li>
+</ul>
+<p>Po połączeniu ekran pokazuje np. „FL Studio | pads”. Napis <i>no host - install the DAW script</i> znaczy, że skrypt na komputerze nie odpowiada.</p>
+
+<h3>Granie i sterowanie</h3>
+<ul>
+  <li>Enkoder wybiera kanał albo ścieżkę, jego kliknięcie to play/pause.</li>
+  <li><b>Podwójne stuknięcie w obudowę</b> przełącza pady na układ sterujący: rząd 1 Play, Stop, Record, Loop; rząd 2 pattern albo ścieżka −/+, metronom, Undo; rzędy 3–4 wyciszanie kanałów albo ścieżek 1–8. Kolejne podwójne stuknięcie wraca do grania.</li>
+</ul>
+<div class="warn"><b>Dolny pasek DAW Control</b>
+Przyciski <span class="lbl">Mics</span>, <span class="lbl">Line in</span>, <span class="lbl">Spk bus</span>, <span class="lbl">HP bus</span> i <span class="lbl">Mix</span> zmieniają to, co nagrywa komputer, z pominięciem ustawień ROUTE w Mikserze, aż do restartu CrossPada. Jeśli ustawiasz nagrywanie w Mikserze, nie używaj ich. Spk bus i HP bus nie działają, gdy para wejść w Mikserze zawiera Line 3/4.<br>
+Przycisk <span class="lbl">USB audio</span> przełącza tryb USB między MIDI + karta dźwiękowa a MIDI + port szeregowy; CrossPad na chwilę odłącza się wtedy od komputera i łączy na nowo (rozdział <a href="#komputer">CrossPad i komputer</a>).</div>
+</section>

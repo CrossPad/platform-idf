@@ -1,0 +1,6 @@
+dependencies:
+  idf: '>=5.0.0'
+
+name: stm32_hal
+description: STM32 co-processor UART HAL — minimal UART + raw brightness command
+version: 1.0.0

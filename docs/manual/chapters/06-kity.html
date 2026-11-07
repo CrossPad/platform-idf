@@ -1,0 +1,45 @@
+<section class="chapter">
+<h1 id="kity">Kity i przeglądarka kitów</h1>
+<p><b>Kit</b> to 16 dźwięków, po jednym na pad, z ustawieniami każdego padu (głośność, panorama, strojenie, filtry, przycięcie). Kity leżą na karcie microSD. Przeglądarkę otwierasz z <b>MODE → pad 13 „Kits”</b>, stuknięciem nazwy kitu w Samplerze, a przy starcie Samplera albo Sequencera otwiera się sama, jeśli żaden kit nie jest wczytany.</p>
+
+<h2>Ekran</h2>
+<figure class="shot"><img src="img/kitselector.png" alt=""><figcaption>Przeglądarka kitów: listy po lewej, kity po prawej</figcaption></figure>
+
+<ul>
+  <li>U góry: informacje o zaznaczonym kicie, np. <span class="lbl">PADS 12  BPM 120  BY …</span>, z dopiskiem <span class="lbl">LOADED</span> przy kicie, który już gra. Kit z listy SLICE pokazuje <span class="lbl">SLICES n</span>, a kit melodyczny <span class="lbl">PITCHED</span>.</li>
+  <li>Po lewej listy, po prawej pięć wierszy wybranej listy. Zielona belka przy wierszu oznacza element wczytany; taka sama belka przy nazwie listy po lewej pokazuje, w której liście on jest.</li>
+  <li>Na dole <span class="lbl">LOAD</span> i <span class="lbl">EDIT</span>. Napis na LOAD mówi, co się stanie: <span class="lbl">LOADING n%</span>, <span class="lbl">+ MAKE</span>, <span class="lbl">OPEN</span>, <span class="lbl">SLICE</span>, <span class="lbl">PICK</span>. LOAD na kicie wczytuje go i otwiera Sampler, na instrumencie otwiera Pitch Play.</li>
+</ul>
+
+<table>
+<tr><th style="width:16%">Lista</th><th>Co zawiera</th></tr>
+<tr><td><span class="lbl">PERF</span></td><td>Kity do grania (folder <span class="lbl">/crosspad/kits</span>). Na początku <span class="lbl">+ NEW KIT</span>.</td></tr>
+<tr><td><span class="lbl">DRUMS</span></td><td>Zestawy perkusyjne (<span class="lbl">/crosspad/drums</span>). Na początku <span class="lbl">+ NEW DRUMS</span>. Kit perkusyjny gra do 12 głosów naraz.</td></tr>
+<tr><td><span class="lbl">SLICE</span></td><td>Kity zrobione w Slicerze jako Slice kit (<span class="lbl">/crosspad/slicer</span>): jedna pętla, każdy pad gra jej fragment.</td></tr>
+<tr><td><span class="lbl">PITCH</span></td><td>Instrumenty zapisane w Pitch Play (w grupach) i kity melodyczne.</td></tr>
+<tr><td><span class="lbl">SONGS</span></td><td>Utwory z Arrange: <span class="lbl">LOAD</span> otwiera utwór w Arrange.</td></tr>
+<tr><td><span class="lbl">USER</span></td><td>Starsze kity własne i nagrania z Recordera (te ostatnie <span class="lbl">LOAD</span> otwiera w Slicerze).</td></tr>
+</table>
+
+<h2>Sterowanie</h2>
+<ul>
+  <li><b>Enkoder:</b> obrót przewija listę, kliknięcie wczytuje (<span class="lbl">LOAD</span>).</li>
+  <li><b>Przytrzymanie enkodera</b> przenosi wybór na listy po lewej, na tę, którą widać. Obrót zmienia listę, a prawa strona od razu ją pokazuje. Kliknięcie wraca do przewijania prawej listy, w tym samym miejscu.</li>
+  <li><b>Dotyk:</b> przeciągnięcie przewija, stuknięcie zaznacza wiersz, stuknięcie zaznaczonego wiersza go wczytuje. Stuknięcie nazwy listy po lewej przełącza listę.</li>
+  <li><b>Pady</b> grają zaznaczony kit, zanim go wczytasz, i świecą w jego kolorach.</li>
+  <li><b>Przycisk zasilania</b> cofa: zamyka kartę albo klawiaturę, wychodzi z grupy instrumentów, na końcu zamyka przeglądarkę.</li>
+</ul>
+
+<h2>Własny kit od zera</h2>
+<ol class="steps">
+  <li>W liście <span class="lbl">PERF</span> (albo <span class="lbl">DRUMS</span>) wybierz <span class="lbl">+ NEW KIT</span> (<span class="lbl">+ NEW DRUMS</span>). Powstaje pusty kit „NEW KIT” z 16 kolorowymi padami.</li>
+  <li><span class="lbl">EDIT</span> → <span class="lbl">NAME</span>: nadaj mu nazwę.</li>
+  <li><span class="lbl">LOAD</span>, a potem w Samplerze przypisz sample padom (edytor padu, rozdział <a href="#sampler">Sampler</a>) albo nagraj dźwięk prosto na pad.</li>
+</ol>
+
+<h2>Karta EDIT</h2>
+<p><span class="lbl">EDIT</span> pokazuje, co to jest (<span class="lbl">KIT</span>, <span class="lbl">YOUR KIT</span>, <span class="lbl">DRUM KIT</span>, <span class="lbl">YOUR DRUM KIT</span>, <span class="lbl">SLICE KIT</span>, <span class="lbl">PITCHED KIT</span>, <span class="lbl">INSTRUMENT</span>, <span class="lbl">SONG</span>, <span class="lbl">RECORDING</span>) i gdzie leży. We <b>własnych</b> kitach zmienisz <span class="lbl">NAME</span>, <span class="lbl">BY</span> (autor), <span class="lbl">NOTE</span> (opis) i <span class="lbl">BPM</span>; zmiana zapisuje się od razu. Tam też jest <span class="lbl">delete this kit</span>: kliknij dwa razy, żeby usunąć. Kitu, który właśnie gra, nie da się usunąć.</p>
+
+<div class="tip"><b>Kity z komputera</b>
+Kit to folder z plikiem <span class="lbl">kit.json</span> i podfolderem <span class="lbl">SAMPLES/</span> z plikami WAV (44,1 kHz, 16 bitów). Wgraj go na kartę do <span class="lbl">/crosspad/kits</span> (PERF) albo <span class="lbl">/crosspad/drums</span> (DRUMS). Kit z samplami 48 kHz CrossPad zaproponuje przekonwertować: <span class="lbl">Convert</span> / <span class="lbl">Not now</span> / <span class="lbl">Never</span>.</div>
+</section>

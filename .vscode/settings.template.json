@@ -1,0 +1,20 @@
+{
+    "idf.espIdfPath": "${userHome}/esp/esp-idf",
+    "idf.toolsPath": "${userHome}/.espressif",
+    "idf.pythonBinPath": "${userHome}/.espressif/python_env/@@IDF_PYTHON_ENV@@/bin/python",
+    "idf.flashType": "UART",
+    "idf.currentSetup": "${userHome}/esp/esp-idf",
+    "VsCodeTaskButtons.showCounter": false,
+    "VsCodeTaskButtons.tasks": [
+        {
+            "label": "$(package) CP Tools",
+            "task": "CrossPad: CP Tools",
+            "tooltip": "CrossPad Tools — app manager, build, flash, health"
+        },
+        {
+            "label": "$(zap) OTA",
+            "task": "CrossPad: OTA Flash",
+            "tooltip": "Flash firmware via OTA (USB CDC)"
+        }
+    ]
+}

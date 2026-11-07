@@ -1,0 +1,32 @@
+<section class="chapter">
+<h1 id="pitchplay">Pitch Play: instrument z sampla</h1>
+<p><b>MODE → pad 9 „Pitch”.</b> Pitch Play robi z jednego sampla (albo z kilku stref) instrument melodyczny: pady grają kolejne dźwięki skali albo całe akordy. Grać można też z klawiatury MIDI.</p>
+
+<h2>Ekran</h2>
+<figure class="shot"><img src="img/pitchplay.png" alt=""><figcaption>Pitch Play: klawisze, sampel i strefy</figcaption></figure>
+
+<ul>
+  <li><b>Góra:</b> przycisk instrumentu (otwiera wybór dźwięku; gwiazdka <span class="lbl">*</span> oznacza niezapisane zmiany), <span class="lbl">SCALE</span> ze skrótem tonacji (np. „C maj”), <span class="lbl">OCT n</span>, <span class="lbl">CHORD</span>.</li>
+  <li><b>Lewa strona:</b> 16 komórek z nazwami nut; komórka świeci, gdy nuta gra.</li>
+  <li><b>Prawa strona:</b> ostatnia nuta i siła uderzenia, przebieg sampla, atak i wybrzmienie (<span class="lbl">ATK</span>, <span class="lbl">REL</span>), zakres padów (np. „C3 - D#4”) i głośność <span class="lbl">VOL</span>.</li>
+  <li><b>Klawisze:</b> <span class="lbl">SCALE</span>, <span class="lbl">OCT -</span>, <span class="lbl">OCT +</span>, <span class="lbl">CHORD</span>, <span class="lbl">EDIT &gt;</span>.</li>
+</ul>
+
+<h2>Wybór dźwięku</h2>
+<p>Stuknij przycisk instrumentu. Lista pokazuje grupy zapisanych instrumentów (np. „BASS (3)”), nagrania z Recordera, <span class="lbl">The card …</span> (dowolny WAV z karty) i <span class="lbl">Save as …</span>. Gdy wybierzesz pojedynczy plik WAV, CrossPad sam wykrywa jego wysokość i ustawia tonację i oktawę tak, żeby sampel wypadł na padach.</p>
+
+<h2>Skala i akordy</h2>
+<ul>
+  <li><span class="lbl">SCALE</span>: tonacja (<span class="lbl">Key</span>), skala (chromatyczna, dur, moll, dorycka, frygijska, lidyjska, miksolidyjska, dwie pentatoniki, bluesowa, moll harmoniczna) i transpozycja ±12. Pady grają 16 kolejnych stopni skali.</li>
+  <li><span class="lbl">OCT -</span> / <span class="lbl">OCT +</span>: oktawa w dół i w górę.</li>
+  <li><span class="lbl">CHORD</span>: projektant akordów. Do 16 akordów, pad n gra akord n. Pryma, typ (maj, min, 7, maj7, m7, 9, m9, 13, dim, sus4), przewroty <span class="lbl">INV</span>, gotowe zestawy (presety) i rozłożenie dźwięków <span class="lbl">VOICE</span>. <span class="lbl">ADD</span>, <span class="lbl">DEL</span> i <span class="lbl">&lt; MOVE</span> / <span class="lbl">MOVE &gt;</span> dodają, usuwają i przestawiają akordy na liście. <span class="lbl">CHORD ON/OFF</span> włącza i wyłącza granie akordami. Lista akordów zostaje po restarcie.</li>
+</ul>
+
+<h2>Strefy (EDIT)</h2>
+<p>Instrument może mieć do 24 stref, np. ten sam instrument nagrany w kilku wysokościach. <span class="lbl">+ ADD</span> dodaje plik WAV jako strefę, <span class="lbl">ROOT</span> albo <span class="lbl">AUTO</span> ustawia jej nutę bazową, <span class="lbl">LOOP ON/OFF</span> z punktami pętli <span class="lbl">S</span>/<span class="lbl">E</span> pozwala trzymać długie dźwięki, <span class="lbl">START</span> wyznacza początek nuty, a <span class="lbl">XF</span> wygładza szew pętli. <span class="lbl">DEL</span> usuwa strefę.</p>
+<div class="tip"><b>Najwyżej cztery dźwięki naraz</b>
+Instrument w Pitch Play gra do 4 głosów jednocześnie, bo każdy głos przestraja sampel w czasie rzeczywistym. Akordy 9, m9 i 13 mają po pięć dźwięków, więc jeden z nich nie zabrzmi.</div>
+
+<h2>Zapis</h2>
+<p><span class="lbl">Save as …</span> i nazwa (1–32 znaki). Instrument trafia na kartę razem z kopiami sampli. Część nazwy przed pierwszym podkreśleniem to grupa: „BASS_Reese” zapisze się w grupie BASS jako „Reese”. Zapisane instrumenty znajdziesz też w przeglądarce kitów (lista <span class="lbl">PITCH</span>) i w Sequencerze jako źródło padów.</p>
+</section>

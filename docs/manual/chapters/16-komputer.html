@@ -1,0 +1,34 @@
+<section class="chapter">
+<h1 id="komputer">CrossPad i komputer</h1>
+
+<h2>Tryby głównego gniazda USB</h2>
+<p>Settings › USB › <span class="lbl">Mode</span>:</p>
+<table>
+<tr><th style="width:26%">Tryb</th><th>Co widzi komputer</th></tr>
+<tr><td><b>MIDI + Audio</b> (domyślny)</td><td>Urządzenie MIDI i kartę dźwiękową <b>„Crosspad Audio”</b>: nagrywasz z CrossPada i odtwarzasz na nim dźwięk z komputera. Bez sterowników na macOS i Linuksie; Windows 10/11 ma wbudowany sterownik tej klasy, ale na nim CrossPada nie testowaliśmy.</td></tr>
+<tr><td><b>MIDI + Serial</b></td><td>Urządzenie MIDI i port szeregowy do aktualizacji z przeglądarki i przesyłania plików. W tym trybie nie ma karty dźwiękowej.</td></tr>
+</table>
+<p>Zmiana trybu odłącza i ponownie podłącza CrossPada w komputerze. Gdy komputer sam prosi o tryb szeregowy, a w ustawieniach włączone jest <span class="lbl">Ask before USB serial</span>, CrossPad pyta na ekranie <i>USB serial mode?</i>: <span class="lbl">Allow</span> albo <span class="lbl">Deny</span>. Zgadzaj się tylko przy własnym, zaufanym komputerze.</p>
+<p>Drugie gniazdo USB to osobny port MIDI (w komputerze „CrossPad MIDI+Serial”). Nie ładuje baterii.</p>
+
+<h2>Nagrywanie CrossPada w programie muzycznym</h2>
+<ol class="steps">
+  <li>Ustaw tryb <b>MIDI + Audio</b> i podłącz CrossPada do komputera.</li>
+  <li>W programie (DAW) wybierz urządzenie audio <b>„Crosspad Audio”</b> jako wejście (i, jeśli chcesz, jako wyjście).</li>
+  <li>W Mikserze CrossPada, w zakładce <span class="lbl">ROUTE</span>, wyślij do kolumny <b>USB</b> to, co komputer ma nagrywać: pady, wejścia, utwór.</li>
+  <li>Poziom całej szyny USB podniesiesz w Settings › USB › <span class="lbl">DAW Output dB</span>.</li>
+</ol>
+<div class="tip"><b>Co nagrywa komputer</b>
+Zawsze to, co ustawisz w Mikserze w kolumnie USB. Opcje w Settings › USB pod nagłówkiem <i>Routing (advanced, until restart)</i> zmieniają to tylko do restartu; na co dzień ich nie potrzebujesz.</div>
+<p>Settings › USB host › <span class="lbl">Computer</span> (Auto / macOS / Linux) dostraja dźwięk USB do komputera. Zostaw <b>Auto</b>: CrossPad sam rozpoznaje komputer (wiersz <i>Detected</i>).</p>
+
+<h2>Karta microSD jako dysk USB</h2>
+<p>Pliki (kity, nagrania, eksporty) przenosisz bez wyjmowania karty:</p>
+<ol class="steps">
+  <li>Settings › USB › <span class="lbl">SD card as USB drive</span> › <span class="lbl">Start</span> i potwierdź <span class="lbl">Restart</span>.</li>
+  <li>CrossPad uruchamia się w trybie dysku: dźwięk i MIDI są wyłączone, komputer widzi dysk <b>„CrossPad SD Card”</b>.</li>
+  <li>Skopiuj pliki, potem <b>wysuń dysk w komputerze</b>.</li>
+  <li>Na CrossPadzie naciśnij <span class="lbl">Exit and restart</span> (dotykiem, enkoderem albo przyciskiem zasilania).</li>
+</ol>
+<p class="small">Po wyłączeniu i włączeniu zasilania CrossPad zawsze startuje normalnie, nie w trybie dysku.</p>
+</section>

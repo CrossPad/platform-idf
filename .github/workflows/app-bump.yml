@@ -1,0 +1,171 @@
+name: App bump
+
+# One rolling PR on auto/app-bump that moves official apps', crosspad-core's and
+# crosspad-gui's gitlinks to one set that satisfies every app's `requires`
+# (tools/deps_resolve.py) and pins the apps in the kit profiles. A reconciler: every
+# trigger recomputes the whole desired state, so a lost or merged dispatch
+# costs nothing. Hourly, so a new app tag lands within the hour; its alerts
+# (diverged, held, stuck) go out only from the 05:17 UTC run (ALERT_HOUR_UTC).
+# No push trigger: a change on main reaches the bump PR through the next hourly
+# reconcile (at most an hour). repository_dispatch is kept for a future relay;
+# its payload is never read.
+# Kill switches (repo variables): APP_BUMP_HOLD=<id,...> holds those apps;
+# APP_BUMP_AUTOMERGE=on arms auto-merge (unset: off).
+# A non-bot PR on auto/app-bump makes reconcile stop hard until a human closes it.
+# report-failure (workflow_run) and report-sweep (schedule): a red or timed-out
+# build of the bump PR is re-run once, then labelled bump-failed, commented and
+# alerted once per head commit (tools/bump_report.py). The sweep catches what
+# workflow_run missed: a re-run started with GITHUB_TOKEN may not fire it again.
+# Spec: "platform-idf: app-bump.yml".
+on:
+  repository_dispatch:
+    types: [app-released]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_run:
+    workflows: ["Build ESP-IDF Project"]
+    types: [completed]
+    branches: [auto/app-bump]
+
+permissions:
+  packages: read
+  contents: read
+
+jobs:
+  reconcile:
+    if: github.event_name != 'workflow_run' && github.ref == 'refs/heads/main'
+    # Holds the bot's private key: the secrets runner, like the signing job.
+    runs-on: ${{ vars.CI_SECRETS_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    # GITHUB_TOKEN reads check runs for the stuck alert (CHECKS_TOKEN): the bot's App
+    # has no Checks permission, so its token cannot be minted with one.
+    permissions:
+      packages: read
+      contents: read
+      checks: read
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    environment: crosspad-bot
+    concurrency:
+      group: app-bump
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # The read token's scope. Fails closed: an error or an empty list stops the
+      # job here, so no token is ever minted with an empty `repositories:`.
+      - id: repos
+        shell: bash
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: "*"
+        run: |
+          list=$(python3 tools/app_bump.py repos)
+          test -n "$list"
+          [[ "$list" =~ ^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*$ ]]
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+      - id: read
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.CROSSPAD_BOT_APP_ID }}
+          private-key: ${{ secrets.CROSSPAD_BOT_PRIVATE_KEY }}
+          owner: CrossPad
+          repositories: ${{ steps.repos.outputs.list }}
+          permission-contents: read
+      - id: write
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.CROSSPAD_BOT_APP_ID }}
+          private-key: ${{ secrets.CROSSPAD_BOT_PRIVATE_KEY }}
+          owner: CrossPad
+          repositories: platform-idf
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Reconcile
+        shell: bash
+        env:
+          APP_READ_TOKEN: ${{ steps.read.outputs.token }}
+          BUMP_TOKEN: ${{ steps.write.outputs.token }}
+          CHECKS_TOKEN: ${{ github.token }}
+          APP_BUMP_HOLD: ${{ vars.APP_BUMP_HOLD }}
+          APP_BUMP_AUTOMERGE: ${{ vars.APP_BUMP_AUTOMERGE }}
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: "*"
+        run: python3 tools/app_bump.py reconcile --repo "$GITHUB_REPOSITORY" --event "$EVENT_NAME"
+
+  # Runs main's copy of the tool (workflow_run checks out the default branch);
+  # the PR's code is never checked out or executed. bump_report.py re-checks
+  # every condition below against the payload.
+  report-failure:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'timed_out') &&
+      github.event.workflow_run.head_branch == 'auto/app-bump' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    concurrency:
+      group: bump-report
+      cancel-in-progress: false
+    permissions:
+      packages: read
+      contents: read
+      actions: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Re-run or report
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+        run: python3 tools/bump_report.py --event "$GITHUB_EVENT_PATH" --repo "$GITHUB_REPOSITORY"
+
+  # The schedule's safety net for report-failure: the newest main.yml run of the
+  # bot PR's head, re-run once (after 15 min) or reported. Same group as
+  # report-failure, so the two never alert side by side.
+  report-sweep:
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    concurrency:
+      group: bump-report
+      cancel-in-progress: false
+    permissions:
+      packages: read
+      contents: read
+      actions: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Sweep
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISCORD_CI_ALERTS_WEBHOOK: ${{ secrets.DISCORD_CI_ALERTS_WEBHOOK }}
+        run: python3 tools/bump_report.py sweep --repo "$GITHUB_REPOSITORY"

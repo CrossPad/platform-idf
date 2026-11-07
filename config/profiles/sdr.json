@@ -1,0 +1,23 @@
+{
+  "name": "sdr",
+  "display_name": "SDR",
+  "icon": "icons/sdr.png",
+  "description": "The board's own Wi-Fi radio as a receiver: 2.4 GHz spectrum, waterfall and I/Q on the panel, settings on the encoder. No WiFi or Bluetooth while it runs.",
+  "platform": "esp-idf",
+  "features": {},
+  "standalone": "Sdr",
+  "top_bar": false,
+  "sample_engine": false,
+  "radio": false,
+  "audio": false,
+  "sdkconfig": [
+    "CONFIG_ESP32S3_INSTRUCTION_CACHE_16KB=y",
+    "# CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB is not set"
+  ],
+  "apps": {
+    "sdr": {
+      "track": "pinned",
+      "commit": "190dad85ec2ad76ab650c13eb0617649ee84aa83"
+    }
+  }
+}

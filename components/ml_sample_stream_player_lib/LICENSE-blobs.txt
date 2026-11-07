@@ -1,0 +1,46 @@
+CrossPad DSP Engines -- Binary Redistribution License
+
+Copyright (c) 2026 Marcel Licence. All rights reserved.
+
+This license covers the precompiled binary library authored by Marcel Licence
+and distributed as part of CrossPad (the "Licensed Binaries"): the SD
+sample-streaming engine, file src/esp32s3/libcrosspad_ply.a in this directory.
+The header files next to it describe its interface only.
+
+1. Ownership
+The Licensed Binaries and their source code are and remain the sole
+intellectual property of Marcel Licence. No source code is published,
+transferred, or licensed under this document. Nothing here grants any right in
+the source code.
+
+2. Grant
+Subject to the conditions below, Marcel Licence grants a worldwide,
+royalty-free, non-exclusive license to use, copy and redistribute the Licensed
+Binaries solely as an integral part of CrossPad -- the CrossPad device firmware
+and software published by the CrossPad project -- and of forks and derivative
+works of that firmware and software.
+
+3. Scope and restrictions
+This grant is limited to distribution as part of CrossPad and its forks. In
+particular you may NOT:
+- distribute the Licensed Binaries as standalone libraries, or as part of any
+  product or software that is not CrossPad or a fork/derivative thereof;
+- link against or invoke the Licensed Binaries from software unrelated to
+  CrossPad;
+- reverse-engineer, decompile, or disassemble the Licensed Binaries, except to
+  the extent that applicable law expressly permits despite this limitation.
+
+4. Attribution
+Any distribution that includes the Licensed Binaries must retain this license
+and give clear attribution to Marcel Licence as author/licensor of the audio
+engine, both in the project README and in the product/software version
+information.
+
+5. No warranty
+The Licensed Binaries are provided "as is", without warranty of any kind. In
+no event shall the author be liable for any claim or damages arising from
+their use.
+
+6. Termination
+Any use outside the scope of sections 2-3 terminates this license
+automatically.
