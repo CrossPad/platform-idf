@@ -692,8 +692,12 @@ static void app_pwr_state_cb(uint8_t state, void *user_data)
             stm32_pwr_sync_ack();
             if (s_charge_boot_mode) {
                 /* Woken from the charge screen: nothing of the instrument is
-                 * up, so boot it whole. The STM's WOKE outlives the restart. */
+                 * up, so boot it whole. The STM's WOKE outlives the restart.
+                 * Dark first: a lit panel shows white while the ESP resets. */
                 charge_overlay_stop();
+                crosspad::getStm32CommandSender().sendBrightness(0);
+                force_pad_strip_dark();
+                vTaskDelay(pdMS_TO_TICKS(50));
                 esp_restart();
             }
             charge_overlay_stop();      // leaving charge-idle (user woke the device)

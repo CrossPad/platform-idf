@@ -18,7 +18,6 @@
 #include "crosspad-gui/components/mode_overlay.h"
 #include "stm_fw_overlay.h"
 #include "cp_remote.h"
-#include "charge_overlay.h"
 #include "bsp_sdmmc.h"
 #include "crosspad-gui/components/status_bar.h"
 #include "crosspad-gui/platform/IGuiPlatform.h"
@@ -136,7 +135,7 @@ void InitializeAppRegistry() {
     crosspad_sampler::KitSelectorAppCallbacks kitSelector;
     crosspad_sampler::kit_gate_install(gate, kitSelector);
     sampler_platform_port_init(kitSelector);
-    if (!charge_boot_active()) song_sounds_start();   // the open song's kit and instrument
+    song_sounds_start();               // the open song's kit and instrument
 
     crosspad_gui::OrchestratorConfig config;
     config.pre_launch    = pre_launch;

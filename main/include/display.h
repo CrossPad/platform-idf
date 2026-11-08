@@ -139,14 +139,8 @@ void setupLVGL()
 #ifdef BSP_BOARD_CROSSPAD_S3
     crosspad::getStm32CommandSender().sendBrightness(0); // turn off backlight to avoid flicker during setup
 
-    /* Charge boot or not. I2C is already up by here (stm32_hal_init ran in
-     * app_main). On failure we default to the splash -- the safe choice. */
-    {
-        uint8_t pwr = 0;
-        if (stm32_i2c_read_u8(REG_IN_PWR_STATE, &pwr) == ESP_OK && pwr == PWR_STATE_CHARGE) {
-            s_charge_boot = true;
-        }
-    }
+    /* Charge boot or not: decided once at app_main's wake gate. */
+    s_charge_boot = charge_boot_active();
 #endif
 
     /* Rate-limited: a draw that cannot get a layer buffer logs two WARN lines
@@ -245,23 +239,7 @@ void setupLVGL()
     }, NULL);
 #endif
 
-#ifdef BSP_BOARD_CROSSPAD_S3
-    // Charge-while-off boot: STM repowered us only to show the feedback. Turn the
-    // backlight on (the splash that normally does this does not play) and start
-    // the gauge + "Charging" screen. Posted while the lock is still held: this
-    // task is not the one running lv_timer_handler.
-    if (s_charge_boot) {
-        lv_async_call([](void *) {
-            crosspad::getStm32CommandSender().sendBrightness((uint8_t)settings->LCDbrightness);
-        }, NULL);
-    }
-#endif
-
     lvgl_port_unlock(); // unlock LVGL after setup
-
-#ifdef BSP_BOARD_CROSSPAD_S3
-    if (s_charge_boot) charge_overlay_start();
-#endif
 
     // The splash, to its end: the launcher is built on the screen it leaves
     // black, so the build never shows as a stall in the animation -- and the
@@ -320,6 +298,24 @@ void LVGLTask(void *pvParameters) // core 0
         lvgl_port_resume();
         while (true) vTaskDelay(pdMS_TO_TICKS(100));
     }
+
+#ifdef BSP_BOARD_CROSSPAD_S3
+    /* A charge-screen boot owns the screen too: no launcher, no apps -- a wake
+     * restarts into a normal boot. The screen goes black before the overlay
+     * lights the panel, so nothing else is ever seen behind it. */
+    if (s_charge_boot) {
+        lvgl_port_lock(3000);
+        initStyles();
+        lv_obj_set_style_bg_color(lv_scr_act(), lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, 0);
+        lvgl_port_unlock();
+        charge_overlay_start();
+        status.isGuiInitialised = true;
+        status.currentGUI = CrosspadStatus::GUI_MAIN;
+        lvgl_port_resume();
+        while (true) vTaskDelay(pdMS_TO_TICKS(100));
+    }
+#endif
 
     InitializeAppRegistry(); // Initialize app registry once
     AddApps(); // add apps to the app list
