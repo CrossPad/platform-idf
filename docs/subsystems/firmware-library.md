@@ -150,13 +150,24 @@ running partition, and on a SHA mismatch clears that slot's package name
 (state is left as whatever it was — an "unnamed" slot, see the assets section
 for the cost of that).
 
+**Nothing writes over the main firmware from a kit of its own.** With a game
+or another single-app kit running (any kit but `full`/`lite`) and the other
+slot holding `full` or `lite`, the slot a write would take is the one Quit and
+the pad-16 recovery go back to — overwrite it and only a UART flash is left.
+`fw_slots_write_would_replace_main()` says so, and both writers refuse:
+`fw_install_start()` (above) and `OTA_BEGIN`/`OTA_DELTA`, which answer
+`OTA_ERROR would_overwrite_main <kit>` before the on-screen question;
+`ota_flash.py` explains it and does not retry. Go back first (the app's Quit,
+or `FW_SWITCH`), then flash: the kit's own slot is the other one then.
+
 `fw_install_start()` runs its whole body under `op_lock()` (see Switching
 below), so the "is anything running?" read and the `Verifying` that arms this
 install are one decision across CDC and the GUI. Its refusals, in order:
 *no such package*, the package's own verdict, *battery low, no charger*, and
 **kit loading** — an install started mid-load would stop the sample engine
 between two of the loader's guarded per-pad calls and tear the library down
-underneath it. Every refusal but *install already running* also writes its
+underneath it — and *would replace the main firmware: switch back to it
+first*. Every refusal but *install already running* also writes its
 reason into the install status, which is where the GUI's poll timer reads it;
 that one deliberately does not, because the status then belongs to the
 install that *is* running. Both callers print the reason the call itself

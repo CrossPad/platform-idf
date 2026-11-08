@@ -657,6 +657,12 @@ bool fw_install_start(const char *packageName, bool allowUnknownBuild, const cha
      * down underneath the loader. */
     if (crosspad_sampler::kit_load_task_is_loading()) return refuse("kit loading", true);
 
+    /* From a game in the second slot the slot written is the main firmware's:
+     * Quit and the pad-16 recovery would have nothing to go back to. */
+    if (fw_slots_write_would_replace_main(nullptr, 0)) {
+        return refuse("would replace the main firmware: switch back to it first", true);
+    }
+
     s_installStmProtoOlder = fw_package_stm_proto_older(pkg);
 
     s_installPkg = pkg;
@@ -688,6 +694,18 @@ static bool is_main_kit(const char *kit)
     for (const char *k : kFwMainKits)
         if (strcmp(kit, k) == 0) return true;
     return false;
+}
+
+bool fw_slots_write_would_replace_main(char *otherKit, size_t otherKitLen)
+{
+    FwSlotInfo slots[2];
+    fw_slots_get(slots);
+    const FwSlotInfo &running = slots[0].running ? slots[0] : slots[1];
+    const FwSlotInfo &other   = slots[0].running ? slots[1] : slots[0];
+    if (is_main_kit(running.kit) || !is_main_kit(other.kit) || other.state == FwSlotState::Empty)
+        return false;
+    if (otherKit && otherKitLen) snprintf(otherKit, otherKitLen, "%s", other.kit);
+    return true;
 }
 
 /* fw_switch_request() and fw_recovery_switch(): a recovery leaves a slot that
