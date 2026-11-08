@@ -267,7 +267,7 @@ back for the resampler**, which needs the source, the converted copy and up to
 ~200 kB of overlap-add scratch live at once (8 kHz → 44.1 kHz, the widest ratio
 a kit ships) *while the zones already built are resident*. The capacity moves
 with the rest of PSRAM (see `ARENA` above): at `cap_kb=3375` the budget is
-~3.1 MB of resident PCM, roughly 36 s of mono 16-bit at 44.1 kHz across all
+~3.1 MB of resident PCM, roughly 35 s of mono 16-bit at 44.1 kHz across all
 zones. Two 5 s zones load at `bank_kb=861`. The
 per-zone failure message names the arena's free bytes when fragmentation is
 the limit.
