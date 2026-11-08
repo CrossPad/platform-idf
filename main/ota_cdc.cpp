@@ -11,6 +11,7 @@
 
 #include "esp_attr.h"
 #include "ota_cdc.h"
+#include "fw_slots.h"
 #include "motion_stream.h"
 
 #include <string.h>
@@ -238,6 +239,20 @@ void ota_process_data(const uint8_t *data, size_t len) {
     }
 }
 
+/* A kit of its own (a game, the SDR) runs from the second slot, so the slot an
+ * OTA writes holds the main firmware: the one Quit and the pad-16 recovery go
+ * back to. Refused before the on-screen question; the host is told which
+ * firmware it would have replaced. */
+static bool refuse_replacing_main(void) {
+    char kit[crosspad::kFwKitMax];
+    if (!fw_slots_write_would_replace_main(kit, sizeof(kit))) return false;
+    char resp[32 + crosspad::kFwKitMax];
+    snprintf(resp, sizeof(resp), "OTA_ERROR would_overwrite_main %s\n", kit);
+    cdc_respond(resp);
+    ESP_LOGW(TAG, "OTA refused: it would overwrite the %s firmware in the other slot", kit);
+    return true;
+}
+
 bool ota_check_begin(const char *buf, size_t len) {
     if (len < 10 || memcmp(buf, "OTA_BEGIN ", 10) != 0) return false;
 
@@ -259,6 +274,7 @@ bool ota_check_begin(const char *buf, size_t len) {
         cdc_respond("OTA_ERROR invalid_size\n");
         return true;
     }
+    if (refuse_replacing_main()) return true;
 
     bool auto_accept = ota_auto_accept_enabled();
 
@@ -337,6 +353,7 @@ bool ota_check_delta_begin(const char *buf, size_t len) {
         cdc_respond("OTA_ERROR invalid_size\n");
         return true;
     }
+    if (refuse_replacing_main()) return true;
 
     bool auto_accept = ota_auto_accept_enabled();
 

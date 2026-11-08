@@ -48,3 +48,15 @@ def test_begin_gives_up_after_its_tries(monkeypatch):
     ports = [FakePort([b"OTA_ERROR busy\n"]) for _ in range(ota_flash.BEGIN_TRIES)]
     assert ota_flash.open_and_begin("/dev/x", "OTA_BEGIN 10 v\n", serial_factory=lambda: ports.pop(0)) is None
     assert not ports
+
+
+def test_a_board_running_a_kit_of_its_own_refuses_without_a_retry(monkeypatch, capsys):
+    slept = []
+    monkeypatch.setattr(ota_flash.time, "sleep", lambda s: slept.append(s))
+    refused = FakePort([b"OTA_ERROR would_overwrite_main full\n"])
+    ports = [refused]
+    assert ota_flash.open_and_begin("/dev/x", "OTA_BEGIN 10 v\n", serial_factory=lambda: ports.pop(0)) is None
+    assert refused.closed
+    assert ota_flash.OTA_STALE_S not in slept      # no second try
+    out = capsys.readouterr().out
+    assert "'full'" in out and "Quit" in out
