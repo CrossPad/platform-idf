@@ -105,9 +105,9 @@ bool copy_file(const std::string& fromFs, const std::string& toFs)
     return ok;
 }
 
-/// The open song plays a Pitch track beside kit tracks: its instrument is
-/// built beside the kits' engines (PitchedLoadOptions::besideKits), not in
-/// their place.
+/// The open song plays a Pitch track beside kit tracks, or beside a kit the
+/// player has loaded: its instrument is built beside the kits' engines
+/// (PitchedLoadOptions::besideKits), not in their place.
 bool song_wants_beside()
 {
     crosspad::ISongEngine* se = crosspad::getPlatformServices().songEngine;
@@ -115,8 +115,10 @@ bool song_wants_beside()
     std::lock_guard<std::recursive_mutex> l(se->songMutex());
     const crosspad::AudioSong& song = se->song();
     /* Any kit track, live or not: one that is not plays its freeze now and
-     * takes the kits' engine back when it is armed. */
-    bool kits = false;
+     * takes the kits' engine back when it is armed. A kit loaded with no kit
+     * track is the pads' and must sound too. */
+    crosspad::IKitManager* km = crosspad::getKitManager();
+    bool kits = km && km->getCurrentKit();
     for (int t = 0; t < crosspad::AudioSong::kTracks; ++t) kits = kits || song.seqRoute(t) == 0;
     return song.hasPitchTrack() && kits;
 }
