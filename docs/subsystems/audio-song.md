@@ -479,9 +479,11 @@ keeps the first. A track's kit is part of an undo step; the song's is not.
   before. With a Pitch track, the instrument is built beside a loaded kit
   (`song_wants_beside()`), so the kit is never kept out of the arena by it.
   When it does not fit there (`no memory`, often only while an auto-freeze
-  bounces), core `SongSounds` asks again after 2, 4, 8, ... s and tells the
-  player only once the retry has failed too, in Arrange, the Sequencer or
-  Pitch Play: "Pitch sound needs more memory: remove a track" (core 2.45.2).
+  bounces), whoever asked for it -- core `SongSounds` as the song opens,
+  Arrange's sound keeper while Arrange is open -- asks again after 2, 4, 8,
+  ... s and tells the player only once the retry has failed too (core
+  `InstrumentLoadNote`, 2.46.0; arrange 0.43.1): "Pitch sound needs more
+  memory: remove a track".
 - **The kit loader.** ADD TRACK > KITS > Kit opens the board's kit browser over
   Arrange (core `IKitPicker`, `PlatformServices::kitPicker`; the browser in
   pick mode, `KitSelectorConfig::onPicked`, lists only the kits, reads PICK
