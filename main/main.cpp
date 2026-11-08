@@ -206,6 +206,13 @@ static void usb_otg_hw_reset(void)
 std::atomic<uint8_t> g_hil_last_pwr_state{0xFF};
 std::atomic<uint32_t> g_hil_pwr_state_count{0};
 
+/* The STM powered us up only to show the charge screen (PWR_STATE_CHARGE at
+ * the wake gate): nothing else of the instrument starts -- no engine, no
+ * start-up sound, no kits, no USB audio, no radio. A wake from it restarts
+ * into a normal boot (app_pwr_state_cb). */
+static bool s_charge_boot_mode = false;
+bool charge_boot_active(void) { return s_charge_boot_mode; }
+
 #ifdef BSP_BOARD_CROSSPAD_S3
 /* A STOP1 wake powers the ESP on the first power-button edge; hold the boot
  * until the button stays down long enough to make the wake intentional.
@@ -502,6 +509,7 @@ static void return_to_soft_off_after_cancelled_wake()
 static void qualify_power_button_wake()
 {
     const uint8_t pwrState = wait_for_stm_power_state();
+    s_charge_boot_mode = (pwrState == PWR_STATE_CHARGE);
     if (pwrState == PWR_STATE_SLEEP_PENDING) wait_for_stm_cancelled_wake();
     if (pwrState != PWR_STATE_WOKE) return;
 
@@ -682,6 +690,12 @@ static void app_pwr_state_cb(uint8_t state, void *user_data)
             bsp_imu_set_inactivity(false);
             // ACK, or the STM re-sends the IRQ every 250 ms for 2 s.
             stm32_pwr_sync_ack();
+            if (s_charge_boot_mode) {
+                /* Woken from the charge screen: nothing of the instrument is
+                 * up, so boot it whole. The STM's WOKE outlives the restart. */
+                charge_overlay_stop();
+                esp_restart();
+            }
             charge_overlay_stop();      // leaving charge-idle (user woke the device)
             // The STM cut the amp behind our back on the way into LIGHT;
             // the cached REG_CTL_AUDIO_EN is stale.
@@ -1057,7 +1071,6 @@ extern "C" void app_main(void)
     cp_account_init();
     fw_updater_init();
     wifi_creds_init();
-    cp_remote_init(!transferMode && !netMode && CROSSPAD_FW_RADIO);   // none of these boots holds a remote session
     instrument_host_init();                  // an app may borrow the pitched engine
 
     midiCallbacks_init();
@@ -1109,6 +1122,9 @@ extern "C" void app_main(void)
 #else
     ESP_LOGI(TAG, "  - STM32: not present on this board");
 #endif
+    /* Past the wake gate: a charge boot is known only there. */
+    const bool chargeMode = s_charge_boot_mode;
+    cp_remote_init(!transferMode && !netMode && !chargeMode && CROSSPAD_FW_RADIO);   // none of these boots holds a remote session
 #if CONFIG_TINYUSB_CDC_COUNT && CONFIG_TINYUSB_CDC_ENABLED
     ESP_LOGI(TAG, "  - USB CDC ACM interface: Ready");
 #endif
@@ -1268,7 +1284,7 @@ extern "C" void app_main(void)
         esp_timer_start_periodic(confirmTimer, (uint64_t)kConfirmDelayMs * 1000);
     }
 
-    if (!transferMode && !netMode) {
+    if (!transferMode && !netMode && !chargeMode) {
         /* Before BLE takes its block and before the first preload reads. */
         sample_player_port_stage_init();
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
@@ -1306,7 +1322,7 @@ extern "C" void app_main(void)
     // and a display that never comes up must not cost the kit list.
     /* Network mode loads no kit: nothing there plays one, and the list costs
      * PSRAM the network stack would rather have. */
-    if (status.sdCardDetected && !netMode && CROSSPAD_FW_SAMPLE_ENGINE) {
+    if (status.sdCardDetected && !netMode && !chargeMode && CROSSPAD_FW_SAMPLE_ENGINE) {
         if (xTaskCreatePinnedToCore([](void* arg) {
             const bool noGui = (arg != nullptr);
             for (int i = 0; !noGui && !status.isGuiInitialised && i < 100; ++i) {
@@ -1334,7 +1350,7 @@ extern "C" void app_main(void)
      * has no card to stream from, and the profile it enumerated has no audio.
      * Network mode neither: its internal RAM belongs to WiFi. Nor a kit
      * whose profile says "audio": false (its app plays nothing). */
-    if (!transferMode && !netMode && CROSSPAD_FW_AUDIO) AudioTasks_Start();
+    if (!transferMode && !netMode && !chargeMode && CROSSPAD_FW_AUDIO) AudioTasks_Start();
 
     /* Persisted USB profile, and USB Audio is the default: the instrument is
      * an audio device first. It has no CDC endpoint, so a board that has never
@@ -1347,7 +1363,7 @@ extern "C" void app_main(void)
      * up stays reachable over CDC, and its stored choice is left alone.
      * Network mode has no engine, so no I2S for the bridge: it stays on CDC
      * the same way. */
-    if (settings->usbAudioEnabled && !transferMode && !netMode && CROSSPAD_FW_AUDIO) {
+    if (settings->usbAudioEnabled && !transferMode && !netMode && !chargeMode && CROSSPAD_FW_AUDIO) {
         constexpr TickType_t kAudioReadyMaxMs = 2500;
         const TickType_t waitStart = xTaskGetTickCount();
         while (!AudioTasks_IsReady()
@@ -1375,12 +1391,12 @@ extern "C" void app_main(void)
         extern void ota_overlay_init(void);
         ota_overlay_init();
         /* An STM reflash is a normal boot's decision; network mode is a short visit. */
-        if (!netMode && (s_stm_fw_status.due || s_stm_fw_status.pcb_mismatch)) {
+        if (!netMode && !chargeMode && (s_stm_fw_status.due || s_stm_fw_status.pcb_mismatch)) {
             stm_fw_overlay_show(&s_stm_fw_status);   /* also raised on a PCB mismatch: says so, offers nothing */
         }
     }
 #endif
-    if (headless && !transferMode && !netMode && s_stm_fw_status.due) {
+    if (headless && !transferMode && !netMode && !chargeMode && s_stm_fw_status.due) {
         // No screen: the pads are the progress bar, as they are for ESP OTA.
         auto& anim = crosspad::getPadAnimator();
         anim.startProgress();
@@ -1397,7 +1413,7 @@ extern "C" void app_main(void)
     /* A boot that mounted no card holds its update check until the first probe
      * (fw_updater.cpp): a card a second late then scans before the radio starts. */
     if (status.sdCardDetected) g_sd_probed.store(true);
-    if (transferMode || netMode || !bsp_worker_add("sd_hotplug", 1000, sd_hotplug_job, nullptr))
+    if (transferMode || netMode || chargeMode || !bsp_worker_add("sd_hotplug", 1000, sd_hotplug_job, nullptr))
         g_sd_probed.store(true);
     lv_async_safe_start();
 
@@ -1419,7 +1435,7 @@ extern "C" void app_main(void)
         // Never in transfer or network mode: nothing there sends MIDI, and the
         // radio would take internal RAM the MSC path / WiFi needs.
         static bool s_bleAutoStartDone = false;
-        if (!s_bleAutoStartDone && !transferMode && !netMode && (headless || status.isGuiInitialised)) {
+        if (!s_bleAutoStartDone && !transferMode && !netMode && !chargeMode && (headless || status.isGuiInitialised)) {
             s_bleAutoStartDone = true;
             bleMidi_boot();
         }
@@ -1428,7 +1444,7 @@ extern "C" void app_main(void)
         // the boot check (when enabled) and the daily idle watch. Normal boots
         // only -- network mode has no launcher to be idle in.
         static bool s_fwUpdaterStarted = false;
-        if (!s_fwUpdaterStarted && !transferMode && !netMode && status.isGuiInitialised) {
+        if (!s_fwUpdaterStarted && !transferMode && !netMode && !chargeMode && status.isGuiInitialised) {
             s_fwUpdaterStarted = true;
             fw_updater_launcher_ready();
         }
@@ -1440,7 +1456,7 @@ extern "C" void app_main(void)
         // call into LVGL goes through the same locked forwarder BLE/CDC
         // handlers use, never lv_async_call() directly.
         static bool s_fwRollbackToastDone = false;
-        if (!s_fwRollbackToastDone && !transferMode && status.isGuiInitialised) {
+        if (!s_fwRollbackToastDone && !transferMode && !chargeMode && status.isGuiInitialised) {
             s_fwRollbackToastDone = true;
             static char s_fwRollbackToastMsg[160];
             char failedPkg[FW_PKG_NAME_LEN];
@@ -1459,7 +1475,7 @@ extern "C" void app_main(void)
         // fw_assets_sync() found no matching assets.bin on the card for the
         // slot booted this time — one toast, once the launcher has painted.
         static bool s_fwAssetsToastDone = false;
-        if (!s_fwAssetsToastDone && !transferMode && status.isGuiInitialised) {
+        if (!s_fwAssetsToastDone && !transferMode && !chargeMode && status.isGuiInitialised) {
             s_fwAssetsToastDone = true;
             static char s_fwAssetsToastMsg[128];
             if (fw_assets_sync_toast_pending(s_fwAssetsToastMsg, sizeof(s_fwAssetsToastMsg))) {
