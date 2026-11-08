@@ -300,9 +300,16 @@ CP_COLD bool pitchedKitLoad(const KitInfo& kit, char* err, size_t errLen, const 
         if (err && errLen) snprintf(err, errLen, "%s", reason);
         setLastError(reason);
         // Fragmentation, not arithmetic, is what fails a zone or a rate
-        // conversion on this board, and core's message cannot see the arena.
-        ESP_LOGE(TAG, "kit '%s' failed: %s (arena free %u kB)", kit.name.c_str(), reason,
-                 (unsigned)((engine_arena_capacity() - engine_arena_used()) / 1024));
+        // conversion on this board, and core's message cannot see the heap.
+        // Beside the kits that is the general PSRAM heap less what it keeps.
+        if (options.besideKits)
+            ESP_LOGE(TAG, "kit '%s' failed: %s (beside the kits: PSRAM free %u kB, largest %u kB, keeps %u kB)",
+                     kit.name.c_str(), reason, (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
+                     (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024),
+                     (unsigned)(kBesideKeepBytes / 1024));
+        else
+            ESP_LOGE(TAG, "kit '%s' failed: %s (arena free %u kB)", kit.name.c_str(), reason,
+                     (unsigned)((engine_arena_capacity() - engine_arena_used()) / 1024));
 
         // Nothing was swapped in, so the *previous* kit's bank is still
         // installed — and the caller is about to drive it through the new kit's
