@@ -80,6 +80,16 @@ defaults is a cell connected afresh (or a board with no battery). Both start
 normally. A power-up keeps the backlight at 0 until the ESP sets a level, and
 the ESP keeps the pads black until the boot splash draws on them.
 
+**A charge-screen boot starts nothing else.** The ESP learns it at the wake
+gate (`PWR_STATE_CHARGE`, `charge_boot_active()` in `main.cpp`) and then skips
+the launcher and the apps (the screen is black under the charge overlay before
+the panel lights), the sample engine and its start-up sound, the kit scan,
+the audio tasks and the switch to the USB audio profile, BLE, WiFi (remote
+management), the update check and the STM update offer. USB comes up before the
+gate, so the host sees the CDC+MIDI profile for those seconds, never USB audio.
+The button on the charge screen (`PWR_STATE_WOKE`) restarts the ESP into a
+normal boot.
+
 **Nested layers register, they do not rely on the app hook.** A layer that is
 not the app itself — the file explorer over the pad editor over the sampler
 panel — pushes its own handler with `crosspad_gui::ui_back_push(fn, user)` in
