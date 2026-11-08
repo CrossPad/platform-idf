@@ -588,8 +588,12 @@ API and rationale: [docs/subsystems/audio-routing.md](docs/subsystems/audio-rout
 
 ## Audio Engine Rate
 
-Kits are 44.1 kHz WAVs and the sample engines play them 1:1, so the
-I2S clock must run at the content rate: `AudioControl_Setup()` pushes
+Kits are 44.1 kHz WAVs, so the engine runs at 44.1 kHz by default. The native
+sample engine steps a voice by the file's rate over the engine's (core
+`SamplerEngine`, the audition voice and `STARTUP.wav` too) and the pitched
+instrument converts at load, so a file at another rate keeps its pitch; only
+the optional prebuilt streamer (`CONFIG_CROSSPAD_SAMPLER_MARCEL`) plays files
+1:1 and needs the clock at the content rate. `AudioControl_Setup()` pushes
 `audioEngine.sampleRate` (44100 default, 48000 allowed) into
 `bsp_i2s_set_sample_rate()` before the codec init, and the USB audio bridge and
 UAC report the same rate. Boards that saved settings before core 1.0.3 hold
@@ -646,9 +650,10 @@ Details, numbers, limitations, traps: [docs/subsystems/wifi.md](docs/subsystems/
 
 ## Pitched Instrument (one sample, sixteen notes)
 
-A kit with `"engine": "pitched"` holds 1–4 recorded zones whole in PSRAM; every
+A kit with `"engine": "pitched"` holds 1–24 recorded zones whole in PSRAM (`kInstrumentMaxZones`); every
 pad plays the nearest zone transposed to its `instrument.pad_notes` note —
-varispeed Hermite, 32.32 phase, `max_voices` ≤ 32. **Core owns the engine**
+varispeed Hermite, 32.32 phase, `max_voices` clamped to 28 (`kMaxSounding`)
+and to the board's cap of 4 (`PitchedSampleNode::kVoiceCap`). **Core owns the engine**
 (`crosspad/instrument/*`, `crosspad/dsp/*`): voices, render gate, `installBank()`,
 `createFft()`, `pitchedBuildBank()`. FFT runs at load time only (root detection,
 rate conversion) — one 1024-point FFT is 0.56 ms of a 1.45 ms block where 16

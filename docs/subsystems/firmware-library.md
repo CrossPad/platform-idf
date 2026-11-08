@@ -162,8 +162,9 @@ that one deliberately does not, because the status then belongs to the
 install that *is* running. Both callers print the reason the call itself
 returned.
 
-**The install stops the sample engine, so it puts the kit back.**
-`marcel_engine_stop()` is a `DeInit` plus an arena reset, and
+**With the prebuilt streamer built (`CONFIG_CROSSPAD_SAMPLER_MARCEL`), the
+install stops it, so it puts the kit back.** The default build's native
+engine is left playing. `marcel_engine_stop()` is a `DeInit` plus an arena reset, and
 `marcel_engine_start()` brings the engine back empty — every other stop/start
 pair in the tree (`components/crosspad-platform-idf/SamplerPlatformPort.cpp`) sits *inside* the kit reload loop, which
 is what normally reloads the pads. `fw_install_task()` has no such loop, so
