@@ -85,6 +85,12 @@ bool ota_auto_accept_enabled(void);
 void ota_process_data(const uint8_t *data, size_t len);
 
 /**
+ * @brief Abort the OTA session if no data arrived for 10 s.
+ * Cheap; call it on every pass of the drain loop while nothing is queued.
+ */
+void ota_poll_timeout(void);
+
+/**
  * @brief Handle OTA timeout (no data received within deadline).
  * Aborts the current OTA transaction and responds with an error.
  */

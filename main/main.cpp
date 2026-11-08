@@ -1470,9 +1470,9 @@ extern "C" void app_main(void)
         }
 #endif
 
-        // Wake at least once a second to report queue drops.
-        TickType_t timeout = (ota_is_active() || fx_stream_active())
-                                 ? pdMS_TO_TICKS(10000) : pdMS_TO_TICKS(1000);
+        // Wake at least once a second to report queue drops and to run the
+        // stream stall checks below.
+        const TickType_t timeout = pdMS_TO_TICKS(1000);
         static int64_t s_lastDrainUs = 0;
         static bool    s_queueWasBacked = false;
         if (xQueueReceive(app_queue, &msg, timeout)) {
@@ -1507,10 +1507,6 @@ extern "C" void app_main(void)
         } else {
             s_queueWasBacked = false;
             /* Idle tick, once a second. */
-            if (ota_is_active()) {
-                ota_abort_timeout();
-            }
-            fx_abort_timeout();
 
             /* Report drops only here: they come in bursts, and a line per
              * drop would flood the console that caused the overflow. */
@@ -1521,6 +1517,17 @@ extern "C" void app_main(void)
                 ESP_LOGW(TAG, "CDC: %u commands dropped (app_queue full)",
                          (unsigned)reportedDrops);
             }
+        }
+
+        /* Stream stall checks run on their own timestamps every pass, not only
+         * on a receive timeout: companion wakes (SysEx HOST_INFO from the
+         * MIDI hub every 2 s, BLE, remote) post empty messages to app_queue,
+         * so with a host attached the receive never timed out and a broken-off
+         * FS_PUT/OTA held the CDC port in stream mode until a reset. Skipped
+         * while data is still queued: that is the stream, not a stall. */
+        if (uxQueueMessagesWaiting(app_queue) == 0) {
+            ota_poll_timeout();
+            fx_abort_timeout();
         }
 
     } // app loop

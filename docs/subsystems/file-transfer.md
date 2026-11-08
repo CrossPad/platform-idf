@@ -120,8 +120,13 @@ dropped and the listing arrives empty.
 
 The chunk size is 4096 on both sides and must stay that way: the device acks on
 4096-byte boundaries, so a short chunk anywhere but the last leaves both ends
-waiting. A stream that stalls for 15 s is abandoned from the idle tick
-(`fx_abort_timeout()`), the same place OTA's timeout lives.
+waiting. A stream that stalls for 15 s is abandoned with `FS_ERR timeout`
+(`fx_abort_timeout()`; OTA: 10 s, `OTA_ERROR timeout`, `ota_poll_timeout()`).
+The drain loop runs both checks on their own timestamps on every pass with
+`app_queue` empty, not only when its receive times out: companion wakes
+(the crosspad-hil MIDI hub's HOST_INFO SysEx every 2 s, BLE, remote) post
+empty messages, and before this a broken-off stream with a host attached
+never timed out.
 
 **There is no CDC at all in the USB-audio profile**, so none of this works
 there; `ota_flash.py`'s MIDI fallback (SysEx `F0 7D 1B 01 F7`) switches the
