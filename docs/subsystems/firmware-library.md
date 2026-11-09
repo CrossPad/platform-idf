@@ -12,7 +12,8 @@ Design intent: `docs/design/2026-09-21-firmware-library-ab-switch-design.md`
 (carries an "As built" note at the top listing where the shipped code diverges
 from that design). Code: `main/fw_image_desc.{h,c}`, `main/fw_library.{h,cpp}`,
 `main/fw_slots.{h,cpp}`, `main/fw_assets_sync.{h,cpp}`, `main/app/update/update_app.cpp`
-(the Firmware app), `main/hil_control.cpp` (`FW_*` verbs), `main/collect_assets.cmake`
+(the Firmware app's registration and Over USB block; the app itself is crosspad-gui's
+`src/fw/`), `main/gui/fw_flow_overlay.cpp` (the install and switch flows), `main/hil_control.cpp` (`FW_*` verbs), `main/collect_assets.cmake`
 (assets id), `tools/make_fw_package.py`, `tools/fw_image_desc.py`,
 `components/crosspad-core/include/crosspad/settings/SettingsScope.hpp` (shared
 settings), `components/stm32_hal/stm32_fw_update.c` (never-downgrade gate).
@@ -139,7 +140,7 @@ Empty → Installed → Trial → Confirmed
 | `Installed` | `installed` | `fw_install_task()` after `esp_ota_end()` succeeds |
 | `Trial` | `trial` | `fw_switch_request()`, right after moving the boot partition, only when the target was `Installed` (a switch between two already-`Confirmed` slots has no trial); also `fw_slots_init()` on any boot where the running image is still `ESP_OTA_IMG_PENDING_VERIFY` — a plain OTA over CDC is a trial as much as a switch is |
 | `Confirmed` | `confirmed` | `fw_confirm_running()` (10 s timer or `FW_CONFIRM`) once the running image is no longer `ESP_OTA_IMG_PENDING_VERIFY`; also `fw_slots_init()` promotes a *running* slot's own stale `Trial`/`RolledBack` on every boot — a slot that is demonstrably executing right now cannot be the one that "did not start last time" |
-| `RolledBack` | `rolledback` | `fw_slots_init()`, when `esp_ota_get_last_invalid_partition()` names the *other* (non-running) slot as `INVALID`/`ABORTED`. Not a dead end: the Firmware app offers that slot again as **Try X again**, which calls `fw_slot_clear_rollback()` (back to `Installed`) before the normal switch — a firmware can fail on something since fixed, and the alternative is a slot the device can never use again |
+| `RolledBack` | `rolledback` | `fw_slots_init()`, when `esp_ota_get_last_invalid_partition()` names the *other* (non-running) slot as `INVALID`/`ABORTED`. Not a dead end: the Firmware app offers that slot again as **Try this slot again**, which calls `fw_slot_clear_rollback()` (back to `Installed`) before the normal switch — a firmware can fail on something since fixed, and the alternative is a slot the device can never use again |
 
 **Installing never touches the boot slot.** `fw_install_start()` always
 targets `esp_ota_get_next_update_partition(nullptr)` — the slot that is not
@@ -475,31 +476,38 @@ actually be applied (still `due`, above).
 
 ## The Firmware app
 
-> The app is a launcher of kit tiles in tabs (Library, Store, Updates) with a kit
-> card; see [firmware-app.md](firmware-app.md). What follows describes the slot
-> cards, the install and switch flows and their overlay, which the app still uses
-> (`fw_flow_overlay.cpp`) -- the one-page layout is gone.
+The app itself, its tabs, tiles, kit card and the questions each action asks,
+is crosspad-gui's (`src/fw/fw_app.cpp`, `src/fw/fw_actions.cpp`): see
+[firmware-app.md](firmware-app.md). What follows is the part that stays on the
+board: the registration, the *Over USB* block, and the install and switch
+flows with their overlay.
 
-`main/app/update/` — renamed from **Update** to **Firmware** (`REGISTER_APP_PL`,
-same file, same `lv_CreateUpdateApp`/`lv_UpdateApp_destroy` function names).
-Its launcher icon is chosen at registration time by the currently running
-slot (`firmware_app_icon()`: `fw_a.png` when slot A is running, else
-`fw_b.png` — both 64×64 RGBA, `main/app/update/assets/`).
+**Registration** (`main/app/update/update_app.cpp`): `REGISTER_APP_PL(Firmware,
+…)`, still with the `lv_CreateUpdateApp`/`lv_UpdateApp_destroy` function names
+from when the app was called **Update**. `lv_CreateUpdateApp()` is a wrapper
+around `crosspad_gui::fw_app_create(parent, a, kHooks)`; the
+`crosspad_gui::FwAppHooks` add the **Over USB** block at the end of the
+Updates tab — one status line, the *Switch USB to CDC* button (hidden in the
+CDC profile), the *Auto-accept updates over USB* checkbox (NVS
+`ota_prefs/auto_accept`), `core · git`, and Close (which offers to restore the
+Audio USB mode when this visit switched away from it). `lv_UpdateApp_destroy()`
+calls `crosspad_gui::fw_app_destroy()`. The launcher icon is chosen at
+registration time by the running slot (`firmware_app_icon()`: `fw_a*.png` when
+slot A is running, else `fw_b*.png`, the `_white` variants on a dark tile —
+`main/app/update/assets/`).
 
-Screen, top to bottom: two slot cards (`A` / `B ▶ running` head, package,
-`kit · version`, state coloured — Confirmed green, Trial yellow, Rolled back
-orange, Empty grey; the running one gets the theme-primary border; **never
-added to the focus group** — informational only), a full-width **Switch to
-A/B** button, a rollback-unavailable row (hidden unless
-`!fw_rollback_supported()`), then **On the SD card**: one row per scanned
-package — the **whole row is the control** (name, `kit · version`, a `›` on
-the right; press = install *and restart*), a package that cannot be installed
-is the same row dimmed, not focusable, with the verdict text where the arrow
-would be. Below that **Over USB**: one status line, the *Switch USB to CDC*
-button (hidden in the CDC profile), the auto-accept checkbox, `core · git`,
-Close. The encoder group follows that order: the rows are built after the
-tail focusables exist, so `rebuild_package_rows()` re-appends the tail behind
-them each time it runs.
+The views reach the slots and the flows only through
+`crosspad_gui::IFwViewService` (`main/fw_view_service.cpp`):
+`rollbackSupported()` = `fw_rollback_supported()`, `flowActive()` =
+`fw_flow_active()`, `flowInstallAndRestart()` / `flowSwitchAndRestart()` = the
+two flow entry points below. The kit card's **Run** / **Try this slot again**
+end in `fw_flow_switch_and_restart()`, **Install and run** / **Reinstall** in
+`fw_flow_install_and_restart()`. A rolled-back slot asks in its own words
+("Slot X did not start last time. Try it once more?") and starts the switch
+with `clearRollback`; the switch dialog appends *Rollback unavailable: old
+bootloader.* when `!fw_rollback_supported()`, and the *cannot confirm itself*
+sentence when the target slot's image has no `CPFI` block
+(`FwSlotInfo::hasDesc`).
 
 **Both flows run in `main/gui/fw_flow_overlay.cpp`**, a full-screen panel on
 `lv_layer_top()` shaped like the OTA and STM32 overlays (title, *Do not power
@@ -512,34 +520,31 @@ off*, bar, phase line; the pads mirror the bar through `PadAnimator`):
   refused (the running image has not confirmed itself yet, say) the panel
   says *Installed to X. \<reason\> Use Switch to X later.* in green — the
   package is in the slot, only the restart is postponed.
-- `fw_flow_switch_and_restart(clearRollback)` — the Switch / Try again
-  button; the same panel from *Restarting into X…* on.
+- `fw_flow_switch_and_restart(clearRollback)` — the same panel from
+  *Restarting into X…* on; with `clearRollback` the switch task calls
+  `fw_slot_clear_rollback()` before `fw_switch_request()`, whose own
+  `RolledBack` refusal stays exactly as it is.
 
 While the panel is up the encoder holds an **empty group** (the app's own
-rows sit underneath and must not answer a press) and the power-button click
+widgets sit underneath and must not answer a press) and the power-button click
 is swallowed through `ui_back_push()` — nothing to go back to while the
 flash is being written. `ui_modal_confirm` restores the encoder group *after*
 its callback returns, so the app starts either flow through `lv_async_call`
 one cycle later, or the dialog's restore would undo the empty group and leave
-the app's rows with focus during the install.
-`fw_flow_active()` is what the app polls: it refreshes the slot cards on the
-true→false edge (a successful flow never comes back).
-
-The switch button reads **Slot X is empty** and is disabled only for `Empty`.
-A `RolledBack` slot is offered as **Try X again** and asks in its own words
-("Slot X did not start last time. Try it once more?"); on confirm the flow's
-switch task calls `fw_slot_clear_rollback()` before `fw_switch_request()`,
-whose own `RolledBack` refusal stays exactly as it is. The ordinary switch
-dialog appends the *cannot confirm itself* sentence when the target slot's
-image has no `CPFI` block (`FwSlotInfo::hasDesc`).
+the app's widgets with focus during the install. The views poll
+`fw_flow_active()` (through `flowActive()`) and rescan the library and the
+slots on its true→false edge (a successful flow never comes back).
 
 **Every `fw_library_*`/`fw_install_start`/`fw_switch_request` call runs off a
-dedicated task, never the LVGL thread** — the app's `fw_scan_task` (SPIRAM
-stack, the scan touches the SD card), the overlay's `install_task` (SPIRAM —
-the *lookup* alone needs a dedicated stack, as on `FW_INSTALL`'s CDC path) and `switch_task` (**internal** stack —
-`fw_switch_request()` writes flash directly). `lv_timer`s poll the published
-results back onto widgets; the app's is deleted unconditionally in
-`lv_UpdateApp_destroy()`, the overlay's when the panel closes. **The switch
+dedicated task, never the LVGL thread.** The views' card work (the library
+scan included) runs on their PSRAM-stack worker `fw_views`
+([firmware-app.md](firmware-app.md#threads-and-memory-worker-icons-outside-the-image-cache-the-budget)).
+The overlay starts one 8 kB task per flow: `install_task` (`"fw_install_gui"`,
+**SPIRAM** stack — the *lookup* alone needs a dedicated stack, as on
+`FW_INSTALL`'s CDC path) and `switch_task` (`"fw_switch_gui"`, **internal**
+stack, `begin_switch()` — `fw_switch_request()` writes flash directly). The
+overlay's 150 ms `lv_timer` polls the tasks' results and `fw_install_status()`
+back onto its widgets and is deleted when the panel closes. **The switch
 restarts from its own task**, ~200 ms after `fw_switch_request()` returns
 success — the same delay and shape the CDC path uses, so "Restarting into
 X…" has a chance to paint before the board disappears.
@@ -563,8 +568,8 @@ needs the user at the device or a trusted CDC host.
 
 - **Flash writes from a PSRAM-backed stack assert/coredump the moment the call
   frame reaches the write's critical section** (it disables the cache the
-  stack itself needs) — `fw_switch_cmd_task`/`fw_switch_gui_task`
-  (`main/hil_control.cpp`, `main/app/update/update_app.cpp`) and
+  stack itself needs) — `fw_switch_cmd_task` (`main/hil_control.cpp`), the
+  overlay's `switch_task` (`"fw_switch_gui"`, `main/gui/fw_flow_overlay.cpp`) and
   `fw_switch_finish_task` (`main/fw_slots.cpp`) all use
   `MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT`, never `MALLOC_CAP_SPIRAM`, for this
   reason.
@@ -637,24 +642,19 @@ Bench procedure (through `tools/bench.py`; a new `crosspad-hil` scenario
    case).
 8. No package on the card for the running slot (unnamed/plain-OTA slot):
    listing and switching still work; installing needs a card.
-9. `app_churn --rounds 5`: the Firmware app itself churns cleanly (0 B/visit,
-   no leak) — it is no longer skipped by name, see the crosspad-hil note
-   below.
+9. `app_churn --rounds 5 --skip "Power OFF,Settings"` (the Firmware app is in
+   both churn scenarios' default skip list, see below): the Firmware app
+   churns cleanly (0 B/visit, no leak).
 
-Verbs `crosspad_hil/verbs.py` + `knowledge/cdc.yaml` (a separate repo) need,
-with their reply prefixes: `FW_SLOTS` (`FWSLOT:`, two rows + a `rollback=`
-trailer — multi-line), `FW_LIST` (`FWPKG:`, N rows + a `count=` trailer —
-multi-line), `FW_INSTALL` (`OK`/`ERR` on success/refusal, `FWINST:` when
-polled bare), `FW_SWITCH` (`OK reboot=1`/`ERR`), `FW_CONFIRM` (`OK`). None of
-the `FW_*` verbs exist in `cdc.yaml` today, so a generic `bench.py hil cdc
-"<verb>" --expect "<prefix>"` only ever sees the *first* matching line for a
-multi-line reply — reading the rest needs a raw multi-line read
-(`crosspad_hil.cdc.CdcLink.transact_multi`).
+crosspad-hil carries the verbs in `crosspad_hil/knowledge/cdc.yaml`, with
+their reply prefixes: `FW_SLOTS` (`FWSLOT:`, multi-line, ends at the
+`FWSLOT: rollback=` trailer), `FW_LIST` (`FWPKG:`, multi-line, ends at
+`FWPKG: count=`), `FW_INSTALL` (`OK`/`ERR` on success/refusal, `FWINST:` when
+polled bare), `FW_SWITCH` (`OK reboot=1`/`ERR`), `FW_CONFIRM` (`OK`),
+`APP_SHA` (`APPSHA:`).
 
-**crosspad-hil's own `app_churn`/`back_churn` `DEFAULT_SKIP` tuples still say
-`"Update"`** (`crosspad_hil/scenarios/app_churn.py`, `back_churn.py`, and the
-matching test assertions) — the app is now named `Firmware`, so it is no
-longer skipped by either churn scenario. It churns cleanly (0 B/visit, no
-leak, no crash), so this is not currently harmful, but whatever made the
-original skip entry there may still apply, and the entry should be updated to
-`"Firmware"` in crosspad-hil.
+crosspad-hil's `app_churn` and `back_churn` list `"Firmware"` in their
+`DEFAULT_SKIP` tuples (`crosspad_hil/scenarios/app_churn.py`,
+`back_churn.py`): an app that can flash firmware is not a "visit", and
+churning it tests the harness rather than the launcher. Churn it explicitly
+by passing a skip list without it.

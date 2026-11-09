@@ -54,9 +54,12 @@ idf.py app-device                                    # what the board is running
   `crosspad.config.json`; only deviations from `Configuration.h` defaults are
   emitted to `.crosspad/build_flags.cmake`, which the top-level `CMakeLists.txt`
   includes. An untouched project builds exactly as the headers say.
-- **The device answers for itself.** `main/generate_app_versions.cmake` bakes the
-  installed app submodules (commit + manifest pin + dirty flag) into the binary
-  at configure time; `APP_VERSIONS` over CDC reports them and Settings → Info
+- **The device answers for itself.** crosspad-core's
+  `cmake/crosspad_app_versions.cmake` (`crosspad_generate_app_versions()`,
+  called from `main/CMakeLists.txt`; the PC simulator uses the same generator)
+  bakes the installed app submodules and the shared ones, crosspad-core and
+  crosspad-gui (commit + manifest pin + dirty flag), into the binary at
+  configure time; `APP_VERSIONS` over CDC reports them and Settings → Info
   lists them. `idf.py app-device` diffs that against the checkout — the manifest
   says what should be installed, the device says what is actually flashed.
 - The flag catalog lives in
