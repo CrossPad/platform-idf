@@ -24,10 +24,11 @@ The home screen is the MODE map: one cell per pad, laid out like the pads. Pad 1
 - 1 Sampler: play a kit on the pads
 - 2 Seq: Sequencer, record loops
 - 3 Song: chain scenes into a song
-- 4 Arrange: four tracks
+- 4 Arrange: eight tracks
 - 5 Record: Recorder, mics, line in, pads or USB
 - 6 Slicer: cut a recording into a kit
-- 7, 8: empty
+- 7: empty
+- 8 More: the other apps
 - 9 Pitch: Pitch Play, where your firmware has it
 - 10 Pad Mix: one fader per pad
 - 11 Mixer: inputs, outputs and routing
@@ -49,7 +50,13 @@ In an app, tap MODE (four small squares, top left) to bring the map back. Tap MO
 - Kits live on the microSD card. Keep the card in its slot.
 - No kit is loaded at start-up: the Sampler (pad 1) first opens the kit browser.
 - Kits (pad 13) or a tap on the kit name in the Sampler opens the browser.
-- LEGACY: the kits your CrossPad came with. USER: kits you made on it.
+- The tabs on the left sort what is on the card.
+- PERF: performance kits, long and short samples. + NEW KIT makes an empty one.
+- DRUMS: drum kits, short hits. + NEW DRUMS makes an empty one.
+- SLICE: one recording cut into a pad each.
+- PITCH: one sound across the pads, and instruments saved in Pitch Play.
+- SONGS: your songs. Loading one opens Arrange.
+- USER: your Recorder takes, which open in the Slicer, and kits you made before.
 - Turn to a kit and press, or tap it, to load it.
 
 ## Volume
