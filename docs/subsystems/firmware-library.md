@@ -2,8 +2,8 @@
 
 > Source of truth for this subsystem. `CLAUDE.md` carries only the summary; when behaviour changes, update this file and the summary together.
 
-CrossPad keeps several firmwares on the SD card (sampler, DAW-only, a future
-kit-specific build, …), installs one into a resident OTA slot in a few
+CrossPad keeps several firmwares on the SD card (the `full` and `lite` kits,
+single-app kits such as the games, …), installs one into a resident OTA slot in a few
 seconds, and switches which slot boots next with nothing more than a restart.
 Each firmware keeps its own settings; a firmware that does not start cannot
 strand the device — the bootloader rolls back on its own.
@@ -29,7 +29,7 @@ own `esp_app_desc_t` — a fixed file offset of **0x120** (`FW_DESC_FILE_OFFSET`
 | `desc_version` | `uint8_t` | layout version (`1` today) |
 | `board_rev` | `uint8_t` | 1 or 2, from the board revision the build was configured for |
 | `stm_proto_min` | `uint16_t` | the STM32 protocol this firmware needs |
-| `kit_id[16]` | `char[]` | firmware kit name (`"full"` — no per-kit builds exist yet, `CROSSPAD_FW_KIT_ID` is a compile define with that fallback) |
+| `kit_id[16]` | `char[]` | firmware kit name: the compile define `CROSSPAD_FW_KIT_ID`, set by the top-level `CMakeLists.txt` from `-DCROSSPAD_FW_KIT=<kit>` (the profile `config/profiles/[community/]<kit>.json` the build applied: `full`, `lite`, `doom`, `pong`, `pianotiles`, `sdr`, …); a plain build without it is `"full"` (the fallback in `main/fw_image_desc.c`) |
 | `assets_id[32]` | `uint8_t[]` | SHA-256 over the staged asset files this image was built with |
 
 The linker places `.rodata_custom_desc` right after `.rodata_desc`; a
@@ -163,26 +163,42 @@ or `FW_SWITCH`), then flash: the kit's own slot is the other one then.
 `fw_install_start()` runs its whole body under `op_lock()` (see Switching
 below), so the "is anything running?" read and the `Verifying` that arms this
 install are one decision across CDC and the GUI. Its refusals, in order:
-*no such package*, the package's own verdict, *battery low, no charger*, and
-**kit loading** — an install started mid-load would stop the sample engine
-between two of the loader's guarded per-pad calls and tear the library down
-underneath it — and *would replace the main firmware: switch back to it
-first*. Every refusal but *install already running* also writes its
+*no such package*, the package's own verdict, *battery low, no charger*,
+**kit loading** — in a build with the prebuilt streamer
+(`CONFIG_CROSSPAD_SAMPLER_MARCEL=y`) an install started mid-load would stop
+that engine between two of the loader's guarded per-pad calls and tear its
+library down underneath it; the check runs in every build — and *would
+replace the main firmware: switch back to it first*. Every refusal but *install already running* also writes its
 reason into the install status, which is where the GUI's poll timer reads it;
 that one deliberately does not, because the status then belongs to the
 install that *is* running. Both callers print the reason the call itself
 returned.
 
-**The install stops the sample engine, so it puts the kit back.**
+**The native engine plays on through an install.** In the default build
+(`CONFIG_CROSSPAD_SAMPLER_MARCEL` not set, `sdkconfig.defaults` and both
+`sdkconfig.v*`) `fw_install_task()` stops nothing: the native engine holds no
+library a `DeInit` could tear down, and the install's card reads go through
+the same pacing every other bulk reader uses.
+
+**With the prebuilt streamer built in, the install stops it and puts the kit
+back.** Only under `CONFIG_CROSSPAD_SAMPLER_MARCEL=y`, and only when
+`marcel_engine_running()` was true when the task started (a pitched kit's bank
+owns the arena then, and starting the streamer back up would tear it out),
+does the task call `marcel_engine_stop()` before writing the slot.
 `marcel_engine_stop()` is a `DeInit` plus an arena reset, and
 `marcel_engine_start()` brings the engine back empty — every other stop/start
-pair in the tree (`components/crosspad-platform-idf/SamplerPlatformPort.cpp`) sits *inside* the kit reload loop, which
-is what normally reloads the pads. `fw_install_task()` has no such loop, so
-after restarting the engine (on the success path and on any abort that got as
-far as stopping it) it asks for one: `kit_load_task_start(false, <current kit
-id>)`, hopped onto the LVGL thread with `lv_async_call_locked()` because that
-is the only thread that call may be made from. Without it the pads would be
-silent after an install until the next kit change.
+pair in the tree (`components/crosspad-platform-idf/SamplerPlatformPort.cpp`)
+sits *inside* the kit reload loop, which is what normally reloads the pads.
+`fw_install_task()` has no such loop, so after restarting the engine (on the
+success path and on any abort that got as far as stopping it)
+`reload_current_kit()` asks for one: `kit_load_task_start(false, <current kit
+id>)`, hopped onto the LVGL thread because that is the only thread that call
+may be made from. The hop is `lvgl_port_lock()` + `lv_async_call()` +
+`lvgl_port_unlock()`, deliberately not `lv_async_call_locked()`: the latter
+returns `void`, so the task could not tell whether the call was ever placed.
+It retries the lock up to 10 times (3 s wait each, 100 ms apart) and logs an
+error if the LVGL thread stays out of reach. Without the reload the pads would
+be silent after an install until the next kit change.
 
 **Switching** (`fw_switch_request()`, `main/fw_slots.cpp`), the whole body
 under the module mutex `op_lock()` that `fw_install_start()` also takes — CDC
@@ -320,9 +336,13 @@ no scheduler dependency, raw `wdt_hal` register writes, the same shape
 ESP-IDF's own `esp_restart_noos()` uses. It **unconditionally clears** the RTC
 watchdog (both the enable bit and `flashboot_en`) before checking anything,
 then arms stage 0 for **30 seconds** (`kTrialWatchdogTimeoutS`) only if the
-running image is still `PENDING_VERIFY`. `fw_confirm_running()` disables it
-(same unconditional-clear helper) right before marking the image valid, well
-inside the 30 s window on a healthy boot.
+running image is still `PENDING_VERIFY`. The confirm task disables it (same
+unconditional-clear helper, `trial_watchdog_disable()`) only **after**
+`esp_ota_mark_app_valid_cancel_rollback()` returned `ESP_OK` — well inside the
+30 s window on a healthy boot. On an error the watchdog stays armed on
+purpose: an image that cannot mark itself valid would otherwise retry on every
+timer tick forever with nothing left to end the boot, whereas with the
+watchdog still running the chip resets at 30 s and the bootloader rolls back.
 
 **Why the watchdog must be cleared unconditionally, not just disabled.**
 `wdt_hal_disable()` clears only the enable bit — `rwdt_ll_disable()`'s own doc
@@ -332,8 +352,9 @@ occur if flashboot mode is simultaneously enabled." A trial armed with
 "disabled" — and still reset ~30 s later, because the independent
 `flashboot_en` trigger keeps counting underneath. So `fw_trial_watchdog_arm()`
 never sets `flashboot_en` (it is a bootloader flash-boot-phase mechanism, not
-for guarding app execution), and the disable path clears and feeds *both*
-trigger paths unconditionally, before the `PENDING_VERIFY` check — closing off
+for guarding app execution), the disable helper clears and feeds *both*
+trigger paths, and `fw_trial_watchdog_arm()` runs that helper unconditionally,
+before its `PENDING_VERIFY` check — closing off
 any state a previous boot's failed disable might have leaked forward,
 regardless of whether the exact RTC_CNTL register survives an
 `esp_restart()`. Verified with three separate 150–200 s console soaks past
