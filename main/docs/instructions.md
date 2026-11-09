@@ -57,7 +57,7 @@ In an app, tap MODE (four small squares, top left) to bring the map back. Tap MO
 - PITCH: one sound across the pads, and instruments saved in Pitch Play.
 - SONGS: your songs. Loading one opens Arrange.
 - USER: your Recorder takes, which open in the Slicer, and kits you made before.
-- Turn to a kit and press, or tap it, to load it.
+- Turn to a kit and press, or tap it and then LOAD, to load it.
 
 ## Volume
 
