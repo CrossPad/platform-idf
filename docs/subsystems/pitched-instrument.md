@@ -7,7 +7,7 @@ The kit loader lists a pitched kit like any other.
 ## What it is
 
 A second sample engine beside the streaming sampler. A kit whose
-`kit.json` says `"engine": "pitched"` carries one to four recorded notes
+`kit.json` says `"engine": "pitched"` carries one to 24 recorded notes
 ("zones"), held **whole in PSRAM**, and every pad plays the nearest zone
 transposed to its own MIDI note. Nothing streams from the SD card while
 playing, which is where the polyphony comes from: a voice is an interpolated
@@ -32,8 +32,8 @@ Design and the reasoning behind each choice:
 | Bank swap: render gate, mutation window, old-bank verdict | core `instrument/PitchedInstrument.hpp` (`gateEnter`/`gateExit`, `beginMutation`/`endMutation`, `installBank`) |
 | Mixer channel "Pitched" — rt-max-µs timing wrapper only | `components/crosspad-platform-idf/include/PitchedSampleNode.hpp` (header-only), wired in `CrosspadPlatform.cpp` |
 | Board's half of the load: arena memory, `/sdcard` prefix, I2S rate, ESP_LOG, status for the CDC verbs | `components/crosspad-platform-idf/PitchedKitPort.{hpp,cpp}` |
-| Shared engine PSRAM arena (`multi_heap` over one block) | `components/crosspad-platform-idf/engine_arena.{hpp,cpp}` |
-| Prebuilt-streamer start/stop handoff | `main/include/engine_handoff.h`, `main/audio/engine_handoff.cpp` |
+| Shared engine PSRAM arena (general PSRAM heap, every block on one list, 512 kB UI floor) | `components/crosspad-platform-idf/engine_arena.{hpp,cpp}` |
+| Arena handoff between the engines (`kit_engines_stop()`, `kit_engines_idle()`) | `main/include/engine_handoff.h`, `main/audio/engine_handoff.cpp` |
 | Engine dispatch (which engine a pad hit and a kit load go to) | `components/crosspad-platform-idf/SamplerPlatformPort.cpp` (`platform_reloadPad`, `platform_reloadPads`, `onSamplePlaybackEvent`) |
 | CDC verbs `PITCHED_STATUS`, `PITCHED_BENCH`, `ARENA` | `main/hil_control.cpp`; host `crosspad-hil` `knowledge/cdc.yaml`, `verbs.py`, `parsers.py` |
 | Fixture kit | `tools/make_pitched_kit.py` |
@@ -72,16 +72,19 @@ the file-reading ones share.
   and choke code read it. `playbackMode: 1` (hold) is what makes the pad
   release reach the engine; without it the note only ends when the sample
   does.
-- `max_voices` is capped by the board at 10 (`PitchedSampleNode::kVoiceCap`,
+- `max_voices` is capped by the board at 4 (`PitchedSampleNode::kVoiceCap`,
   set in `CrosspadPlatform_Init`; `PitchedInstrument::setVoiceCap()`, which
   every `setParams()` meets -- a load and the kit editor's Attack, Release and
-  Voices alike). Measured in the 16-note chord: ~65-69 us a voice beside a
-  pass of ~550 us (CDC) to ~680 us (phone streaming over USB audio); ten
-  voices are 84 % / 93 % of the 1451 us block. At 15-16 the render fills the
-  block, `crosspad_events` (which plays the notes) starves and a chord loses
-  its last note and hangs its release. Above the cap a voice is stolen (see
-  below). `PITCHED_CAP n` sets the cap from the next `setParams()`, until a
-  restart; the editor's Voices goes up to it.
+  Voices alike). Four is a design choice, not the CPU's limit: Pitch is one
+  of the kit types beside Drums and Slice and is played as chords of at most
+  four notes next to the other engines. The CPU's own limit, measured in the
+  16-note chord: ~65-69 us a voice beside a pass of ~550 us (CDC) to ~680 us
+  (phone streaming over USB audio); ten voices are 84 % / 93 % of the
+  1451 us block. At 15-16 the render fills the block, `crosspad_events`
+  (which plays the notes) starves and a chord loses its last note and hangs
+  its release. Above the cap a voice is stolen (see below). `PITCHED_CAP n`
+  (1..28) sets the cap from the next `setParams()`, until a restart; the
+  editor's Voices goes up to it.
 - **The render holds the polyphony over budget** (`main/audio/audio_task.cpp`):
   `audio_rt` keeps a running average of its pass, I2S waits excluded, each
   pass weighing a quarter; over 85 % of the block it raises
@@ -89,7 +92,8 @@ the file-reading ones share.
   place instead of adding one, until the average is back under 75 %. The cap
   is a guess at the budget, this is the budget as measured, with USB audio,
   the song and the metronome in it. `PITCHED_STATUS shed=` counts those steals.
-- Up to four zones (`kInstrumentMaxZones`). Zone selection is nearest root,
+- Up to 24 zones (`kInstrumentMaxZones`, the same as `SampleBank::kMaxZones`;
+  zones past it are dropped when the kit is parsed). Zone selection is nearest root,
   ties to the lower one. `loop_start`/`loop_end` in samples of the file;
   they are scaled when the file is rate-converted, and so are the two below.
 - `start`: where a note begins -- the attack, played once before the loop, so
@@ -117,9 +121,9 @@ hears -- the oldest of those, which fades out over `kStealFadeMs` (5 ms; 2 ms
 was a cut on a low note) in its own slot while the new note starts in a free
 one — `kMaxVoices` (32) is the slot count, `max_voices` is capped at
 `kMaxSounding` (28) so `kFadeSlots` (4) stay free for the fades (under the
-board's cap of 10 there are 22); `PITCHED_STATUS steals=` counts them, the
-hard cut when every fade slot is busy included. A 16-note chord sounds as 10
-voices: the 6 oldest are stolen. Duration scales with pitch, as on every classic sampler.
+board's cap of 4 there are 28); `PITCHED_STATUS steals=` counts them, the
+hard cut when every fade slot is busy included. A 16-note chord sounds as 4
+voices: the 12 oldest are stolen. Duration scales with pitch, as on every classic sampler.
 
 Measured with `PITCHED_BENCH 20` on a v2 board (44.1 kHz, 64-frame
 block = 1451 µs):
@@ -150,36 +154,56 @@ sin(t·π/2) to within 0.25 dB). Outside them the voice costs what it did; insid
 one more four-tap read. Host test: a ramp looped plain jumps by the whole span
 at the wrap, crossfaded it never steps by more than a few LSB.
 
-## The two engines share one PSRAM arena
+## The engines take turns owning one PSRAM arena
 
-The prebuilt streamer's memory is chosen by the caller:
-`SampleStreamPlayer_Init(32 kB, 16 kB)` (`engine_handoff.cpp`) takes 6484 B
-of state in 25 blocks (`SampleStreamPlayer_MallocFastMemory`), and its sample
-and stream blocks come from the arena as a kit is set up
-(`SampleStreamPlayer_MallocSlowMemory`; 1343 kB for HIL SINE A's 16 samples,
-measured 2026-11-07 -- the hooks count them and `EngineHandoff` logs the sum on
-every start). Only one of the two engines is ever current, so they take turns
-owning that memory.
+`components/crosspad-platform-idf/engine_arena.cpp` is not a reserved block.
+The engines take PSRAM from the general heap as they need it and give it back:
+every arena block carries a 16-byte header that links it into one list, and
+`engine_arena_reset()` frees the whole list in one step, so a handoff does
+not depend on any engine's own teardown. The one rule is a **floor**: the
+arena never takes the last 512 kB of PSRAM (`kUiFloorBytes`), which is what
+the UI, the apps, WiFi and the Recorder's ring are left at the least. An
+allocation that would cross the floor is **refused**: `engine_arena_alloc()`
+logs `refused <n> B` with a WARN and returns `nullptr`, and nothing falls back
+to the general heap. The pitched bank's budget check and the native engine's
+head plan are meant to stop a load before it gets there. Blocks are handed
+out 16-byte aligned, which is what esp-dsp's `aes3` FFT kernels need to read
+the bank PCM and the resampler scratch in place.
 
-`components/crosspad-platform-idf/engine_arena.cpp` allocates **one** PSRAM
-block of 4608 kB at boot (sized so the UI and WiFi keep their PSRAM beside it),
-before `SampleStreamPlayer_Init()`, and registers an
-IDF `multi_heap` over it. `SampleStreamPlayer_MallocSlowMemory/Free` serve from it, and
-so does the pitched bank (`SampleBank`'s allocator *and* the resampler
-scratch). An arena that runs dry falls back to `heap_caps_malloc(SPIRAM)` with
-a WARN rather than failing — nothing outside the arena ever moves into it.
-Blocks are handed out 16-byte aligned, which is what esp-dsp's `aes3` FFT
-kernels need to read the bank PCM and the resampler scratch in place.
+The arena serves the native sampler engine (its heads and stream pool), the
+pitched bank (`SampleBank`'s allocator *and* the resampler scratch), and the
+optional prebuilt streamer when it is built (`CONFIG_CROSSPAD_SAMPLER_MARCEL`,
+off by default). The song engine's and the sample tools' rings borrow what an
+owner leaves (`engine_arena_lend()`, `engine_arena_lend_ring()`); a ring that
+does not fit goes to the general heap.
 
 `main/audio/engine_handoff.cpp` is the switch:
 
 | Direction | Sequence |
 |---|---|
-| → pitched kit (pad 0) | `marcel_engine_stop()` → `pitchedKitLoad()` builds the bank from the arena |
-| → sampler kit (pad 0) | `pitchedKitUnload()` → `engine_arena_reset()` → `marcel_engine_start()` → the prebuilt streamer's per-pad path |
+| → pitched kit (pad 0) | `kit_engines_stop()` → `pitchedKitLoad()` builds the bank from the arena |
+| → sampler kit | the pitched bank in the arena is unloaded (`pitchedKitUnload()`); the native engine takes the kit when the load is done (`native_sampler_take_kit()`), which releases the previous kit and resets the arena itself |
 
-`marcel_engine_stop()` lowers `marcelEngineReady()` first, then runs all-notes-
-off, `WipeOut()` and `SampleStreamPlayer_DeInit()` under
+`kit_engines_stop()` holds `EngineArenaOwner` and lets every owner go, each
+into the heap its blocks came from, *before* the reset: the installed pitched
+bank (only one in the arena: a song's Pitch track's bank is built beside the
+kits, in the general heap, and plays on), the native sampler's voices and
+resident heads (`native_sampler_release()`), the prebuilt streamer when it is
+built and running (`marcel_engine_stop()`), and the song engine's borrowed
+rings; then `engine_arena_reset()`. A caller that builds a bank next holds
+`EngineArenaOwner` across the handoff and the build, so no native take or pad
+rebuild starts in between. `kit_engines_idle()` is the way back with nothing
+loaded: it starts the prebuilt streamer when that is built and is
+`kit_engines_stop()` otherwise.
+
+When the prebuilt streamer is built, its memory is chosen by the caller:
+`SampleStreamPlayer_Init(32 kB, 16 kB)` (`engine_handoff.cpp`) takes 6484 B
+of state in 25 blocks (`SampleStreamPlayer_MallocFastMemory`), and its sample
+and stream blocks come from the arena as a kit is set up
+(`SampleStreamPlayer_MallocSlowMemory`; 1343 kB for HIL SINE A's 16 samples,
+measured 2026-11-07 -- the hooks count them and `EngineHandoff` logs the sum on
+every start). `marcel_engine_stop()` lowers `marcelEngineReady()` first, then
+runs all-notes-off, `WipeOut()` and `SampleStreamPlayer_DeInit()` under
 `SamplePlayerMutationGuard` — the gate waits out an in-flight
 `SampleStreamPly_Process()`, the file mutex waits out an in-flight
 `SampleStreamPlayer_BkgProc()`. `smpl_stream_ply_ready()` is that flag, and
@@ -187,45 +211,25 @@ every call into the prebuilt library is gated on it: `MarcelSampleNode::mix()`
 returns silence without a library call, `AudioModule_BG_Process()` reads the
 flag *inside* the file mutex (so a refill that sees it up is holding the lock
 the teardown still needs), and the `platform_*` player callbacks in `SamplerPlatformPort.cpp`
-plus `SMPL_POLY`/`SMPL_PREVIEW` refuse while it is down.
+plus `SMPL_POLY`/`SMPL_PREVIEW` refuse while it is down. Whatever
+`SampleStreamPlayer_DeInit()` leaves, `engine_arena_reset()` reclaims; a fast
+block it left is freed by the port (`sample_player_port_forget_blocks()`).
+`Init()` after `DeInit()` plays again.
 
-**`engine_arena_reset()` reclaims whatever `SampleStreamPlayer_DeInit()`
-leaves**, in one step, so the handoff does not depend on what the library
-hands back through the Free hook (with no kit set up it returned all 6484 B in
-25 blocks); a fast block it left is freed by the port
-(`sample_player_port_forget_blocks()`). `Init()` after `DeInit()` plays again
--- `kit_churn` through HIL PITCHED and back under pad hits, 2026-11-07.
-
-Numbers on a v2 board (arena 4608 kB, usable 4605 kB; the pitched
-line is from the 5424 kB arena, the zones' size does not depend on it):
+`ARENA` reports `cap_kb` (what the arena holds plus what it could still take
+above the floor, so it moves with the rest of PSRAM), `used_kb` and `owner`
+(`pitched` or `native`; `marcel` or `none` too when the prebuilt streamer is
+built). `MEM` cannot tell the engines' blocks from anyone else's: to the
+general heap they are ordinary allocations. A v2 board with a sampler kit and
+a Pitch instrument loaded (2026-11-08):
 
 ```
-ARENA: cap_kb=4605 used_kb=4252 owner=marcel      # launcher, sampler kit (2026-10-03)
-ARENA: cap_kb=5421 used_kb=861   owner=pitched    # HIL PITCHED, 2 × 5 s zones
-MEM: … psram_free=210796 psram_largest=167924     # launcher after app_churn, BLE on (2026-10-03)
+ARENA: cap_kb=3375 used_kb=1188 owner=pitched
 ```
-
-`ARENA` is its own verb because `MEM` cannot see inside the block: to the
-general heap the whole arena is one allocation whichever engine is up.
-
-The arena is a whole number of TLSF size classes, less the 16 B the heap
-adds in front: between 4 and 8 MiB a class is 128 kB, and TLSF keeps the
-rounding, so 4720 kB and 4656 kB both cost 4736 kB (the same 326 kB left
-outside on a v2 board). At 4608 kB (2026-10-03, v2) the prebuilt streamer holds 4252 kB, and
-the ~350 kB left is what the song engine's and the sample tools' rings borrow
-(Recorder take 256 kB, bounce 128 kB, song playback 32 kB, audition 32 kB,
-measured with `ARENA`); a ring that does not fit goes to the general heap above
-the UI's reserve. A pitched bank's budget is 4605 − 256 kB. PSRAM
-*outside* it is what LVGL, the kit list and the waveform cache run on; an
-arena of 5.5 MiB (233 kB more than the streamer asks for) leaves 306 kB
-outside, too little: `lv_realloc` cannot grow and the board boot-loops on
-core 1 before the kit scan finishes. One contiguous block also fragments the
-pool differently from 56 separate ones: the launcher reports `psram_free`
-334 kB / largest 200 kB, where 56 interleaved blocks left ~450 kB / 393 kB.
 
 ## Load path and memory
 
-`platform_reloadPad(0)` on a pitched kit stops the prebuilt streamer and then calls
+`platform_reloadPad(0)` on a pitched kit hands the arena over (`kit_engines_stop()`) and then calls
 `pitchedKitLoad()` on the kit-load worker (8 kB PSRAM stack, core 1, priority 4 — the build is CPU-bound and must not starve LVGL or the CDC loop on core 0):
 core's `pitchedBuildBank()` **streams** each zone (`WavPcmReader` →
 `FftResamplerStream` when the rate differs → the zone's PCM), so a file longer
@@ -255,15 +259,16 @@ streamer is not a fallback, `reloadPad()` wiped its slots for this kit and put
 nothing back. A
 pitched pad with no bank is silent, and `PITCHED_STATUS`'s `err=` says why.
 
-Pads 1–15 only `WipeOut()` the prebuilt streamer's slot, and only while it is
-running.
+Pads 1–15 carry no engine state of their own; with the prebuilt streamer
+built and running they only `WipeOut()` its slot.
 
 Budget: `pitchedMaxBankBytes()` is the arena's capacity minus **256 kB held
 back for the resampler**, which needs the source, the converted copy and up to
 ~200 kB of overlap-add scratch live at once (8 kHz → 44.1 kHz, the widest ratio
-a kit ships) *while the zones already built are resident*. On a v2 board
-that is ~4.3 MB of resident PCM, roughly 50 s of mono 16-bit at 44.1 kHz across
-all zones. Two 5 s zones load at `bank_kb=861`. The
+a kit ships) *while the zones already built are resident*. The capacity moves
+with the rest of PSRAM (see `ARENA` above): at `cap_kb=3375` the budget is
+~3.1 MB of resident PCM, roughly 35 s of mono 16-bit at 44.1 kHz across all
+zones. Two 5 s zones load at `bank_kb=861`. The
 per-zone failure message names the arena's free bytes when fragmentation is
 the limit.
 
@@ -317,11 +322,11 @@ costs ~60 µs per block at sixteen voices), 32.6 kB internal RAM free.
 ## Off-device
 
 ```
-PITCHED_STATUS   → PITCHED: active=1 zones=2 roots=57.00,69.00 voices=1/10 bank_kb=172 rt_max_us=107 steals=0 rt_busy_max_us=… overruns=0 cap=10 kit_max=24 shed=0
-                 → PITCHED: active=0 zones=0 roots= voices=0/0 bank_kb=0 rt_max_us=0 steals=0 err=zone_2:_no_PSRAM_(86_kB) rt_busy_max_us=0 overruns=0 cap=10 kit_max=0 shed=0
-PITCHED_CAP 10   → OK      (the board's voice cap, from the next setParams: a load or an edit; until a restart)
+PITCHED_STATUS   → PITCHED: active=1 zones=2 roots=57.00,69.00 voices=1/4 bank_kb=172 rt_max_us=107 steals=0 rt_busy_max_us=… overruns=0 cap=4 kit_max=24 shed=0
+                 → PITCHED: active=0 zones=0 roots= voices=0/0 bank_kb=0 rt_max_us=0 steals=0 err=zone_2:_no_PSRAM_(86_kB) rt_busy_max_us=0 overruns=0 cap=4 kit_max=0 shed=0
+PITCHED_CAP 4    → OK      (the board's voice cap, 1..28, from the next setParams: a load or an edit; until a restart)
 PITCHED_BENCH 20 → BENCH: <name>=<us> … OK      (async, own task with a PSRAM stack; --expect OK --timeout 120000)
-ARENA            → ARENA: cap_kb=5421 used_kb=861 owner=pitched
+ARENA            → ARENA: cap_kb=3375 used_kb=1188 owner=pitched
 ```
 
 `rt_max_us` resets on read; so does `rt_busy_max_us`, the whole render pass

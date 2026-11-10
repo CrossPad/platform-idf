@@ -82,7 +82,8 @@ protocol bump) ships the STM with it instead of asking for an ST-Link.
   `ui_modal_confirm` shows running vs bundled version with Update/Later;
   progress is a panel on `lv_layer_top()`, the update runs in its own task;
   failure shows the error and the recovery (retry, or USB DFU +
-  `tools/dfu_flash.py` when the STM stays dead) with Retry/Close. A modal
+  `tools/dfu_flash.py` from the CrossPad_STM32_r2 repo when the STM stays
+  dead) with Retry/Close. A modal
   raised from inside another modal's callback loses focus — queue it with
   `lv_async_call`. Headless boards update without asking.
 - **Browser flasher**: `tools/webflasher/index.html` (serve it statically —

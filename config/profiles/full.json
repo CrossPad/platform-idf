@@ -7,14 +7,14 @@
   "features": {},
   "apps": {
     "instructions": { "track": "pinned", "commit": "d4f620fb77155b0830471d15bb84cc296ef36ee0" },
-    "sampler": { "track": "pinned", "commit": "efca418219e69272ffdaea933016ced16a609321" },
+    "sampler": { "track": "pinned", "commit": "3a9c68984a6e8b709a0a9d063a802854da67708d" },
     "mixer": { "track": "pinned", "commit": "3ed4eb7b2daa5dfdd56ff830edda047bd9719673" },
     "dawcontrol": { "track": "pinned", "commit": "efdd97f8db5104ecf831d724030ee507e67d028e" },
-    "arrange": { "track": "pinned", "commit": "6aa32269ea706490535125d767dccaec2ee806bd" },
+    "arrange": { "track": "pinned", "commit": "a5e6932fdf82d63a4e72b18fabd72dee3f50e775" },
     "pad-mixer": { "track": "pinned", "commit": "e913d44cc2fe50f8f187274dd7721662b7ae5d3c" },
     "sequencer": { "track": "pinned", "commit": "70897db1c663d3fd9a17900c622496d86d997cd0" },
     "song": { "track": "pinned", "commit": "71ba9fab1ac3fca7cbbe89fb1f3757bb38f8c192" },
     "recorder": { "track": "pinned", "commit": "4a2ee541fe86ba0bedceb7944e91e9b5cdc149f7" },
-    "slicer": { "track": "pinned", "commit": "4630c2d836bae2cb6a82122e43315ee016fb5297" }
+    "slicer": { "track": "pinned", "commit": "ec67cdc02e3708a5bc7913d6612c028a4fdfa252" }
   }
 }

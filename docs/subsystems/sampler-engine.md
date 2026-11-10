@@ -68,19 +68,25 @@ touches is `const` and reads only what `load()` published; `serviceIo()` is
 the streaming thread's.
 
 **`BlockPool`** — memory that is given back. Two sizes for two jobs: a **page**
-is what the heap understands (64 kB, a whole TLSF class on this board, so
-taking and returning one does not fragment the pool the UI lives in), and a
-**block** is what a voice reads through (4 kB = 2048 mono frames = 46 ms).
-A streaming voice takes eight blocks when it starts and returns them when it
-ends; an idle kit holds none. `trim()` hands back every page with nothing in
-it — that is the "share the RAM between operations" half, and it is what lets
-the Recorder, the Slicer and Pitch Play have memory the sampler is not using.
+is what the heap is asked for and given back (96 kB, one voice's whole ring, so
+a ring stays one span and one card read refills several of its blocks), and a
+**block** is what a voice reads through (16 kB = 4096 stereo frames = 93 ms at
+44.1 kHz; `kBlockBytes` in `SamplerEnginePort.cpp`). A streaming voice takes a
+ring of six blocks when it starts and returns them when it ends; an idle kit
+holds none. At most 16 pages, 1.5 MB of streaming (`kMaxPages`). `trim()`
+hands back every page with nothing in it — that is the "share the RAM between
+operations" half, and it is what lets the Recorder, the Slicer and Pitch Play
+have memory the sampler is not using.
 
-Eight blocks, not four, because the number that matters is not how often the
-streaming task wakes (every millisecond) but how long a refill pass takes when
-the card is busy: **100–210 ms measured** with eight voices streaming beside a
-kit load. Eight blocks is 185 ms of stereo; four would run dry exactly when a
-player would hear it.
+16 kB blocks, not 4 kB, because the wall on streaming polyphony is the
+overhead of a read, not the card's throughput: at sixteen voices a 4 kB read
+averaged 1784 µs and peaked at 12704 µs (`SMPL_LAST` lat avg/max), so one
+streamer task issuing them in series could not keep sixteen voices fed. Six
+blocks a ring, not four, because the card is the kit loader's and the UI's
+too: right as a kit lands under play, the streamer's opens waited 180–200 ms
+behind theirs. Six blocks are 465 ms of lookahead at 44.1 kHz stereo against
+279 ms with four; at 20 hits/s across kit swaps that was 1 underrun in 30
+swaps against 10 in 18.
 
 `acquire()`/`release()` touch one intrusive free list under a spinlock held for
 a few instructions and never reach the heap, so they are safe on the render
@@ -374,20 +380,29 @@ SMPL_PITCH <pad> <semis>    # a realtime step, the pad editor's own door
 ARENA                       # cap_kb / used_kb / owner
 ```
 
-A live reading, native engine holding DIPPER_KIT:
+A live reading (v2 board, 2026-11-08), native engine holding BLACK TESLA with a
+Pitch instrument loaded beside it:
 
 ```
-SMPLENG: engine=native state=2 slots=16 complete=4 head_kb=128 heads_kb=1932
-         pool_kb=640 pool_blocks=0/40 voices=0/0 lim=0/10
-         notes=0 drop=0 steal=0 norings=0 underrun=0 quiet=0 rt_max_us=16
-ARENA:   cap_kb=4605 used_kb=2573 owner=none
+SMPLENG: engine=native state=2 slots=16 complete=2 head_kb=64 heads_kb=996
+         pool_kb=192 pool_blocks=0/12 voices=0/2 lim=0/16
+         notes=5 drop=0 steal=0 norings=0 underrun=0 quiet=0 rt_max_us=149
+ARENA:   cap_kb=3375 used_kb=1188 owner=pitched
 ```
 
-`complete=4` — four of the sixteen samples are held whole and never stream.
-`pool_blocks=0/40` — nothing is sounding, so the pool holds nothing out.
+`complete=2` — two of the sixteen samples are held whole and never stream.
+`pool_kb=192` is two 96 kB pages (the audition's ring and one voice ring, see
+below); `pool_blocks=0/12` — nothing is sounding, so the pool holds nothing out.
+`ARENA`'s `cap_kb` is what the arena holds plus what it could still take
+above the 512 kB floor, so it moves with the rest of PSRAM; `owner` is
+`native` or `pitched` (`marcel` or `none` too when the prebuilt streamer is
+built).
 
-Fixtures: `crosspad-hil run sampler_poly`, and the host tests
-(`BlockPool`, `SampleStore`, `StreamWindow`, `SampleCursor`, `SamplerEngine`).
+Fixtures: `crosspad-hil run speedtest --chord` (free voice slots and lost
+hits as the rate rises), the `many` step of `crosspad-hil run live_jam` (16 pads round
+robin plus an 8-pad chord: the oldest voice stolen, never cut early), and the
+host tests (`BlockPool`, `SampleStore`, `StreamWindow`, `SampleCursor`,
+`SamplerEngine`).
 
 ## Traps
 

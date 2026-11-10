@@ -5,13 +5,22 @@ Measured through the board's own USB audio capture (rate and RX order
 
 ## Why the I2S clock follows the content
 
-Kits ship 44.1 kHz WAVs. The sample engine has no resampler: a file plays at
-whatever rate the I2S clock runs. Clocked at 48 kHz, every pad plays **8.8 %
-sharp and 8 % short** — a pad hit recorded over USB, cross-correlated against
-the source file stretched by candidate speeds, matches at speed 0.918
-(= 44100/48000); with the clock at the content rate it matches at 1.000. The
-same holds the other way: a 48 kHz `STARTUP.wav` plays 8 % slow on a 44.1 kHz
-engine, so content must match the engine rate.
+Kits ship 44.1 kHz WAVs, so the engine runs at 44.1 kHz by default and a
+kit's files play one frame per output frame. A file at another rate still
+plays at its own pitch and length: the native sample engine (core
+`SamplerEngine`, `src/sampler/SamplerEngine.cpp`) steps each voice by the
+file's rate over the engine's, times the pad's pitch, in one increment, and
+its audition voice -- which also plays `STARTUP.wav` at boot -- does the same.
+The pitched instrument converts a zone once at load
+([pitched-instrument.md](pitched-instrument.md)).
+
+The optional prebuilt streamer (`CONFIG_CROSSPAD_SAMPLER_MARCEL`, off by
+default) has no resampler: under it a file plays at whatever rate the I2S
+clock runs. Clocked at 48 kHz, every pad then plays **8.8 % sharp and 8 %
+short** — a pad hit recorded over USB, cross-correlated against the source
+file stretched by candidate speeds, matches at speed 0.918
+(= 44100/48000); with the clock at the content rate it matches at 1.000. With
+that engine built, content must match the engine rate.
 
 ## How the rate is set
 
