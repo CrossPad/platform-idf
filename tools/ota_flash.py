@@ -220,6 +220,9 @@ def send_data_to_device(ser, data, data_size, label="firmware"):
 # taken as firmware bytes, and its answer is that session's "OTA_ERROR timeout".
 OTA_STALE_S = 12
 BEGIN_TRIES = 2
+# ota_begin()'s answer when the board will not take this image at all: trying
+# again cannot help, so open_and_begin() stops at once.
+REFUSED = "refused"
 
 
 def read_begin_reply(ser):
@@ -242,8 +245,11 @@ def open_and_begin(port, command, serial_factory=None):
             ser = factory()
             time.sleep(0.5)
             ser.reset_input_buffer()
-            if ota_begin(ser, command):
+            began = ota_begin(ser, command)
+            if began is True:
                 return ser
+            if began == REFUSED:
+                return None
         except serial.SerialException as e:
             print(f"Error: the port went away during OTA begin: {e}")
             if ser is not None:
@@ -254,9 +260,23 @@ def open_and_begin(port, command, serial_factory=None):
     return None
 
 
+def explain_refusal(response):
+    """What to do about an OTA_ERROR the board answers to every attempt, or
+    None for one worth another try."""
+    if response.startswith("OTA_ERROR would_overwrite_main"):
+        kit = response.split()[2] if len(response.split()) > 2 else "main"
+        return (f"The board is running a firmware kit of its own (a game, a single-purpose\n"
+                f"firmware) from its second slot. This update would overwrite the '{kit}'\n"
+                f"firmware in the other slot -- the one Quit and holding pad 16 at start-up\n"
+                f"go back to. Go back to it first (Quit in the app, or FW_SWITCH over the\n"
+                f"console), then run this again.")
+    return None
+
+
 def ota_begin(ser, command):
     """Send OTA begin command and wait for device ready.
-    Returns True if device is ready, False on error."""
+    Returns True if device is ready, REFUSED when the board will not take this
+    image (no retry helps), False on any other error."""
     print(f"Sending: {command.strip()}")
     ser.write(command.encode())
 
@@ -270,6 +290,11 @@ def ota_begin(ser, command):
         ser.timeout = 30  # restore normal timeout
 
     if response != "OTA_READY":
+        why = explain_refusal(response)
+        if why:
+            print(f"Refused: {response}\n\n{why}")
+            ser.close()
+            return REFUSED
         print(f"Error: expected OTA_READY, got: '{response}'")
         ser.close()
         return False

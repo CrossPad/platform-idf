@@ -398,8 +398,11 @@ above the 512 kB floor, so it moves with the rest of PSRAM; `owner` is
 `native` or `pitched` (`marcel` or `none` too when the prebuilt streamer is
 built).
 
-Fixtures: `crosspad-hil run sampler_poly`, and the host tests
-(`BlockPool`, `SampleStore`, `StreamWindow`, `SampleCursor`, `SamplerEngine`).
+Fixtures: `crosspad-hil run speedtest --chord` (free voice slots and lost
+hits as the rate rises), the `many` step of `crosspad-hil run live_jam` (16 pads round
+robin plus an 8-pad chord: the oldest voice stolen, never cut early), and the
+host tests (`BlockPool`, `SampleStore`, `StreamWindow`, `SampleCursor`,
+`SamplerEngine`).
 
 ## Traps
 
