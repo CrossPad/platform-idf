@@ -76,7 +76,8 @@ crosspad-hil run stability --duration-hours 8 --stim-midi   # liveness = MEM ove
 crosspad-hil run sampler_record --kit-name DRUMS   # record what it plays
 crosspad-hil run ble_midi --kit 8         # BLE MIDI both ways, from this PC
 crosspad-hil run sampler_record --stim ble --kit-name DRUMS  # BLE + sampler + UAC2
-crosspad-hil run play_perf                # MIDI -> sound: latency, jitter, load, two-kit song
+crosspad-hil run latency                  # MIDI note / host audio -> sound at the jack, per hit
+crosspad-hil run speedtest                # ramp the hit rate until the board drops hits
 crosspad-hil run fs_transfer --assets build_v2/assets.bin   # CDC transfer + assets reflash
 crosspad-hil run release_gate --keep-going              # overnight, before a tag
 ```
@@ -205,44 +206,41 @@ blocking-UART write from priority 1 every 10 s stretches CDC replies past
 `kit_churn`'s 2 s timeout on its own; `TASKS`/`MEM` give the same numbers
 on demand.
 
-### How the board plays: `play_perf`
+### How the board plays: `latency`, `speedtest`, `hil_perf_song.py`
 
-What a player and a DAW feel, measured in one take (~1.5 min): note-ons sent
-to the **STM bridge's** MIDI port -- the UART path a struck pad's note takes; a
-note-on on the ESP's own port only lights a pad -- and the mixer's **capture
-bus** recorded over UAC2 (`--preset sampler`, digital: codec 1's DAC->ADC loop,
-`--preset headphone`, carries -35 dBFS RMS of broadband noise whatever the
-volume and buries a click). Every send is stamped with the capture stream's
-clock; PortAudio's ADC times on macOS come a buffer at a time (single marks off
-by up to ~6 ms), so a send is mapped through the median of the marks around it
-(`TimeBase`), which also steps over frames the host loses mid-take -- reported
-as `capture_gaps`, and a hit inside one is not counted as lost. Latency is then
-absolute *as the host sees it*: the USB capture path is in it, the I2S block
-out and the DAC are not.
+What a player and a DAW feel is measured by three tools; each answers its own
+question, none stands in for the others:
 
-Phases: isolated hits (the baseline), host sixteenths at the song's tempo,
-rising rates (8..32 hits/s), the two-kit test song alone (`HIL PERF`: kit A on
-the eighths, the second kit a sixteenth later -- played from its freeze since
-core 2.42 --, notes at velocity 40 so a live
-hit's click -- velocity 120 -- is told from a song note by its height) and hits
-played over it. Around each phase `SMPL_ENGINE`, `SMPL_PEAK`,
-`PAD_STATS` and `UAC_STATS` are read over SysEx (and `ASONG PLAY`/`STOP` sent),
-which is why the companion allowlist has them. It builds `HIL CLICK A`/`B`
-(12 ms bursts at 1.2 and 4.4 kHz, told apart by a band-pass) and the song,
-mutes codec 0 for the run, and opens the board's own song again at the end.
+- **`crosspad-hil run latency`** -- how late a hit sounds. Path `pad`: a
+  note-on on the **STM bridge's** MIDI port -- the UART path a struck pad's
+  note takes; a note-on on the ESP's own port only lights a pad. Path `host`:
+  a noise burst written into the board's UAC OUT. Both are heard on the PCB's
+  DAC->ADC loop through the board's UAC IN, on one duplex stream whose clock
+  maps every frame to the clock the sends are stamped on; hits come at random
+  gaps, so nothing lines up with a fixed grid. The capture ring the board
+  reports is subtracted: `*_jack_ms` is the headline ("at the jack"),
+  `*_uac_in_ms` is what a DAW recording the board sees. It provisions the
+  `HIL CLICK` fixture kit once and puts back the kit, app and Mixer desk.
+- **`crosspad-hil run speedtest`** -- how fast the pads can be played. The
+  hit rate is ramped per pad set (1, 4, 16 pads) and each step reports how
+  far the hits got: sent -> accepted (`PAD_STATS` press) -> played, with free
+  voice slots sampled; `--chord` strikes a whole set at once (polyphony)
+  instead of round robin. See *Reading a speedtest* above.
+- **`python3 tools/hil_perf_song.py`** -- the render under a song. It builds
+  the PERF songs over CDC (A: Drums + Slice kit + audio track, B: Pitch Play +
+  audio, C: all four at once), plays them looped and fails on an unpaced or
+  over-block render pass, an underrun, or a voice refused a ring.
 
 ```bash
-crosspad-hil run play_perf                         # everything, defaults
-crosspad-hil run play_perf --rates 8,16,32,48 --bpm 140
+crosspad-hil run latency                         # pad and host paths, 60 hits each
+crosspad-hil run latency --paths pad --hits 200
+crosspad-hil run speedtest --rates 8,16,32,48    # sent -> accepted -> played per rate
+crosspad-hil run speedtest --chord --padsets 0-15
+python3 tools/hil_perf_song.py --only C --seconds 60
 ```
 
-Baseline, v2, 15.10.2026 (two kits up, 5 voices each): MIDI ->
-sound 17.0 ms median, p95 17.8, max 18.0, spread 0.6 ms; every hit sounds up
-to 32/s and the firmware counts no drop, steal or underrun, the worst render
-block 0.11-0.16 ms of 1.45; the song's two kits keep their grids to 0.8-0.9 ms
-(the sequencer fires on its 2 ms poll), kit B 0.3-1.1 ms early against kit A
-(its notes go straight to its engine, kit A's through the pads' logic and the
-event bus), and as steady with hits played over the song.
+Compare a build against a run of the previous release on the same bench, not
+against a number on this page.
 
 ### Kit swaps you can hear
 
