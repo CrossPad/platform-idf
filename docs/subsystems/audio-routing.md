@@ -47,8 +47,10 @@ MIDI and the feedback endpoint (TinyUSB refuses the configuration). `CUSTOM` (0x
   dropdown, CDC `USB_DEFAULT`/`USB_AUDIO`, or the SysEx mode byte.
 
 **Adding a preset** means: enum entry before `_COUNT`, a row in `k_presets`,
-and one more option in `kRoutePresetOptions` — the UI's "Custom" index is
-derived from the option count, so the three must stay in step.
+and one more option in `kRoutePresetOptions` (crosspad-gui
+`settings_ui_audio.cpp`), before the trailing "Custom" — the UI's "Custom"
+index is derived from the option count (crosspad-gui 2.13.1; a hard-coded 6
+before it), so the three must stay in step.
 
 ## The USB audio port: one I2S writer, one I2S reader
 

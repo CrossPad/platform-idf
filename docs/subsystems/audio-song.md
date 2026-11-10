@@ -62,7 +62,7 @@ the shared file adopts its booting kit's, once. `SEQ` reports `file=`;
 `song.json` is written beside itself (`.tmp`) and swapped in with the old one
 kept as `.bak` until the new one is in place; `AudioSong::load()` falls back to
 `.tmp`, then `.bak`. A file that does not parse, or was written by newer
-firmware (`version` above `AudioSong::kVersion`, 5), is **Unreadable**: the engine does not open it and
+firmware (`version` above `AudioSong::kVersion`, 6), is **Unreadable**: the engine does not open it and
 nothing saves over it. The open project's name is in NVS `song/current`.
 
 Deleting (`requestDelete()`, Arrange → Songs → Edit → Delete song, asked
@@ -163,12 +163,14 @@ inside, so a Play pressed right after Stop cannot race the free.
   because the next instrument is built beside the one playing. On the heap a ring never
   takes the last `kUiReserveBytes` (128 kB). LVGL aborts on a failed
   allocation; a ring only gets shorter. Bounce ring
-  32–128 kB, song ring up to 256 kB (~1.5 s ahead, down to the 4096-frame
-  prime where memory is short), and while the song plays a 16 kB read-ahead
+  32 kB–1 MB (`kBounceRingFrames`, ~5.9 s of card stall: with 128 kB a
+  2-minute bounce failed "card too slow" on the card's write stalls), song
+  ring up to 256 kB (~1.5 s ahead, down to the 4096-frame prime where memory
+  is short), and while the song plays a 16 kB read-ahead
   per track (core 2.31, `ClipReader::setAhead()`, past the ring's minimum: none
   where memory is short). A bounce also drops LVGL's image cache first.
-- **FAT descriptors** (`max_files` 20, shared with the sample player's cache,
-  the streamer, `kit.json` and the waveform loader). Playback holds one file
+- **FAT descriptors** (`max_files` 32, `CONFIG_FATFS_FS_LOCK` 32, shared
+  with the sample player's cache, the streamer, `kit.json` and the waveform loader). Playback holds one file
   per track *only while that track has a block under the chunk being mixed*;
   a refused open is counted in `openFailures()`.
 - **Image size.** The four apps plus this engine grew `.ext_ram.dummy` by one
