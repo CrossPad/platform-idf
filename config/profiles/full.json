@@ -10,7 +10,7 @@
     "sampler": { "track": "pinned", "commit": "3a9c68984a6e8b709a0a9d063a802854da67708d" },
     "mixer": { "track": "pinned", "commit": "3ed4eb7b2daa5dfdd56ff830edda047bd9719673" },
     "dawcontrol": { "track": "pinned", "commit": "efdd97f8db5104ecf831d724030ee507e67d028e" },
-    "arrange": { "track": "pinned", "commit": "1d6dd959e7cd8f0bcf53bffe8473dd713075584f" },
+    "arrange": { "track": "pinned", "commit": "a5e6932fdf82d63a4e72b18fabd72dee3f50e775" },
     "pad-mixer": { "track": "pinned", "commit": "e913d44cc2fe50f8f187274dd7721662b7ae5d3c" },
     "sequencer": { "track": "pinned", "commit": "70897db1c663d3fd9a17900c622496d86d997cd0" },
     "song": { "track": "pinned", "commit": "71ba9fab1ac3fca7cbbe89fb1f3757bb38f8c192" },

@@ -110,8 +110,8 @@ static constexpr size_t kStdioBuf = 1024;
  * needed on a pad's first hit — and every evicted one is a FAT directory
  * walk (40..160 ms on a 1-bit card) inside the streamer's pass, which is a
  * late start of the voice, or a hole in whichever was nearest empty. Not
- * sixteen: every descriptor of the mount (bsp_sdmmc.c max_files, 20) is a
- * 4 kB FIL in PSRAM at mount time, and CONFIG_FATFS_FS_LOCK caps the open
+ * sixteen: every descriptor of the mount (bsp_sdmmc.c max_files, 20 then,
+ * 32 now) is a 4 kB FIL in PSRAM at mount time, and CONFIG_FATFS_FS_LOCK caps the open
  * files too — the streamer's own copies, kit.json and the waveform loader
  * need the rest, and at 16 the card refused opens. Each handle keeps a
  * stdio buffer, lent from PSRAM below: unbuffered, newlib refills one byte
