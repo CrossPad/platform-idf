@@ -816,7 +816,7 @@ own message. Details: [docs/subsystems/trs-midi.md](docs/subsystems/trs-midi.md)
 ## Audio Song (bounce, arrange, play back)
 
 Sequencer (`components/crosspad-sequencer`, repo `crosspad-pattern-seq`)
-bounces a scene to a WAV in a project on the card; Arrange lays clips on four
+bounces a scene to a WAV in a project on the card; Arrange lays clips on eight
 tracks; Song arranges scenes as blocks with repeats; Pad Mixer sets per-pad
 levels through `PlatformServices::padMix`. Core owns the model and interface
 (`AudioSong`, `ISongEngine`, `WavWriter`) and, since 1.24.0, the engine itself
@@ -1324,7 +1324,7 @@ documentation ships with the code. Full text: [docs/MANIFESTO.md](docs/MANIFESTO
 | Shared engine PSRAM arena / prebuilt streamer start-stop | `components/crosspad-platform-idf/engine_arena.cpp`, `main/audio/engine_handoff.cpp`, `main/include/engine_handoff.h` |
 | Sample-player thread arbitration | `components/crosspad-platform-idf/include/SamplePlayerAccess.hpp` |
 | Kit load worker | `components/crosspad-sampler/src/logic/kit_load_task.cpp` |
-| Kit browser (UX 2000: KITS / DRUMS by kit.json `category` / PITCH / SONGS / USER, LOAD, EDIT card, pads play the highlighted kit via a `kit_peek` worker) and the kit picker | `components/crosspad-sampler/src/ui/kit_selector.cpp`, `components/crosspad-sampler/src/logic/kit_gate.cpp` |
+| Kit browser (UX 2000: PERF / DRUMS / SLICE / PITCH / SONGS / USER, filed by folder (core `KitFolders`), LOAD, EDIT card, pads play the highlighted kit via a `kit_peek` worker) and the kit picker | `components/crosspad-sampler/src/ui/kit_selector.cpp`, `components/crosspad-sampler/src/logic/kit_gate.cpp` |
 | HIL suite (host side) | `crosspad-hil` package; `tools/hil_*.py` are shims |
 | Recorder / Slicer (sample tools: takes, audition, loops, kits from slices) | `components/crosspad-platform-idf/SampleToolsPort.cpp`, `crosspad/sampletools/`, [docs/subsystems/sample-tools.md](docs/subsystems/sample-tools.md) |
 | WiFi (link, saved networks, verbs, page, fallback) / network mode (boot flag, screen) | `main/wifi_link.cpp`, `main/wifi_creds.cpp`, `main/wifi_verbs.cpp`, `main/wifi_ping.cpp`, `main/gui/wifi_page.cpp`, `main/gui/wifi_fallback.cpp`, `main/net_mode.cpp`, `main/gui/net_mode_screen.cpp`, [docs/subsystems/wifi.md](docs/subsystems/wifi.md) |
