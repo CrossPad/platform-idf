@@ -18,6 +18,7 @@
 #include <stdio.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "esp_delta_ota.h"
@@ -45,6 +46,10 @@ static size_t ota_received = 0;
 EXT_RAM_BSS_ATTR static uint8_t ota_write_buf[OTA_WRITE_BUF_SIZE];
 static size_t ota_write_pos = 0;
 static volatile bool ota_active = false;
+/* Last time stream data arrived (or the stream began); ota_poll_timeout()
+ * abandons the session after OTA_STALL_US without data. */
+static int64_t ota_last_rx_us = 0;
+#define OTA_STALL_US (10 * 1000 * 1000)
 
 /* ── Delta OTA state ─────────────────────────────────────────────────── */
 
@@ -120,6 +125,7 @@ static void delta_cleanup(void) {
 /* ── OTA protocol logic ──────────────────────────────────────────────── */
 
 void ota_process_data(const uint8_t *data, size_t len) {
+    ota_last_rx_us = esp_timer_get_time();
     if (ota_delta_mode) {
         /* ── Delta mode: feed patch data to delta engine ── */
         ota_received += len;
@@ -319,6 +325,7 @@ bool ota_check_begin(const char *buf, size_t len) {
     ota_received = 0;
     ota_write_pos = 0;
     ota_active = true;
+    ota_last_rx_us = esp_timer_get_time();
     ESP_LOGW(TAG, "OTA started, size=%zu, partition=%s", size, ota_partition->label);
     cdc_respond("OTA_READY\n");
 
@@ -421,6 +428,7 @@ bool ota_check_delta_begin(const char *buf, size_t len) {
     ota_write_pos = 0;
     ota_delta_mode = true;
     ota_active = true;
+    ota_last_rx_us = esp_timer_get_time();
     ESP_LOGW(TAG, "Delta OTA started, patch_size=%zu, base=%s, target=%s",
              size, ota_base_partition->label, ota_partition->label);
     cdc_respond("OTA_READY\n");
@@ -447,6 +455,12 @@ bool ota_is_active(void) {
 
 bool ota_is_delta(void) {
     return ota_delta_mode;
+}
+
+void ota_poll_timeout(void) {
+    if (!ota_active) return;
+    if (esp_timer_get_time() - ota_last_rx_us < OTA_STALL_US) return;
+    ota_abort_timeout();
 }
 
 void ota_abort_timeout(void) {
