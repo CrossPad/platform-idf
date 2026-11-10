@@ -163,7 +163,7 @@ static allocation inside the class driver — it costs its size in internal RAM
 in every build, which is why it is not 8192. USB full-speed bulk caps the link
 at about 1.1 MB/s regardless, so four sectors per SCSI data chunk is already
 more than the wire can keep busy. The engines never start in this mode, so the
-4608 kB PSRAM arena is simply never allocated.
+engine arena, which holds only what the engines ask for, takes no PSRAM.
 
 ## Measured (v2, 29.8 GB card in 1-bit)
 

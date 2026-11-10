@@ -588,8 +588,12 @@ API and rationale: [docs/subsystems/audio-routing.md](docs/subsystems/audio-rout
 
 ## Audio Engine Rate
 
-Kits are 44.1 kHz WAVs and the sample engines play them 1:1, so the
-I2S clock must run at the content rate: `AudioControl_Setup()` pushes
+Kits are 44.1 kHz WAVs, so the engine runs at 44.1 kHz by default. The native
+sample engine steps a voice by the file's rate over the engine's (core
+`SamplerEngine`, the audition voice and `STARTUP.wav` too) and the pitched
+instrument converts at load, so a file at another rate keeps its pitch; only
+the optional prebuilt streamer (`CONFIG_CROSSPAD_SAMPLER_MARCEL`) plays files
+1:1 and needs the clock at the content rate. `AudioControl_Setup()` pushes
 `audioEngine.sampleRate` (44100 default, 48000 allowed) into
 `bsp_i2s_set_sample_rate()` before the codec init, and the USB audio bridge and
 UAC report the same rate. Boards that saved settings before core 1.0.3 hold
@@ -646,9 +650,10 @@ Details, numbers, limitations, traps: [docs/subsystems/wifi.md](docs/subsystems/
 
 ## Pitched Instrument (one sample, sixteen notes)
 
-A kit with `"engine": "pitched"` holds 1–4 recorded zones whole in PSRAM; every
+A kit with `"engine": "pitched"` holds 1–24 recorded zones whole in PSRAM (`kInstrumentMaxZones`); every
 pad plays the nearest zone transposed to its `instrument.pad_notes` note —
-varispeed Hermite, 32.32 phase, `max_voices` ≤ 32. **Core owns the engine**
+varispeed Hermite, 32.32 phase, `max_voices` clamped to 28 (`kMaxSounding`)
+and to the board's cap of 4 (`PitchedSampleNode::kVoiceCap`). **Core owns the engine**
 (`crosspad/instrument/*`, `crosspad/dsp/*`): voices, render gate, `installBank()`,
 `createFft()`, `pitchedBuildBank()`. FFT runs at load time only (root detection,
 rate conversion) — one 1024-point FFT is 0.56 ms of a 1.45 ms block where 16
@@ -816,7 +821,7 @@ own message. Details: [docs/subsystems/trs-midi.md](docs/subsystems/trs-midi.md)
 ## Audio Song (bounce, arrange, play back)
 
 Sequencer (`components/crosspad-sequencer`, repo `crosspad-pattern-seq`)
-bounces a scene to a WAV in a project on the card; Arrange lays clips on four
+bounces a scene to a WAV in a project on the card; Arrange lays clips on eight
 tracks; Song arranges scenes as blocks with repeats; Pad Mixer sets per-pad
 levels through `PlatformServices::padMix`. Core owns the model and interface
 (`AudioSong`, `ISongEngine`, `WavWriter`) and, since 1.24.0, the engine itself
@@ -1324,7 +1329,7 @@ documentation ships with the code. Full text: [docs/MANIFESTO.md](docs/MANIFESTO
 | Shared engine PSRAM arena / prebuilt streamer start-stop | `components/crosspad-platform-idf/engine_arena.cpp`, `main/audio/engine_handoff.cpp`, `main/include/engine_handoff.h` |
 | Sample-player thread arbitration | `components/crosspad-platform-idf/include/SamplePlayerAccess.hpp` |
 | Kit load worker | `components/crosspad-sampler/src/logic/kit_load_task.cpp` |
-| Kit browser (UX 2000: KITS / DRUMS by kit.json `category` / PITCH / SONGS / USER, LOAD, EDIT card, pads play the highlighted kit via a `kit_peek` worker) and the kit picker | `components/crosspad-sampler/src/ui/kit_selector.cpp`, `components/crosspad-sampler/src/logic/kit_gate.cpp` |
+| Kit browser (UX 2000: PERF / DRUMS / SLICE / PITCH / SONGS / USER, filed by folder (core `KitFolders`), LOAD, EDIT card, pads play the highlighted kit via a `kit_peek` worker) and the kit picker | `components/crosspad-sampler/src/ui/kit_selector.cpp`, `components/crosspad-sampler/src/logic/kit_gate.cpp` |
 | HIL suite (host side) | `crosspad-hil` package; `tools/hil_*.py` are shims |
 | Recorder / Slicer (sample tools: takes, audition, loops, kits from slices) | `components/crosspad-platform-idf/SampleToolsPort.cpp`, `crosspad/sampletools/`, [docs/subsystems/sample-tools.md](docs/subsystems/sample-tools.md) |
 | WiFi (link, saved networks, verbs, page, fallback) / network mode (boot flag, screen) | `main/wifi_link.cpp`, `main/wifi_creds.cpp`, `main/wifi_verbs.cpp`, `main/wifi_ping.cpp`, `main/gui/wifi_page.cpp`, `main/gui/wifi_fallback.cpp`, `main/net_mode.cpp`, `main/gui/net_mode_screen.cpp`, [docs/subsystems/wifi.md](docs/subsystems/wifi.md) |

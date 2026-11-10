@@ -105,6 +105,13 @@ bool fw_switch_request(const char** error);
  * Refused, with `error` set, otherwise. The caller restarts. */
 bool fw_recovery_switch(const char** error);
 
+/** Writing the non-running slot now would replace the main firmware: the
+ * running slot holds another kit (a game, a single-purpose firmware) and the
+ * other one a main kit (full, lite) -- the firmware Quit and the pad-16
+ * recovery go back to. An OTA and fw_install_start() are refused then. When
+ * true, `otherKit` (may be null) gets that slot's kit, NUL-terminated. */
+bool fw_slots_write_would_replace_main(char* otherKit, size_t otherKitLen);
+
 /** Completes a pending switch after boot. When NVS `pending` equals the
  * running slot's own package name and `<pkg>/settings.json` exists on the
  * card, imports it with settingsImportPerFirmware() (device-shared settings

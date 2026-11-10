@@ -36,6 +36,10 @@ void charge_overlay_stop(void);
 /** True while charge mode is active. */
 bool charge_overlay_active(void);
 
+/** True for the whole of a boot the STM made only for the charge screen
+ *  (main.cpp): the engine, kits, USB audio and radios stay off. */
+bool charge_boot_active(void);
+
 #ifdef __cplusplus
 }
 #endif
