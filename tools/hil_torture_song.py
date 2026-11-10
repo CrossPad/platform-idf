@@ -269,15 +269,25 @@ class Torture:
             return "skip: 8 tracks"
         name = self.rng.choice(INSTRUMENTS)
         ok = fields(self.b.cmd(f"ASONG PITCHTRACK {inst_path(name)}", "ASONG:")).get("ok")
-        end = time.time() + 60
-        inst: dict[str, str] = {}
-        while time.time() < end:
-            inst = fields(self.b.cmd("INST_STATUS", "INST:"))
-            if inst.get("state") in ("ready", "failed"):
-                break
+        inst = fields(self.b.cmd("INST_STATUS", "INST:"))
+        if ok != "1":
+            return f"{name} ok={ok} inst={inst.get('state')} beside={inst.get('beside')}"
+        # "failed" is not the end: an instrument with no memory beside the kits
+        # (a bounce holding PSRAM) is asked for again by the song (core
+        # SongSounds instRetry_: 2, 4, 8, 16 s apart). Not ready in a minute fails.
+        start = time.time()
+        end = start + 60
+        failed: dict[str, str] = {}
+        while inst.get("state") != "ready" and time.time() < end:
+            if inst.get("state") == "failed" and not failed:
+                failed = inst
             time.sleep(0.5)
-        if ok == "1" and inst.get("state") != "ready":
-            self.fail(f"Pitch track {name}: the instrument is {inst.get('state')} ({inst.get('msg')})")
+            inst = fields(self.b.cmd("INST_STATUS", "INST:"))
+        if inst.get("state") != "ready":
+            self.fail(f"Pitch track {name}: the instrument is {inst.get('state')} after "
+                      f"{time.time() - start:.0f} s ({inst.get('msg')})")
+        elif failed:
+            print(f"    (Pitch track {name}: failed once ({failed.get('msg')}), ready on the song's retry)")
         return f"{name} ok={ok} inst={inst.get('state')} beside={inst.get('beside')}"
 
     def free_or_audio_track(self) -> int:
