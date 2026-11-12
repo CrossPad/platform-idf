@@ -2998,6 +2998,13 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         return true;
     }
     if (strcmp(cmd, "UI_TREE") == 0) {
+        /* During boot, before crosspad_gui::bootstrap(), the probe would
+         * assert in getGuiPlatform(): a host polling for the first screen
+         * panicked the board into a boot loop. */
+        if (!status.isGuiInitialised) {
+            cdc_reply("ERR UI_TREE not_ready\r\n");
+            return true;
+        }
         handle_ui_tree();
         return true;
     }
