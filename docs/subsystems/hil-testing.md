@@ -400,7 +400,9 @@ rotating cannot distinguish those two.
 of the screen and the top layer: class, rectangle in LCD pixels, `int` (clickable or
 in the encoder group), `hit` (an `lv_indev_search_obj` from its middle lands on it or
 inside it -- a map button under an app, or a row under a dialog, is drawn but not
-`hit`), checked/disabled/focused, then its text. crosspad-hil's `ui.Ui` taps a control
+`hit`), checked/disabled/focused, then its text. Before the GUI is up (the first
+second or two of a boot) it answers `ERR UI_TREE not_ready`; it used to assert in
+`getGuiPlatform()`, so a host polling through a boot kept the board panicking. crosspad-hil's `ui.Ui` taps a control
 by what it says (`TOUCH_TAP` on its middle, or on the label when the words are a row
 of a list), scrolls a list with `TOUCH_DRAG` until a row shows, turns the knob to a
 control no finger reaches (the Sequencer's top row), and fails with what the screen
