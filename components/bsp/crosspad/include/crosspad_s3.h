@@ -476,6 +476,16 @@ esp_err_t bsp_stm32_init(void);
  */
 esp_err_t bsp_stm32_deinit(void);
 
+/**
+ * @brief Hardware reset of the STM32: a 100 ms HIGH pulse on BSP_STM_RST_PIN
+ *
+ * Blocks for the pulse. The STM's console and the link go away for a moment;
+ * the ESP stays up (EN_3V3 defaults high in the STM's GPIO init). From the
+ * ROM DFU bootloader the STM boots its app (boot_check_dfu_request() finds
+ * the return marker). The CDC verb STM_RESET and Settings' DFU screen use it.
+ */
+void bsp_stm32_reset(void);
+
 /** @} */ // end of stm32
 
 
