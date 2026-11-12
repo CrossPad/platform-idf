@@ -2562,33 +2562,49 @@ static bool twin_verb(const char *cmd)
     return false;
 }
 
-bool hil_control_handle_cdc(const char *buff, size_t len)
-{
+/* One received line and the scratch the verbs share. A verb's sscanf may fill
+ * a, b or name before it turns the line down, and a later verb may read what
+ * is left there, so they live with the line, not in each verb. */
+struct VerbLine {
     char cmd[160];
-    /* A CDC line can be longer than this (CDC_LINE_MAX, for FS_* paths): no
-     * verb here takes one, and a cut-off argument must not run. */
-    if (len >= sizeof(cmd)) {
-        cdc_reply("ERR too_long\r\n");
-        return true;
-    }
-    memcpy(cmd, buff, len);
-    cmd[len] = '\0';
-
+    size_t len;
     int a = -1, b = -1;
     char name[32] = {0};
+};
 
+static bool verb_pad_notes(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "PAD_NOTES", 9) == 0) {
         handle_pad_notes();
         return true;
     }
+    return false;
+}
+
+static bool verb_usb_msc(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "USB_MSC", 7) == 0) {
         handle_usb_msc(cmd + 7);
         return true;
     }
+    return false;
+}
+
+static bool verb_net_mode(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "NET_MODE", 8) == 0 && (cmd[8] == '\0' || cmd[8] == ' ')) {
         handle_net_mode(cmd + 8);
         return true;
     }
+    return false;
+}
+
+static bool verb_fw_list(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "FW_LIST", 7) == 0) {
         if (s_fw_list_busy) { cdc_reply("FWPKG: ERR busy\r\n"); return true; }
         s_fw_list_busy = true;
@@ -2602,10 +2618,22 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_fw_slots(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "FW_SLOTS", 8) == 0) {
         handle_fw_slots();
         return true;
     }
+    return false;
+}
+
+static bool verb_fw_install(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "FW_INSTALL", 10) == 0) {
         const char *args = cmd + 10;
         while (*args == ' ') args++;
@@ -2613,38 +2641,104 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         else       handle_fw_install_status();
         return true;
     }
+    return false;
+}
+
+static bool verb_fw_switch(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "FW_SWITCH", 9) == 0) {
         handle_fw_switch();
         return true;
     }
+    return false;
+}
+
+static bool verb_fw_confirm(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "FW_CONFIRM", 10) == 0) {
         handle_fw_confirm();
         return true;
     }
+    return false;
+}
+
+static bool verb_fw_updater_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (fw_updater_handle(cmd, cdc_reply)) {
         return true;
     }
+    return false;
+}
+
+static bool verb_cp_account_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (cp_account_handle(cmd, cdc_reply)) {
         return true;
     }
+    return false;
+}
+
+static bool verb_cp_remote_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (cp_remote_handle(cmd, cdc_reply)) {
         return true;
     }
+    return false;
+}
+
+static bool verb_fw_ui_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (fw_ui_handle(cmd, cdc_reply)) {
         return true;
     }
+    return false;
+}
+
+static bool verb_host_info_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (host_info_handle(cmd, cdc_reply)) {
         return true;
     }
+    return false;
+}
+
+static bool verb_wifi_verbs_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (wifi_verbs_handle(cmd, cdc_reply)) {
         return true;
     }
+    return false;
+}
+
+static bool verb_kit_convert_verbs_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (kit_convert_verbs_handle(cmd, cdc_reply)) {
         return true;
     }
+    return false;
+}
+
+static bool verb_sdr_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (sdr_verbs_handle && sdr_verbs_handle(cmd, cdc_reply)) {
         return true;
     }
+    return false;
+}
+
+static bool verb_tbar(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* TBAR -- the transport bar's four readouts, with geometry. They are in
      * no encoder group, so ENC_GROUP cannot reach them, and SCREENSHOT wants
      * 230 kB of contiguous PSRAM a board with a kit loaded does not have. */
@@ -2662,10 +2756,22 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("TBAR: end\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_ui_state(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "UI_STATE", 8) == 0) {
         handle_ui_state();
         return true;
     }
+    return false;
+}
+
+static bool verb_twin(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* TWIN 1|0 -- the browser twin's keepalive (twin_mirror.h): while it keeps
      * coming, the LVGL inputs go out as SysEx 09 frames. */
     if (strncmp(cmd, "TWIN ", 5) == 0) {
@@ -2673,6 +2779,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_motion(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* MOTION 1|0 -- a host page's keepalive (motion_stream.h): while it keeps
      * coming, the IMU goes out as SysEx 0A frames. */
     if (strncmp(cmd, "MOTION ", 7) == 0) {
@@ -2680,6 +2792,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_twin_2(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* TWIN_INFO P|C|<row> -- what Settings shows that the board alone knows,
      * through its own ISettingsUI: P the platform name and info, C the
      * coprocessor firmware, <row> an Info page row. Tab-separated fields. */
@@ -2689,6 +2807,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("ERR TWIN not_ready\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_twin_3(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "TWIN_", 5) == 0) {
         SemaphoreHandle_t lock = twin_verb_lock();
         if (!lock || xSemaphoreTake(lock, pdMS_TO_TICKS(2000)) != pdTRUE) { cdc_reply("ERR TWIN busy\r\n"); return true; }
@@ -2696,6 +2820,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         xSemaphoreGive(lock);
         if (handled) return true;
     }
+    return false;
+}
+
+static bool verb_pwr_gesture(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "PWR_GESTURE ", 12) == 0) {
         /* The power button cannot be pressed remotely; this injects what the
          * poll would have produced. The resolved context is logged by PWR_BTN
@@ -2707,6 +2837,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_tasks(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "TASKS", 5) == 0) {
         /* To the console, not CDC: the table is long and the console survives
          * a starved main loop. Read twice and diff to see who owns a core. */
@@ -2714,6 +2850,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_toast(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* TOAST <text> -- the toast a screen shows, with this text: how a long
      * one wraps and how long it stays, seen with SCREENSHOT. */
     if (strncmp(cmd, "TOAST ", 6) == 0) {
@@ -2723,6 +2865,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_screenshot(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* SCREENSHOT -- the active screen as /sdcard/crosspad/screen.bmp (24 bit),
      * for looking at a UI from the host: pull it with fs_transfer. */
     if (strcmp(cmd, "SCREENSHOT") == 0) {
@@ -2738,6 +2886,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_in_pair(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* IN_PAIR [n] -- which inputs the two ADCs hear (the Mixer's IN pair):
      * the current pair, then every pair by number. */
     if (strncmp(cmd, "IN_PAIR", 7) == 0 && (cmd[7] == 0 || cmd[7] == ' ')) {
@@ -2755,6 +2909,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_codec_reg(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* CODEC_REG c reg [val] -- raw ES8388 register (hex) on codec c, for
      * bench measurements; read back after a write. */
     if (strncmp(cmd, "CODEC_REG ", 10) == 0) {
@@ -2779,6 +2939,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_ingain(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* INGAIN [i dB] -- the inputs' preamp gain (0 mics, 1 Line 1/2, 2 Line 3/4). */
     if (strncmp(cmd, "INGAIN", 6) == 0 && (cmd[6] == 0 || cmd[6] == ' ')) {
         auto* g = crosspad::getPlatformServices().inputGain;
@@ -2794,14 +2960,32 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_mem_blocks(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "MEM_BLOCKS", 10) == 0) {
         handle_mem_blocks(strstr(cmd, "PSRAM") != nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_worker(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "WORKER", 6) == 0) {
         handle_worker();
         return true;
     }
+    return false;
+}
+
+static bool verb_ulp(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "ULP") == 0) {
         /* What the ULP RISC-V program has counted: a heartbeat that moves
          * proves the coprocessor runs beside the main CPU. */
@@ -2813,11 +2997,23 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_reset_log(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "RESET_LOG CLEAR", 15) == 0) {
         reset_log_clear();
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_imu_regw(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "IMU_REGW ", 9) == 0) {
         // Raw LSM6DS3TR-C register write for bench experiments: IMU_REGW <hex addr> <hex value>.
         unsigned addr = 0, val = 0;
@@ -2828,6 +3024,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(bsp_imu_write_register((uint8_t)addr, (uint8_t)val) == ESP_OK ? "OK\r\n" : "ERR i2c\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_imu_reg(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "IMU_REG ", 8) == 0) {
         // Raw LSM6DS3TR-C register read: IMU_REG <hex addr> [len<=64] -> hex bytes.
         unsigned addr = 0, len = 1;
@@ -2847,6 +3049,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_stm_regw(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "STM_REGW ", 9) == 0) {
         // Raw STM32 register-map write for bench experiments: STM_REGW <hex addr> <hex value>.
         // Not saved: the next settings push (an STM reset, Settings) restores the stored value.
@@ -2858,6 +3066,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(stm32_i2c_write_u8((uint16_t)addr, (uint8_t)val) == ESP_OK ? "OK\r\n" : "ERR i2c\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_stm_reg(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "STM_REG ", 8) == 0) {
         // Raw STM32 register-map read: STM_REG <hex addr> [len<=64] → hex bytes.
         unsigned addr = 0, len = 1;
@@ -2877,24 +3091,48 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_reset_log_2(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "RESET_LOG STM", 13) == 0) {
         char out[96];
         reset_log_stm_format(out, sizeof(out));
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_reset_log_3(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "RESET_LOG", 9) == 0) {
         EXT_RAM_BSS_ATTR static char out[1024];
         reset_log_format(out, sizeof(out));
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_coredump_info(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "COREDUMP_INFO", 13) == 0) {
         EXT_RAM_BSS_ATTR static char out[512];
         reset_log_coredump_format(out, sizeof(out));
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_imu_midi(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "IMU_MIDI SLOT ", 14) == 0) {
         /* One slot per call: src tgt cc ch inv span. Everything is validated
          * against the enums rather than trusted, because a bad source index
@@ -2926,6 +3164,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_imu_midi_2(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "IMU_MIDI ", 9) == 0) {
         int on = -1;
         if (sscanf(cmd, "IMU_MIDI %d", &on) == 1 && (on == 0 || on == 1)) {
@@ -2941,26 +3185,62 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_heap_trace(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "HEAP_TRACE ", 11) == 0) {
         handle_heap_trace(cmd + 11);
         return true;
     }
+    return false;
+}
+
+static bool verb_touch_trace(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "TOUCH_TRACE ", 12) == 0) {
         handle_touch_trace(cmd + 12);
         return true;
     }
+    return false;
+}
+
+static bool verb_touch_drag(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "TOUCH_DRAG ", 11) == 0) {
         handle_touch_inject(cmd + 11, false);
         return true;
     }
+    return false;
+}
+
+static bool verb_touch_tap(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "TOUCH_TAP ", 10) == 0) {
         handle_touch_inject(cmd + 10, true);
         return true;
     }
+    return false;
+}
+
+static bool verb_topbar(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "TOPBAR") == 0) {
         handle_topbar();
         return true;
     }
+    return false;
+}
+
+static bool verb_ui_tree(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "UI_TREE") == 0) {
         /* During boot, before crosspad_gui::bootstrap(), the probe would
          * assert in getGuiPlatform(): a host polling for the first screen
@@ -2972,7 +3252,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         handle_ui_tree();
         return true;
     }
+    return false;
+}
 
+static bool verb_uac_stats(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "UAC_STATS") == 0) {
         /* Host playback, end to end: what the render was short of (under),
          * how close it came (ring_min, frames; -1 = not streaming), and on
@@ -2996,6 +3281,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_usb_host(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "USB_HOST", 8) == 0 && (cmd[8] == '\0' || cmd[8] == ' ')) {
         /* The computer USB audio is tuned for (usb_host_profile.h): the
          * feedback endpoint's shape and the playback resampler's range.
@@ -3018,6 +3309,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_usb_enum(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "USB_ENUM", 8) == 0 && (cmd[8] == '\0' || cmd[8] == ' ')) {
         /* The control requests since the last bus reset, eight a reply:
          * USB_ENUM <first>. */
@@ -3030,6 +3327,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_uac_late(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "UAC_LATE") == 0) {
         /* The tasks a SOF more than 1.3 ms late interrupted, with counts:
          * whoever held its core with interrupts off. */
@@ -3040,6 +3343,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_uac_pkt(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "UAC_PKT") == 0) {
         /* The speaker packets as the board took them: received, short,
          * frames skipped between two, frames with two, and the latest an
@@ -3057,6 +3366,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_uac_flow(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "UAC_FLOW", 8) == 0) {
         /* The playback stream's rates, short enough for one companion frame:
          * the feedback sent (samples a frame x 1e6), the frames the host
@@ -3077,12 +3392,24 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_clock_status(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "CLOCK_STATUS", 12) == 0) {
         char out[200];
         midi_clock_status(out, sizeof(out), strstr(cmd + 12, "RESET") != nullptr);
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_imu_gesture(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "IMU_GESTURE ", 12) == 0) {
         /* The board cannot be knocked from the bench; this posts what the IMU
          * driver would have, on the event bus, so an app's reaction to a
@@ -3106,6 +3433,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("ERR IMU_GESTURE TAP|DOUBLE_TAP|FREE_FALL|WAKE_UP|ORIENTATION|STILL\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_imu_ths(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "IMU_THS ", 8) == 0) {
         /* IMU_THS <tap 0-31> <wake 0-63>: the embedded tap and wake-up thresholds,
          * for tuning on hardware (not persisted). */
@@ -3118,10 +3451,22 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_imu(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "IMU", 3) == 0) {
         handle_imu();
         return true;
     }
+    return false;
+}
+
+static bool verb_settings_reset(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SETTINGS_RESET", 14) == 0) {
         if (strstr(cmd, "FORCE") == nullptr) {
             cdc_reply("ERR say FORCE — this erases every saved setting and reboots\r\n");
@@ -3130,6 +3475,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         handle_settings_reset();
         return true;
     }
+    return false;
+}
+
+static bool verb_reset_test(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "RESET_TEST ", 11) == 0) {
         // Kill the device three ways, to check the black box end to end.
         // Each one reboots the ESP.
@@ -3156,10 +3507,22 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("ERR panic|wdt|stmwd\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_mem(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "MEM", 3) == 0) {
         handle_mem();
         return true;
     }
+    return false;
+}
+
+static bool verb_lvgl_prof(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "LVGL_PROF", 9) == 0) {
         /* LVGL_PROF 1 arms the trace, 2 arms it for the next big frame,
          * 0 stops and dumps it. */
@@ -3167,11 +3530,23 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("LVGLPROF: end\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_lvgl_inv(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "LVGL_INV", 8) == 0) {
         /* Which rectangles a UI step dirtied, not just how many pixels. */
         lvgl_stats_inv_dump([](const char* l) { cdc_reply(l); });
         return true;
     }
+    return false;
+}
+
+static bool verb_splash(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "SPLASH") == 0) {
         /* The boot splash again, over whatever is on screen, gone by itself
          * after ~2.2 s: to look at it, and bracketed by LVGL_STATS, to time
@@ -3190,6 +3565,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_lvgl_stats(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "LVGL_STATS", 10) == 0) {
         /* Read-and-cleared like CDC_STATS: bracket a window with two reads. */
         char reply[240];
@@ -3197,6 +3578,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_cdc_stats(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "CDC_STATS", 9) == 0) {
         /* The three fates of a command with no reply: rx = USB reads queued,
          * cmds = complete lines dispatched, drop = lost to a full queue. */
@@ -3223,20 +3610,44 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_status(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "BLE_STATUS", 10) == 0) {
         handle_ble_status();
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_devices(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "BLE_DEVICES", 11) == 0) {
         handle_ble_devices();
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_stop(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "BLE_STOP", 8) == 0) {
         cdc_reply("OK queued\r\n");   /* reply first */
         ble_job_post(0, 0, false);      /* on the LVGL thread; BLE_STATUS req= */
         return true;
     }
+    return false;
+}
+
 #if __has_include("crosspad-dawcontrol/DawControlState.hpp")
+static bool verb_daw_state(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "DAW_STATE", 9) == 0) {
         /* What DAW Control shows, for a bench that cannot read the LCD:
          * the three rows the host sent, transport bits, beat and mode. */
@@ -3251,7 +3662,14 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(rbuf);
         return true;
     }
+    return false;
+}
+
 #endif
+static bool verb_sysex_echo(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (strncmp(cmd, "SYSEX_ECHO", 10) == 0) {
         /* Bounce foreign-manufacturer SysEx from USB back to the host. A DAW
          * under Wine only hears MIDI whose ALSA source is the device it
@@ -3263,6 +3681,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(usbMidi_getSysExEcho() ? "SYSEX_ECHO: 1\r\n" : "SYSEX_ECHO: 0\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_audio_rate(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "AUDIO_RATE", 10) == 0) {
         /* Engine sample rate: what the I2S clock runs at now, and what the
          * saved setting asks for after the next boot. The set form persists
@@ -3282,6 +3706,13 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(rbuf);
         return true;
     }
+    return false;
+}
+
+static bool verb_usb_guard(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (strncmp(cmd, "USB_GUARD", 9) == 0) {
         /* The USB serial guard (usb_serial_prompt): with it on, a host's SysEx
          * request for the CDC profile is confirmed on the device. A bench
@@ -3299,6 +3730,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_ota_prefs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "OTA_PREFS") == 0) {
         /* Read-only: whether an OTA over CDC will stop at the on-screen Allow
          * prompt (auto_accept=0) or start at once. Set only from the Firmware
@@ -3308,6 +3745,13 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_enable(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "BLE_ENABLE %d", &a) == 1 && (a == 0 || a == 1)) {
         /* Persisted, unlike BLE_START/BLE_STOP: the same switch Settings ->
          * BLE MIDI flips, so a bench can put the board in the rc1 shape (BLE
@@ -3321,6 +3765,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         ble_job_post(a == 1 ? 1 : 0, cfg->wireless.bleMidiMode, true);
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_start(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "BLE_START", 9) == 0) {
         /* BLE_START [0|1] — 0 = Host (central), 1 = Server (peripheral).
          * Defaults to the mode in settings. */
@@ -3333,27 +3783,59 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         ble_job_post(1, (uint8_t)mode, false);
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_scan(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "BLE_SCAN %d", &a) == 1) {
         crosspad::getEspBleMidi().startScan((uint16_t)a);
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_scan_2(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "BLE_SCAN", 8) == 0) {
         crosspad::getEspBleMidi().startScan(5000);
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_connect(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "BLE_CONNECT", 11) == 0) {
         char addr[24] = {0};
         sscanf(cmd, "BLE_CONNECT %23s", addr);
         cdc_reply(crosspad::getEspBleMidi().connectToDevice(addr) ? "OK\r\n" : "ERR\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_disconnect(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "BLE_DISCONNECT", 14) == 0) {
         crosspad::getEspBleMidi().disconnect();
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_txoff(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "BLE_TXOFF %d", &a) == 1 && a >= -127 && a <= 127) {
         /* Transport-level, not persisted — proves the shift on the wire
          * without touching the user's settings. */
@@ -3361,6 +3843,14 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_ble_send(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
+    int &b = l.b;
     if (sscanf(cmd, "BLE_SEND %d %d", &a, &b) >= 1 && a >= 0 && a < 128) {
         /* Straight at the BLE transport: a dead link vs an unrouted pad. */
         auto &ble = crosspad::getEspBleMidi();
@@ -3369,18 +3859,43 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_app_list(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "APP_LIST", 8) == 0) {
         handle_app_list();
         return true;
     }
+    return false;
+}
+
+static bool verb_app_versions(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "APP_VERSIONS", 12) == 0) {
         handle_app_versions();
         return true;
     }
+    return false;
+}
+
+static bool verb_app_sha(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "APP_SHA", 7) == 0) {
         handle_app_sha();
         return true;
     }
+    return false;
+}
+
+static bool verb_app_start(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    char (&name)[32] = l.name;
     if (sscanf(cmd, "APP_START %31s", name) == 1) {
         if (!find_app(name)) {
             cdc_reply("ERR unknown app\r\n");
@@ -3392,14 +3907,32 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         lv_async_call_locked(async_app_start, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_enc_focus(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "ENC_FOCUS", 9) == 0) {
         handle_enc_focus();
         return true;
     }
+    return false;
+}
+
+static bool verb_enc_group(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "ENC_GROUP", 9) == 0) {
         handle_enc_group();
         return true;
     }
+    return false;
+}
+
+static bool verb_enc_raw(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* ENC_RAW -- the encoder bytes exactly as the STM sends them. The focus
      * moving while nobody is turning anything is either this wobbling or the
      * driver reading it wrong, and there is no telling which from the UI. */
@@ -3412,10 +3945,23 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_enc_state(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "ENC_STATE", 9) == 0) {
         handle_enc_state();
         return true;
     }
+    return false;
+}
+
+static bool verb_led_state(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (strncmp(cmd, "LED_STATE", 9) == 0) {
         /* LED_STATE COALESCE 0|1: the A/B of who sends the frames (main.cpp
          * turns it on). Off, the frame marked dirty meanwhile goes out now. */
@@ -3427,6 +3973,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         handle_led_state();
         return true;
     }
+    return false;
+}
+
+static bool verb_pad_stats_reset(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "PAD_STATS_RESET", 15) == 0) {
         g_hil_pad_press_count = 0;
         g_hil_pad_release_count = 0;
@@ -3444,6 +3996,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_midi_trs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     static crosspad::STMRoutingSettings s_route_saved;
     static bool s_route_saved_valid = false;
     /* MIDI_TRS [TYPE A|B | SKEW <0.1 %> | FLIP <seg> <1-in-N> | RESET |
@@ -3514,6 +4072,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_midi_loop(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* MIDI_LOOP [CAPTURE 0|1 | SEND <count> <rate> | STOP] -- the ESP's end of
      * the MIDI loop test (midi_loop_test.h). */
     if (strncmp(cmd, "MIDI_LOOP", 9) == 0) {
@@ -3534,6 +4098,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_stm_vpad(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "STM_VPAD", 8) == 0) {
         // STM-side virtual pads: STM_VPAD <rate_hz> <count> [hold_ms] [mode]
         // | STOP | (no args = status). Hits leave the STM on the physical
@@ -3574,6 +4144,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_click(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* CLICK <0|1> [bpm] [bars] -- the metronome, which is also the sequencer's
      * clock. Reports where it is, so a scenario can check the grid without
      * listening. */
@@ -3593,6 +4169,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_seq_dump(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* SEQ_DUMP -- every recorded event, so a scenario can check the grid a take
      * landed on without listening to it. len= is how long the pad was held, in
      * samples, 0 for a tap. Its own verb rather than a SEQ
@@ -3615,6 +4197,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("SEQDUMP: end\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_seq(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* SEQ [REC|OVERDUB|PLAY|STOP|CLEAR|DOUBLE|HALF|ERASE 0|1|COUNTIN 0|1|BARS n|BPM n|QUANT n] -- the loop recorder.
      * Bare SEQ reports, so a scenario can check what was captured without
      * listening to it. */
@@ -3666,6 +4254,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_song(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* SONG [ADD s r|SET i s r|DEL i|CLEAR|PLAY [i]|LOOP 0|1] -- the song
      * arrangement. Bare SONG reports the blocks and where playback is. */
     if (strncmp(cmd, "SONG", 4) == 0 && (cmd[4] == 0 || cmd[4] == ' ')) {
@@ -3701,6 +4295,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_asong_seq(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* ASONG [OPEN name|BOUNCE scene track|PLAY [bar]|STOP|CANCEL|LEN bars|SYNC 0|1|TEMPO bpm|RENAME name|
      *        REGION a b|MERGE mask from to|IMPORT path a b track bar lead|EXPORT|EXPORTWAV|REPORT|
      *        REC bar [beats]|DUB bar [beats]|PUNCH R|D|N|BOUNCESEQ track|VOL track pct|MUTE track 0|1|
@@ -3748,6 +4348,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(row);
         return true;
     }
+    return false;
+}
+
+static bool verb_asong_trk(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* ASONG_TRK -- every track in use, one "ATRK:" row each: its kind (a
      * audio, s seq), the route its notes take and the one they take now
      * (AudioSong::liveRoute(): -1 for a kit track the kits' engine does not
@@ -3788,6 +4394,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(row);
         return true;
     }
+    return false;
+}
+
+static bool verb_asong_dbg(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* Why a playing song can be silent. ASONG already fills its 300-byte
      * budget on the 5 kB main task, so this is its own line. */
     if (strcmp(cmd, "ASONG_DBG") == 0) {
@@ -3799,6 +4411,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(row);
         return true;
     }
+    return false;
+}
+
+static bool verb_asong(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "ASONG", 5) == 0 && (cmd[5] == 0 || cmd[5] == ' ')) {
         auto* se = crosspad::getPlatformServices().songEngine;
         if (!se) { cdc_reply("ERR ASONG no song engine\r\n"); return true; }
@@ -4079,6 +4697,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_outvol(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* INSRC (the engine branch's Source switch) is not in this build: main's
      * input pairs (InputPairPort, IN_PAIR) choose what each codec listens to. */
 
@@ -4115,6 +4739,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_mix_eq(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* MIX_EQ [out ON|OFF|FLAT | out band OFF | out band PEAK|LOSHELF|HISHELF|HP|LP hz [db] [q]]
      * -- the four bands across an output, for evening out what it plays
      * through. Bare MIX_EQ reports a line per output; db is in tenths and q
@@ -4188,6 +4818,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("MIXEQ: end\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_clip(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* CLIP [LAUNCH track file [bars]|STOP [track]|Q bars] -- the clip
      * launcher's live transport. Bare CLIP reports a line per track: the
      * song's fader and mute (what the engine plays it at), the loop and how
@@ -4257,6 +4893,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("CLIP: end\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_heap_check(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* STOOL [IN MIC|LINE|PADS|USB|REC|SYNC bar [beats]|DIR [path]|STOP|RELEASE|LIST|OV path [a b]|ONSETS sens|EQ n|
      *        PLAY path a b loop|SLICE path a b|ATK ms|PITCH st|PSTOP|SAVE path a b|EXPORT name|HANDOFF path a b|
      *        FX path out st hp lp rev [keep]] --
@@ -4285,6 +4927,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_stool(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "STOOL", 5) == 0 && (cmd[5] == 0 || cmd[5] == ' ')) {
         auto* st = crosspad::getPlatformServices().sampleTools;
         if (!st) { cdc_reply("ERR STOOL no sample tools\r\n"); return true; }
@@ -4403,15 +5051,33 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_audio_level(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "AUDIO_LEVEL", 11) == 0) {
         handle_audio_level();
         return true;
     }
+    return false;
+}
+
 #ifdef HIL_HAS_MIXER
+static bool verb_mix_lvl(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "MIX_LVL", 7) == 0) {
         handle_mix_lvl();
         return true;
     }
+    return false;
+}
+
+static bool verb_mix_preset(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* MIX_PRESET [LOAD n|SAVE n name|UNDO] -- the Mixer's presets, slots 1..6:
      * each slot's kind (s saved, f starting point, e empty) and name. On a
      * task of its own, as FW_LIST: every form reads the card, and on the 4 kB
@@ -4429,6 +5095,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_input_mon(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* INPUT_MON MIC|LINE|MICLINE|USB [0|1] -- an input heard live or not, as
      * Arrange's audio track sets it (IInputMonitor: the Mixer's MONITOR at
      * all or off for that input's channels). Bare: whether it is. CDC only,
@@ -4457,6 +5129,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_mix_route(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* MIX_ROUTE ch out 0|1 -- a send on or off, as the Mixer's MONITOR and
      * ROUTE set them (an IN channel sent anywhere holds its ADC on the input):
      * a send switched on whose level was dragged to nothing comes back at unity. */
@@ -4476,6 +5154,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
             return true;
         }
     }
+    return false;
+}
+
+static bool verb_mix_mute(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* MIX_MUTE ch 0|1, MIX_VOL ch pct, MIX_OUT_MUTE out 0|1, MIX_OUT_VOL out pct
      * -- a channel's (MIX_LVL numbering) or an output's mute and level, set
      * with the setters the Mixer's M button and fader use. pct is linear gain
@@ -4516,39 +5200,83 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
             return true;
         }
     }
+    return false;
+}
+
 #endif
+static bool verb_pad_stats(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "PAD_STATS", 9) == 0) {
         handle_pad_stats();
         return true;
     }
+    return false;
+}
+
+static bool verb_enc_rotate(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "ENC_ROTATE %d", &a) == 1 && a != 0) {
         s_enc_delta = a > 16 ? 16 : (a < -16 ? -16 : a);
         cdc_reply("OK\r\n");   /* reply first: the post wakes LVGL work that preempts this task */
         lv_async_call_locked(async_enc_rotate, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_enc_press(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "ENC_PRESS %d", &a) == 1 && a > 0) {
         s_enc_press_ms = (uint32_t)(a > 5000 ? 5000 : a);
         cdc_reply("OK\r\n");   /* reply first: the post wakes LVGL work that preempts this task */
         lv_async_call_locked(async_enc_press, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_enc_press_2(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "ENC_PRESS", 9) == 0) {
         s_enc_press_ms = 80;
         cdc_reply("OK\r\n");   /* reply first: the post wakes LVGL work that preempts this task */
         lv_async_call_locked(async_enc_press, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_app_self_close(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "APP_SELF_CLOSE", 14) == 0) {
         cdc_reply("OK\r\n");   /* reply first: the post wakes LVGL work that preempts this task */
         lv_async_call_locked(async_app_self_close, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_app_destroy(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "APP_DESTROY", 11) == 0) {
         cdc_reply("OK\r\n");   /* reply first: the post wakes LVGL work that preempts this task */
         lv_async_call_locked(async_app_destroy, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_app_stop(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "APP_STOP", 8) == 0) {
         if (!launcher_up()) {
             cdc_reply("ERR no_launcher\r\n");
@@ -4558,20 +5286,51 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         lv_async_call_locked(async_app_stop, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_pad_press(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
+    int &b = l.b;
     if (sscanf(cmd, "PAD_PRESS %d %d", &a, &b) >= 1 && a >= 0 && a < 16) {
         const uint8_t vel = (b >= 0 && b <= 127) ? (uint8_t)b : 127;
         pad_inject_reply_first(HilPadInject::Press, (uint8_t)a, vel, cdc_reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_pad_release(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "PAD_RELEASE %d", &a) == 1 && a >= 0 && a < 16) {
         pad_inject_reply_first(HilPadInject::Release, (uint8_t)a, 0, cdc_reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_pad_pressure(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
+    int &b = l.b;
     if (sscanf(cmd, "PAD_PRESSURE %d %d", &a, &b) == 2 &&
         a >= 0 && a < 16 && b >= 0 && b <= 255) {
         pad_inject_reply_first(HilPadInject::Pressure, (uint8_t)a, (uint8_t)b, cdc_reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_pad_pan(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
+    int &b = l.b;
     if (sscanf(cmd, "PAD_PAN %d %d", &a, &b) == 2 &&
         a >= 0 && a < 16 && b >= 0 && b <= 127) {
         /* Left/right balance of a held pad as the STM would stream it:
@@ -4579,14 +5338,32 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         pad_inject_reply_first(HilPadInject::Pan, (uint8_t)a, (uint8_t)b, cdc_reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_kit_list(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "KIT_LIST", 8) == 0) {
         handle_kit_list();
         return true;
     }
+    return false;
+}
+
+static bool verb_kit_status(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "KIT_STATUS", 10) == 0) {
         handle_kit_status();
         return true;
     }
+    return false;
+}
+
+static bool verb_settings_export(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SETTINGS_EXPORT", 15) == 0 || strncmp(cmd, "SETTINGS_IMPORT", 15) == 0) {
         char path[96] = {};
         const char *arg = cmd + 15;
@@ -4606,18 +5383,43 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         lv_async_call_locked(async_settings_backup, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_settings_status(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SETTINGS_STATUS", 15) == 0) {
         handle_settings_status();
         return true;
     }
+    return false;
+}
+
+static bool verb_kit_swap_log(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "KIT_SWAP_LOG", 12) == 0) {
         handle_kit_swap_log();
         return true;
     }
+    return false;
+}
+
+static bool verb_wave_status(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "WAVE_STATUS", 11) == 0) {
         handle_wave_status();
         return true;
     }
+    return false;
+}
+
+static bool verb_smpl_pace(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (strncmp(cmd, "SMPL_PACE", 9) == 0) {
         /* SMPL_PACE [ms]: how long the kit loader and the other bulk readers
          * wait for a native streaming pass to end; 0 = they do not give way.
@@ -4628,6 +5430,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_smpl_stall(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SMPL_STALL", 10) == 0) {
         /* SMPL_STALL [ON|OFF]: the slowest native note-on and STM pad path,
          * and who had the CPU meanwhile. */
@@ -4639,18 +5447,37 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_smpl_last(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SMPL_LAST", 9) == 0) {
         handle_smpl_last();
         return true;
     }
+    return false;
+}
+
 #if !CONFIG_CROSSPAD_SAMPLER_MARCEL
+static bool verb_smpl_pool(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SMPL_POOL", 9) == 0) {
         /* No prebuilt streamer in this image; the native engine's pool is in
          * SMPL_ENGINE (pool_blocks=, norings=). */
         cdc_reply("ERR only_native\r\n");
         return true;
     }
+    return false;
+}
+
 #endif
+static bool verb_kit_load(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "KIT_LOAD %d", &a) == 1 && a >= 0) {
         if (!g_kit_scan_done.load()) {
             /* getKitCount() below reads the vector the scan is growing, and the
@@ -4667,6 +5494,13 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         lv_async_call_locked(async_kit_load, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_kit_delete(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     /* KIT_DELETE id name -- a kit of the user's own (USER: the Slicer's)
      * off the card and out of the list, as the kit browser's "delete this
      * kit". The name must be the id's, so an id from an old listing never
@@ -4691,6 +5525,13 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
             return true;
         }
     }
+    return false;
+}
+
+static bool verb_pad_info(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "PAD_INFO %d", &a) == 1 && a >= 0 && a < 16) {
         /* What the kit model holds for a pad: a wrong stored path vs an
          * engine that refused it. */
@@ -4716,6 +5557,14 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_pad_mix(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
+    int &b = l.b;
     /* PAD_MIX: the current kit's sixteen volumes, "PADMIX: kit=… max=…
      * loading=… name=…", a row per pad, "PADMIX: end count=16". PAD_MIX pad
      * vol: that pad's volume, in the kit's units (0..127, a pitched kit
@@ -4758,6 +5607,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("PADMIX: end count=16\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_kit_save_status(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* KIT_SAVE: the current kit, pads and all, into its kit.json -- the
      * Sampler's save, on the LVGL thread. OK = queued; KIT_SAVE_STATUS says
      * "KITSAVE: busy=0|1 ok=-1|0|1 kit=N" once it is written. */
@@ -4768,6 +5623,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_kit_save(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "KIT_SAVE") == 0) {
         auto *mgr = crosspad::getKitManager();
         if (!g_kit_scan_done.load()) { cdc_reply("ERR scanning\r\n"); return true; }
@@ -4780,6 +5641,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         lv_async_call_locked(async_kit_save, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_arena(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "ARENA", 5) == 0) {
         /* The two sample engines share one PSRAM block, so MEM's PSRAM figures
          * no longer say who holds what — everything inside the arena looks
@@ -4801,6 +5668,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_inst_load(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* The instrument host (instrument_host.h), driven without Pitch Play's
      * screen: INST_LOAD <logical wav> builds a one-zone instrument, as picking
      * a sample from its list does; INST_STATUS says where the host is and how
@@ -4818,12 +5691,24 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(h && h->requestLoad(*spec) ? "INST: OK\r\n" : "INST: ERR no_host\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_inst_release(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "INST_RELEASE", 12) == 0) {
         auto* h = crosspad::getPlatformServices().instrumentHost;
         if (h) h->release();
         cdc_reply(h ? "INST: OK\r\n" : "INST: ERR no_host\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_inst_status(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "INST_STATUS", 11) == 0) {
         auto* h = crosspad::getPlatformServices().instrumentHost;
         if (!h) { cdc_reply("INST: ERR no_host\r\n"); return true; }
@@ -4838,6 +5723,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_pitched_status(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "PITCHED_STATUS", 14) == 0) {
         /* rt_max_us resets on read, like SMPL_PEAK's — a scenario samples it
          * per phase and wants the worst block of that phase, not of the boot.
@@ -4857,6 +5748,13 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_pitched_cap(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "PITCHED_CAP %d", &a) == 1 && a >= 1 && a <= 28) {
         /* Bench: the pitched voice cap (PitchedSampleNode::kVoiceCap), from
          * the next setParams on -- a load, or an edit in the kit editor.
@@ -4865,6 +5763,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_simd_mode(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "SIMD_MODE") == 0) {
         /* Which kernels the render runs: the S3's (PIE 128-bit float loads)
          * once the platform registered them with core, the portable ones
@@ -4879,7 +5783,19 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_sd_bench_verb_verbs(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (sd_bench_verb(cmd, cdc_reply)) return true;
+    return false;
+}
+
+static bool verb_sd_cache(VerbLine &l)
+{
+    char *cmd = l.cmd;
     /* SD_CACHE [0|1] -- the card layer's cache of single sectors (directory
      * and FAT reads, sd_sector_io.cpp), for an A/B; emptied either way. */
     if (strncmp(cmd, "SD_CACHE", 8) == 0 && (cmd[8] == 0 || cmd[8] == ' ')) {
@@ -4887,6 +5803,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(sd_cache_on() ? "SDCACHE: on=1\r\n" : "SDCACHE: on=0\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_sd_trace(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "SD_TRACE") == 0) {
         /* Every card transaction since the last call, by task (sd_sector_io.cpp). */
         EXT_RAM_BSS_ATTR static char reply[1024];
@@ -4894,12 +5816,24 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_sd_bounce(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SD_BOUNCE ", 10) == 0) {
         /* The sector bounce off (0) or on (1), for an A/B. */
         sd_bounce_enable(cmd[10] == '1');
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_pitched_bench(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "PITCHED_BENCH", 13) == 0) {
         int iters = kBenchDefaultIters;
         sscanf(cmd, "PITCHED_BENCH %d", &iters);
@@ -4919,7 +5853,14 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
+static bool verb_smpl_poly(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "SMPL_POLY %d", &a) == 1 && a >= 0 && a <= 17 && marcel_engine_running()) {
         /* The prebuilt streamer holds the kit: its voice cap
          * (SampleStreamPlayer_SetMaxPolyphony()). Bench knob: it holds over
@@ -4929,7 +5870,13 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
 #endif
+static bool verb_smpl_poly_2(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SMPL_POLY", 9) == 0) {
         /* The voice cap, so a polyphony sweep can see past the default 16 --
          * the engine's own ceiling is higher. `SMPL_POLY` alone reports it. */
@@ -4960,6 +5907,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_audio_buf(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "AUDIO_BUF", 9) == 0) {
         /* Settings -> Audio -> Buffer (IAudioBuffer): the render's block and
          * how far ahead of the DAC it runs. `AUDIO_BUF` lists the choices,
@@ -5007,6 +5960,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(line);
         return true;
     }
+    return false;
+}
+
+static bool verb_lat_trace(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "LAT_TRACE", 9) == 0) {
         /* One STM note's trip through the ESP, stage by stage (lat_trace.h).
          * `LAT_TRACE RESET` starts (or restarts) it, `LAT_TRACE` reports per
@@ -5056,6 +6015,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         heap_caps_free(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_rt_prof(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "RT_PROF", 7) == 0) {
         /* Where the render pass goes, span by span. `RT_PROF 1` starts it,
          * `RT_PROF` reads and clears, `RT_PROF 0` stops. It exists because
@@ -5078,6 +6043,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_smpl_peak(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SMPL_PEAK", 9) == 0) {
         /* Peak rendered since the last read (int16 scale) plus free WAV
          * slots: a silent engine vs a bus that carried nothing out. The louder
@@ -5134,6 +6105,14 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_smpl_pitch(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
+    int &b = l.b;
     if (sscanf(cmd, "SMPL_PITCH %d %d", &a, &b) == 2 &&
         a >= 0 && a < 16 && b >= -24 && b <= 24) {
         /* A pad's step, from the bench, through the same door the pad editor
@@ -5171,12 +6150,24 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_smpl_loops(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strcmp(cmd, "SMPL_LOOPS") == 0) {
         static char reply[96];
         native_sampler_loops(reply, sizeof(reply));
         cdc_reply(reply);
         return true;
     }
+    return false;
+}
+
+static bool verb_smpl_engine(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SMPL_ENGINE", 11) == 0) {
         /* Which of the two sample engines holds the kit. They share the PSRAM
          * arena, so this is a handover, not a fan-out -- and it is a runtime
@@ -5228,13 +6219,26 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
 #endif
         return true;
     }
+    return false;
+}
+
 #if !CONFIG_CROSSPAD_SAMPLER_MARCEL
+static bool verb_smpl_bkg(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "SMPL_BKG %d", &a) == 1 && (a == 0 || a == 1)) {
         /* No prebuilt streamer in this image. */
         cdc_reply("ERR only_native\r\n");
         return true;
     }
+    return false;
+}
+
 #endif
+static bool verb_smpl_preview(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SMPL_PREVIEW ", 13) == 0) {
         /* The preview voice directly: a silent preview vs a UI path that
          * never fires. */
@@ -5271,6 +6275,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
 #endif
         return true;
     }
+    return false;
+}
+
+static bool verb_smpl_preview_stop(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "SMPL_PREVIEW_STOP", 17) == 0) {
         /* Through the same owner as the start, so a start and a stop sent in
          * that order happen in that order. */
@@ -5278,6 +6288,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         lv_async_call_locked([](void*) { native_sampler_preview_stop(); }, nullptr);
         return true;
     }
+    return false;
+}
+
+static bool verb_stm_fw_info(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "STM_FW_INFO", 11) == 0) {
         // Running STM firmware vs the image bundled in LittleFS.
         stm32_link_info_t li = {};
@@ -5297,6 +6313,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(out);
         return true;
     }
+    return false;
+}
+
+static bool verb_stm_fw_update(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "STM_FW_UPDATE", 13) == 0) {
         // Reflash the STM from a file (default: the bundled image). ~10 s,
         // on its own task, which sends the reply. A trailing FORCE overrides
@@ -5324,6 +6346,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         }
         return true;
     }
+    return false;
+}
+
+static bool verb_stm_reset(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "STM_RESET", 9) == 0) {
         /* Hardware reset of the STM through the ESP's reset line, a 100 ms
          * pulse. An ST-LINK without an NRST wire cannot reset it, so when the STM sits in
@@ -5336,17 +6364,235 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply("OK\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_stm_dfu(VerbLine &l)
+{
+    char *cmd = l.cmd;
     if (strncmp(cmd, "STM_DFU", 7) == 0) {
         // Drop the STM into USB DFU; the bridge is gone until it reboots.
         cdc_reply(crosspad::getStm32CommandSender().sendDfuRequest(true)
                       ? "OK\r\n" : "ERR\r\n");
         return true;
     }
+    return false;
+}
+
+static bool verb_audio_tasks(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    int &a = l.a;
     if (sscanf(cmd, "AUDIO_TASKS %d", &a) == 1 && (a == 0 || a == 1)) {
         ESP_LOGW(TAG, "AUDIO_TASKS override: %s", a ? "resume" : "suspend");
         AudioTasks_SetSuspended(a == 0);
         cdc_reply("OK\r\n");
         return true;
+    }
+    return false;
+}
+
+/* Every verb, in the order a line is offered to them. The order is part of
+ * the protocol: verbs match by prefix (MEM_BLOCKS before MEM, IMU_REGW before
+ * IMU_REG before IMU), so the first one that takes the line wins. */
+static bool (*const k_verbs[])(VerbLine &) = {
+    verb_pad_notes,
+    verb_usb_msc,
+    verb_net_mode,
+    verb_fw_list,
+    verb_fw_slots,
+    verb_fw_install,
+    verb_fw_switch,
+    verb_fw_confirm,
+    verb_fw_updater_verbs,
+    verb_cp_account_verbs,
+    verb_cp_remote_verbs,
+    verb_fw_ui_verbs,
+    verb_host_info_verbs,
+    verb_wifi_verbs_verbs,
+    verb_kit_convert_verbs_verbs,
+    verb_sdr_verbs,
+    verb_tbar,
+    verb_ui_state,
+    verb_twin,
+    verb_motion,
+    verb_twin_2,
+    verb_twin_3,
+    verb_pwr_gesture,
+    verb_tasks,
+    verb_toast,
+    verb_screenshot,
+    verb_in_pair,
+    verb_codec_reg,
+    verb_ingain,
+    verb_mem_blocks,
+    verb_worker,
+    verb_ulp,
+    verb_reset_log,
+    verb_imu_regw,
+    verb_imu_reg,
+    verb_stm_regw,
+    verb_stm_reg,
+    verb_reset_log_2,
+    verb_reset_log_3,
+    verb_coredump_info,
+    verb_imu_midi,
+    verb_imu_midi_2,
+    verb_heap_trace,
+    verb_touch_trace,
+    verb_touch_drag,
+    verb_touch_tap,
+    verb_topbar,
+    verb_ui_tree,
+    verb_uac_stats,
+    verb_usb_host,
+    verb_usb_enum,
+    verb_uac_late,
+    verb_uac_pkt,
+    verb_uac_flow,
+    verb_clock_status,
+    verb_imu_gesture,
+    verb_imu_ths,
+    verb_imu,
+    verb_settings_reset,
+    verb_reset_test,
+    verb_mem,
+    verb_lvgl_prof,
+    verb_lvgl_inv,
+    verb_splash,
+    verb_lvgl_stats,
+    verb_cdc_stats,
+    verb_ble_status,
+    verb_ble_devices,
+    verb_ble_stop,
+#if __has_include("crosspad-dawcontrol/DawControlState.hpp")
+    verb_daw_state,
+#endif
+    verb_sysex_echo,
+    verb_audio_rate,
+    verb_usb_guard,
+    verb_ota_prefs,
+    verb_ble_enable,
+    verb_ble_start,
+    verb_ble_scan,
+    verb_ble_scan_2,
+    verb_ble_connect,
+    verb_ble_disconnect,
+    verb_ble_txoff,
+    verb_ble_send,
+    verb_app_list,
+    verb_app_versions,
+    verb_app_sha,
+    verb_app_start,
+    verb_enc_focus,
+    verb_enc_group,
+    verb_enc_raw,
+    verb_enc_state,
+    verb_led_state,
+    verb_pad_stats_reset,
+    verb_midi_trs,
+    verb_midi_loop,
+    verb_stm_vpad,
+    verb_click,
+    verb_seq_dump,
+    verb_seq,
+    verb_song,
+    verb_asong_seq,
+    verb_asong_trk,
+    verb_asong_dbg,
+    verb_asong,
+    verb_outvol,
+    verb_mix_eq,
+    verb_clip,
+    verb_heap_check,
+    verb_stool,
+    verb_audio_level,
+#ifdef HIL_HAS_MIXER
+    verb_mix_lvl,
+    verb_mix_preset,
+    verb_input_mon,
+    verb_mix_route,
+    verb_mix_mute,
+#endif
+    verb_pad_stats,
+    verb_enc_rotate,
+    verb_enc_press,
+    verb_enc_press_2,
+    verb_app_self_close,
+    verb_app_destroy,
+    verb_app_stop,
+    verb_pad_press,
+    verb_pad_release,
+    verb_pad_pressure,
+    verb_pad_pan,
+    verb_kit_list,
+    verb_kit_status,
+    verb_settings_export,
+    verb_settings_status,
+    verb_kit_swap_log,
+    verb_wave_status,
+    verb_smpl_pace,
+    verb_smpl_stall,
+    verb_smpl_last,
+#if !CONFIG_CROSSPAD_SAMPLER_MARCEL
+    verb_smpl_pool,
+#endif
+    verb_kit_load,
+    verb_kit_delete,
+    verb_pad_info,
+    verb_pad_mix,
+    verb_kit_save_status,
+    verb_kit_save,
+    verb_arena,
+    verb_inst_load,
+    verb_inst_release,
+    verb_inst_status,
+    verb_pitched_status,
+    verb_pitched_cap,
+    verb_simd_mode,
+    verb_sd_bench_verb_verbs,
+    verb_sd_cache,
+    verb_sd_trace,
+    verb_sd_bounce,
+    verb_pitched_bench,
+#if CONFIG_CROSSPAD_SAMPLER_MARCEL
+    verb_smpl_poly,
+#endif
+    verb_smpl_poly_2,
+    verb_audio_buf,
+    verb_lat_trace,
+    verb_rt_prof,
+    verb_smpl_peak,
+    verb_smpl_pitch,
+    verb_smpl_loops,
+    verb_smpl_engine,
+#if !CONFIG_CROSSPAD_SAMPLER_MARCEL
+    verb_smpl_bkg,
+#endif
+    verb_smpl_preview,
+    verb_smpl_preview_stop,
+    verb_stm_fw_info,
+    verb_stm_fw_update,
+    verb_stm_reset,
+    verb_stm_dfu,
+    verb_audio_tasks,
+};
+
+bool hil_control_handle_cdc(const char *buff, size_t len)
+{
+    VerbLine l;
+    /* A CDC line can be longer than this (CDC_LINE_MAX, for FS_* paths): no
+     * verb here takes one, and a cut-off argument must not run. */
+    if (len >= sizeof(l.cmd)) {
+        cdc_reply("ERR too_long\r\n");
+        return true;
+    }
+    memcpy(l.cmd, buff, len);
+    l.cmd[len] = '\0';
+    l.len = len;
+
+    for (auto verb : k_verbs) {
+        if (verb(l)) return true;
     }
     return false;
 }
