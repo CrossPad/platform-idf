@@ -16,6 +16,22 @@ if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/.vscode/settings.json"
     endif()
 endif()
 
+# The firmware is written against ESP-IDF 5.5.x from 5.5.4 on. Older trees miss
+# fixes it relies on and 6.x changed APIs it uses; say so here instead of
+# failing somewhere inside a component.
+set(CROSSPAD_IDF_MAJOR 5)
+set(CROSSPAD_IDF_MINOR 5)
+set(CROSSPAD_IDF_MIN_PATCH 4)
+include($ENV{IDF_PATH}/tools/cmake/version.cmake)
+if(NOT IDF_VERSION_MAJOR EQUAL CROSSPAD_IDF_MAJOR OR NOT IDF_VERSION_MINOR EQUAL CROSSPAD_IDF_MINOR
+        OR IDF_VERSION_PATCH LESS CROSSPAD_IDF_MIN_PATCH)
+    message(FATAL_ERROR
+        "ESP-IDF ${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}.${IDF_VERSION_PATCH} at $ENV{IDF_PATH}: "
+        "CrossPad builds with ${CROSSPAD_IDF_MAJOR}.${CROSSPAD_IDF_MINOR}.x, "
+        "${CROSSPAD_IDF_MAJOR}.${CROSSPAD_IDF_MINOR}.${CROSSPAD_IDF_MIN_PATCH} or newer "
+        "(https://crosspad.app/docs/how-to/esp-idf-versions/)")
+endif()
+
 add_compile_options(-DUSE_LVGL -DCROSSPAD_REGISTER_APP_NAMED_FUNCTIONS)
 
 # ---------------------------------------------------------------------------

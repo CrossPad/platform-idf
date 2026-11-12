@@ -1,0 +1,48 @@
+{
+  "about": "Kconfig values the firmware depends on. tools/check_sdkconfig.py holds sdkconfig.defaults and every sdkconfig.v* to them; the reason for each is the page named in 'why'.",
+  "revisions": ["v1", "v2"],
+  "required": [
+    {"line": "CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y",
+     "why": "The render runs from PSRAM through the I-cache both cores share; at 16 kB sixteen streamed voices cost 844 us a block against 613. CLAUDE.md, Build Gotchas."},
+    {"line": "CONFIG_TINYUSB_INIT_IN_DEFAULT_TASK=y",
+     "why": "Keeps the USB interrupt on core 1; on core 0 a PSRAM heap walk made the DWC2 drop speaker packets. docs/subsystems/audio-routing.md."},
+    {"line": "CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y",
+     "why": "Code runs from PSRAM; the image-size budget in config/image_budget.json assumes it."},
+    {"line": "CONFIG_SPIRAM_RODATA=y",
+     "why": "Read-only data lives in PSRAM; the image-size budget assumes it."},
+    {"line": "CONFIG_COMPILER_OPTIMIZATION_SIZE=y",
+     "why": "The image is copied into PSRAM, so its size is the UI's memory; hot paths are -O2 per file in main/CMakeLists.txt."},
+    {"line": "CONFIG_FATFS_API_ENCODING_UTF_8=y",
+     "why": "Code page 437 has no Polish letters; a folder named with them could not be opened. CLAUDE.md, Fonts."},
+    {"line": "CONFIG_LV_COLOR_DEPTH_24=y",
+     "why": "The display path and SCREENSHOT render RGB888."},
+    {"line": "CONFIG_LV_CACHE_DEF_SIZE=196608",
+     "why": "600 kB let decoded thumbnails take what the kit selector needs (bad_alloc, reboot). CLAUDE.md, Build Gotchas."},
+    {"line": "CONFIG_LV_ASSERT_HANDLER_INCLUDE=\"lvgl_assert_handler.h\"",
+     "why": "An LVGL assert is a panic with a reset record, not LVGL's while(1). main/lvgl_assert/."},
+    {"line": "CONFIG_TINYUSB_MSC_BUFSIZE=2048",
+     "why": "USB transfer mode's measured cost and speed are for this buffer. docs/subsystems/usb-transfer-mode.md."},
+    {"line": "CONFIG_ESP_MAIN_TASK_STACK_SIZE=5120",
+     "why": "Every CDC verb runs on the main task; replies are built in static buffers to fit it."},
+    {"line": "# CONFIG_CROSSPAD_SAMPLER_MARCEL is not set",
+     "why": "The prebuilt streamer is opt-in; the default image carries the native engine only. docs/subsystems/sampler-engine.md."}
+  ],
+  "required_in_revisions": [
+    {"line": "# CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM is not set",
+     "why": "It puts ~68 kB of LVGL blend code in IRAM; off is +67.8 kB of internal RAM. CLAUDE.md, Build Gotchas."},
+    {"line": "CONFIG_LV_DRAW_SW_SUPPORT_RGB888=y",
+     "why": "With LV_COLOR_DEPTH 24 every opaque layer is rendered in it, and SCREENSHOT snapshots it."},
+    {"line": "CONFIG_LV_DRAW_SW_SUPPORT_ARGB8888=y",
+     "why": "Every PNG decodes to it."},
+    {"line": "# CONFIG_LV_DRAW_SW_SUPPORT_AL88 is not set",
+     "why": "Nothing produces it; the unused renderers cost 41 kB of image."},
+    {"line": "# CONFIG_LV_DRAW_SW_SUPPORT_L8 is not set",
+     "why": "Nothing produces it; the unused renderers cost 41 kB of image."},
+    {"line": "# CONFIG_LV_DRAW_SW_SUPPORT_I1 is not set",
+     "why": "Nothing produces it; the unused renderers cost 41 kB of image."}
+  ],
+  "forbidden_in_defaults": [
+    {"symbol": "CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM",
+     "why": "sdkconfig.defaults wins over sdkconfig.v*, so setting it here moves the blend code back into IRAM in every build."}
+  ]
+}
