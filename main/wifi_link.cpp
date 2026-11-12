@@ -81,6 +81,10 @@ static constexpr size_t kWifiMinPsramFree = 116736;
  * whose records are not. Enough free bytes in smaller pieces still fail.
  * 2026-10-03, v2, image ba9a935. */
 static constexpr size_t kWifiMinPsramBlock = 20480;
+static_assert(kWifiMinInternalFree < kWifiMinInternalTotal,
+              "the default-caps gate is a part of all internal RAM");
+static_assert(kWifiMinPsramBlock < kWifiMinPsramFree,
+              "the largest block asked for is a part of the PSRAM asked for");
 /* PSRAM a running BLE stack hands back when the radio stops it: 16068 B
  * measured (launcher), taken down to whole KiB. The first-lease gate credits
  * it, since radio_init() checks PSRAM again once BLE has stopped. */
