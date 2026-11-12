@@ -416,7 +416,7 @@ measurements below.
 | Download, bin 3086384 B + assets 1048576 B over WiFi | ~150–165 kB/s (~25–28 s), all 200, no resume |
 | Install into the other slot | ~16.5 s |
 | Boot check after an OTA / a switch (trial) | lease ~0.6–0.9 s after the confirm, link up ~3.5 s later |
-| `ext_ram.dummy` (2026-10-05) | v2 2686944 (41 pages, **712 B** text headroom); v1 2621408 (40 pages, ~32 kB) |
+| `ext_ram.dummy` | the page count a build may reach is in `config/image_budget.json`, checked by `python3 tools/check_image_budget.py --rev v2` |
 
 ## Limits
 
@@ -552,7 +552,6 @@ switch back), which has never run on hardware.
   `--remove-extra`, in CI as locally.
 - **A kit named like a revision** (`v3`) would break the release file names --
   `ci_matrix.py` and CMake refuse it.
-- **v2 is 712 B from its next 64 kB PSRAM page** (`ext_ram.dummy`, 2026-10-05;
-  v1 is in its 40th page with ~32 kB): check
-  `xtensa-esp32s3-elf-size -A build_v2/CrossPad.elf | grep -E 'flash.text|ext_ram.dummy'`
-  after adding code.
+- **The image is close to its next 64 kB PSRAM page**: run
+  `python3 tools/check_image_budget.py --rev v2` after adding code (CI runs
+  it on every build).

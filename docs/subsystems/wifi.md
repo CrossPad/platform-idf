@@ -790,8 +790,8 @@ it (without it esp-mqtt refuses `wss://` at runtime).
   dropped by the attempt fence (see "Scan").
 - **A TLS client is paid in PSRAM.** Linking `esp_http_client` with the full
   certificate bundle costs 192 kB and the board loses its kit list on every
-  boot (see "TLS"). Check `xtensa-esp32s3-elf-size -A build_v2/CrossPad.elf | grep
-  ext_ram.dummy` against 2949088 after touching the network code.
+  boot (see "TLS"). Run `python3 tools/check_image_budget.py --rev v2`
+  after touching the network code.
 
 ## HIL scenario `wifi`
 

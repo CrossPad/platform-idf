@@ -34,7 +34,8 @@ kits give way. Arrange's ADD TRACK is AUDIO / KITS, and KITS is Perf, Drums,
 Slice or Pitch, a kit picked from the browser's list of its kind
 (`IKitPicker::open(..., KitList)`). With Pitch armed the fingers play the
 instrument and the song's route-0 notes still reach the kit (`PitchFingers`).
-Measured (`tools/hil_perf_song.py --only C`): ~760 us of work a 1451 us block,
+Measured (`tools/hil_perf_song.py --only C`): ~760 us of work a 1451 us block
+(~850 in the run [audio-song.md](../subsystems/audio-song.md) records),
 no underruns, a few single passes over the block a minute. Slice filter and
 sample position are next.
 Details: [docs/subsystems/sample-tools.md](../subsystems/sample-tools.md).

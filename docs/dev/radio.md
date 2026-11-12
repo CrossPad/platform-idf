@@ -10,7 +10,7 @@ Browser companion control shares NimBLE: custom GATT service `7e400001-b5a3-f393
 NimBLE, both roles, routed through the same `MidiInputHandler` as every other
 transport (`components/crosspad-platform-idf/EspBleMidi.{hpp,cpp}`, wiring in
 `main/midiCallbacks.cpp`). Lazy-started after boot per `wireless.enableBLE`.
-**Cost: ~30–60 kB of internal RAM while running** — with BLE up the launcher sits
+**Cost: ~40 kB of internal RAM while running, plus ~36 kB of static DRAM** — with BLE up the launcher sits
 at ~8 kB free, which is why `v1.0.0-rc1` ships it off and why anything that needs
 an internal stack (audio tasks, `fx_worker`) must be checked against `MEM` /
 `MEM_BLOCKS`. Off-device: `BLE_ENABLE 0|1` (persisted — `crosspad-hil ble enable off`

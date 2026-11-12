@@ -312,15 +312,13 @@ from the build before it (launcher baseline then 490 352 B free):
 Stacks seen on the board: check job 4.3 kB free, download 2.8-2.9 kB, install 2.9 kB,
 `wifi_ctl` 2.2 kB.
 
-**Image size.** The v2 image's `.flash.text` sits just under a 64 kB page
-boundary (2 031 616 B). Core's Store cache filter is a constant JSON document
+**Image size.** The v2 image's `.flash.text` sits close to a 64 kB page
+boundary. Core's Store cache filter is a constant JSON document
 parsed by the `deserializeJson(const char*, size_t)` the catalog parser already
-links, not 17 proxy chains (986 B of text, enough to cost a page). As of
-2026-10-05 `.flash.text` is **2 030 904 B, 712 B under the boundary**:
-`ext_ram.dummy` v2 2 686 944 (41 pages), v1 2 621 408 (40 pages; text 1 933 644 B,
-~32 kB headroom). Check `xtensa-esp32s3-elf-size -A build_v2/CrossPad.elf | grep
--E 'flash.text|ext_ram.dummy'` after adding code to v2: the next 712 B cost the
-launcher 64 kB.
+links, not 17 proxy chains (986 B of text, enough to cost a page). Run
+`python3 tools/check_image_budget.py --rev v2` after adding code to v2:
+a page crossed costs the launcher 64 kB. The page count a build may reach is in
+`config/image_budget.json`.
 
 ## ui_tile_grid
 
