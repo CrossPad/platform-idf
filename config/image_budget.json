@@ -1,0 +1,7 @@
+{
+  "about": "Image size is PSRAM: .flash.text and .flash.rodata are copied there at boot in 64 kB pages (.ext_ram.dummy), so a page the image grows is 64 kB the UI loses. tools/check_image_budget.py fails a build of the full kit that needs more pages than listed. Raising a number is a decision: do it in the pull request that needs it, with the launcher's free PSRAM measured (crosspad-hil mem).",
+  "page_bytes": 65536,
+  "revisions": {
+    "v2": {"ext_ram_pages": 51}
+  }
+}
