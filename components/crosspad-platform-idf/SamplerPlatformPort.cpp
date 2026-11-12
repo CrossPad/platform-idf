@@ -55,6 +55,8 @@
 #include <cstring>
 #include <string>
 #include <sys/stat.h>
+#include "sample_player_port.hpp"
+#include "audio_rt.h"
 
 static const char * TAG = "GUI";
 
@@ -136,19 +138,6 @@ static void platform_startLoadKit(int kitId, bool onlyModified) {
     // froze the UI into the task watchdog. The load task owns it now.
     crosspad_sampler::kit_load_task_start(onlyModified, kitId);
 }
-
-extern void sample_player_port_flush_files(void);
-extern std::atomic<uint32_t> g_engine_noblock, g_engine_underrun;   /* sample_player_port.cpp */
-extern bool sample_player_pad_sounding(uint8_t pad);
-extern std::atomic<uint32_t> g_rt_gap_max_us;                       /* audio_task.cpp */
-extern std::atomic<uint32_t> g_bg_pass_max_us;                      /* audio_module.cpp */
-extern std::atomic<uint32_t> g_port_stream_fopen;                   /* sample_player_port.cpp */
-extern std::atomic<uint32_t> g_port_fopen_max_us;                   /* sample_player_port.cpp */
-extern std::atomic<uint32_t> g_port_stream_bytes, g_port_mutator_bytes; /* sample_player_port.cpp */
-extern std::atomic<bool> g_port_loader_hurry;                          /* sample_player_port.cpp */
-extern void sample_player_pad_starting(uint8_t pad);
-extern void sample_player_pad_forget_voices(uint8_t pad);
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
 
 /* Hits that arrived while their pad was being restructured: held, then
  * played once the pad is back — late by what was left of the reload rather
@@ -991,7 +980,6 @@ static void platform_wf_free(void* ptr) {
 // into an engine call.
 
 static void* s_samplePlaybackSub = nullptr;
-extern std::atomic<uint32_t> g_note_req_us[128];  /* sample_player_port.cpp */
 /* The low 32 bits of esp_timer, never 0 (0 = no request outstanding). */
 static inline uint32_t note_req_stamp()
 {

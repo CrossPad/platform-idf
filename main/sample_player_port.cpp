@@ -42,12 +42,12 @@
 #include <atomic>
 #include <sys/stat.h>
 #include <algorithm>
+#include "sample_player_port.hpp"
+#include "audio_rt.h"
 
 
 bool sample_player_any_sounding(void);
 /* weight 1 = the kit loader; a cosmetic reader passes more and waits longer. */
-void sample_player_port_yield_to_streamer(uint32_t weight);
-extern std::atomic<uint32_t> g_bg_pass_last_us;   /* audio_module.cpp */
 
 
 /* A path read through open_resolved() lands in "the open file" of its task's
@@ -245,7 +245,6 @@ static void drain_deferred(void)
 /* Who reaches into the file port, by task. Every open, seek and read is
  * meant to come from audio_bg (streaming) or a mutator holding the file
  * mutex; a caller outside those two is a race with the stream. */
-struct PortCallers { uint32_t audio_bg; uint32_t other; char lastOther[16]; };
 PortCallers g_port_opens = {};
 PortCallers g_port_seeks = {};
 PortCallers g_port_closes = {};
@@ -391,7 +390,6 @@ EXT_RAM_BSS_ATTR static UnderrunAt s_ur;
 static volatile bool s_urTaken;               /* s_ur holds one not yet printed */
 static volatile uint8_t s_urEnded;            /* how many of its s_ur.end[] are in */
 #endif /* CONFIG_CROSSPAD_SAMPLER_MARCEL */
-extern std::atomic<uint32_t> g_bg_pass_mark_us;   /* audio_module.cpp */
 /* The streamer's pass under way, written by audio_bg only. */
 static uint16_t s_passYld, s_passFb;
 static uint32_t s_passReadMaxUs;              /* its longest read() of a piece, FAT lock wait included */
@@ -1285,7 +1283,6 @@ void sample_player_port_engine_started(void)
  * cannot tell "the pad below sounds" from "the wrong note arrived". */
 #include <atomic>
 #include "esp_timer.h"
-struct EngineNoteEvent { uint8_t note; uint8_t wavIdx; uint32_t ms; };
 EngineNoteEvent g_engine_last[8];
 std::atomic<uint32_t> g_engine_last_count{0};
 
@@ -1348,7 +1345,6 @@ bool sample_player_any_sounding(void)
  * piece a kit under heavy play took 17 s to land, and a swap that never
  * lands is its own kind of dropout. */
 std::atomic<bool> g_port_loader_hurry{false};
-extern std::atomic<uint32_t> g_bg_pass_mark_us;   /* audio_module.cpp */
 
 /* A song streaming from the card mixes every track into one ring ahead of
  * playback (core SongEngine, kSongRingFrames): below 16384 frames, a bulk reader

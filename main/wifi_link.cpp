@@ -21,8 +21,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
-
-extern crosspad::CrosspadStatus status;
+#include "app_globals.h"
 
 using crosspad::WifiFail;
 using crosspad::WifiLinkState;

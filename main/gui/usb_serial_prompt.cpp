@@ -22,8 +22,7 @@ static const char *TAG = "usb_serial_prompt";
 #include "CrosspadPlatform.hpp"
 #include "crosspad/status/CrosspadStatus.hpp"
 #include <atomic>
-
-extern crosspad::CrosspadStatus status;
+#include "app_globals.h"
 
 static constexpr uint32_t kPromptTimeoutMs = 30000;
 

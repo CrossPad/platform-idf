@@ -53,20 +53,9 @@ void kit_engines_idle(void)
 #include "SamplePlayerAccess.hpp"
 
 #include <ml_smpl_stream_ply.h>
+#include "sample_player_port.hpp"
 
 static const char *TAG = "EngineHandoff";
-
-/* sample_player_port.cpp: what the library's memory hooks have moved, so
- * DeInit's semantics can be read off the console rather than assumed. */
-extern uint32_t g_marcel_malloc_bytes, g_marcel_malloc_count;
-extern uint32_t g_marcel_fast_bytes, g_marcel_fast_internal_bytes;
-extern uint32_t g_marcel_free_bytes, g_marcel_free_count;
-extern uint32_t g_marcel_free_untracked, g_marcel_blocks_lost;
-extern void sample_player_port_forget_blocks(void);
-extern void sample_player_port_flush_files(void);
-extern void sample_player_port_close_library_files(void);
-extern void sample_player_port_engine_started(void);
-extern void sample_player_port_set_poly_cap(uint8_t cap);
 
 /* The library's memory, chosen here: every sample it sets up takes a first
  * block of kStartBlockBytes and stream blocks of kBlockBytes, all from the
@@ -100,8 +89,6 @@ void engine_set_reclaim_hook(engine_reclaim_fn fn, void *ctx)
 /* The voice cap the port gives SampleStreamPlayer_SetMaxPolyphony() after
  * every Init(). These two are other names for the same knob: SMPL_PEAK
  * reports what is in force, SMPL_POLY overrides it. */
-extern uint8_t sample_player_port_poly(void);
-
 extern "C" uint8_t marcel_engine_poly(void) { return sample_player_port_poly(); }
 
 extern "C" void marcel_engine_set_poly(uint8_t maxPoly)

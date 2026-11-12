@@ -27,14 +27,12 @@
 #include "freertos/idf_additions.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "sample_player_port.hpp"
 
 /* main/audio_route_control.cpp: hold a codec's ADC on its own input (the
  * mics, the jack) while the tools listen to it; the capture preset's choice
  * comes back when the last claim on it goes. */
 extern "C" bool sample_tools_adc_claim(uint8_t codec, bool on);
-/* Defined in main (sample_player_port.cpp): makes a bulk card reader or
- * writer give way to the streamer while pads are sounding. */
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
 
 namespace crosspad {
 namespace {

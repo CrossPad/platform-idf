@@ -88,3 +88,7 @@ void sequencer_poll_from_render(bool on);
 void sequencer_poll_now();
 
 } // namespace crosspad
+
+/* LVGL thread, once the first screen is up: the desk a boot migrated, saved
+ * back once. */
+extern "C" void mixer_state_save_deferred(void);

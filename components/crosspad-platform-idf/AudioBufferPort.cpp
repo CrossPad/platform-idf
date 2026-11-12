@@ -25,12 +25,7 @@ extern "C" {
 #include "esp_log.h"
 
 #include <atomic>
-
-extern "C" void     audio_rt_set_queue_frames(uint32_t frames);
-extern "C" uint32_t audio_rt_queue_frames(void);
-extern "C" bool     audio_rt_queue_supported(uint32_t block, uint32_t queue);
-/* main/audio/audio_task.cpp */
-extern "C" bool     audio_rt_park(bool park, uint32_t timeout_ms);
+#include "audio_rt.h"
 
 namespace crosspad {
 namespace {

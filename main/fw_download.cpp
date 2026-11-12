@@ -25,8 +25,7 @@
 #include "fw_updater.h"
 #include "fw_verify.h"
 #include "psram_json_allocator.h"
-
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
+#include "sample_player_port.hpp"
 
 static const char* TAG = "fw_download";
 static constexpr int kSha256NotSha224 = 0;

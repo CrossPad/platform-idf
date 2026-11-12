@@ -78,6 +78,7 @@
 #include "freertos/idf_additions.h"
 #include "nvs.h"
 #include <string>
+#include "sample_player_port.hpp"
 
 /* Boot-time and settings-save code, built for size: this file is -O2 for
  * the nodes it constructs (their inline mix() is compiled here), not for
@@ -93,8 +94,6 @@ static const uint8_t PAD_TO_LED_MAP[16] = {
     12, 11, 4, 3, 13, 10, 5, 2, 14, 9, 6, 1, 15, 8, 7, 0
 };
 
-/* main/sample_player_port.cpp: the file cache's handles under a folder closed. */
-extern void sample_player_port_forget_dir(const char* dir);
 /* main/lv_async_safe.cpp: lv_async_call under the display lock, never waits. */
 extern "C" void lv_async_call_locked(lv_async_cb_t cb, void *user_data);
 

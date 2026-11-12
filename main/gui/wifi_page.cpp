@@ -32,8 +32,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/idf_additions.h"
-
-extern lv_indev_t * indev_encoderTop;
+#include "app_globals.h"
 
 /* One page at a time (Settings and network mode never share a boot), so the
  * state is static. In Settings the page is deleted when the category closes:

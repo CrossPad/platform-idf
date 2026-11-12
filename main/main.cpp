@@ -135,6 +135,10 @@ lv_indev_t *indev_touchpad = nullptr;
 #include "cdc_line.h"
 #include "charge_overlay.h"   // charge-while-off pad gauge + "Charging" screen
 #include "app/settings/settings_app.h"
+#include "sample_player_port.hpp"
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#include "include/usb_audio_bridge.h"
+#endif
 #ifdef BSP_BOARD_CROSSPAD_S3
 #include "audio_task.h"
 #include "performance_monitor.h"
@@ -145,14 +149,9 @@ lv_indev_t *indev_touchpad = nullptr;
 
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
 extern void smpl_stream_ply_test(void);
-extern void sample_player_port_report_errors(void);
 #else
 #include "engine_arena.hpp"
 #include "SamplerEnginePort.hpp"
-#endif
-extern void sample_player_port_stage_init(void);
-#ifdef CONFIG_IDF_TARGET_ESP32S3
-extern "C" void usb_audio_bridge_report(void);
 #endif
 
 

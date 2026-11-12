@@ -17,9 +17,8 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "crosspad-gui/components/app_orchestrator.h"
+#include "app_globals.h"
 
-extern lv_group_t * encoderTop_group;
-extern lv_indev_t * indev_encoderTop;
 // styleButton comes from crosspad-gui (via gui.h -> crosspad_gui.h -> styles.h)
 
 static const char * TAG = "ota_overlay";

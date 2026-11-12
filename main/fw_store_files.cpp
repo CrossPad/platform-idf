@@ -19,8 +19,7 @@
 #include "fw_http.h"
 #include "fw_image_desc.h"
 #include "psram_json_allocator.h"
-
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
+#include "sample_player_port.hpp"
 
 static const char* TAG = "fw_store_files";
 static constexpr uint8_t kLvImageMagic = 0x19;    // LV_IMAGE_HEADER_MAGIC

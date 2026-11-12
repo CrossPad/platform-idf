@@ -7,8 +7,7 @@
 #include "usb_transfer.h"
 #include "crosspad-gui/components/power_gesture.h"
 #include "crosspad-gui/components/ui_modal.h"
-
-extern lv_group_t * encoderTop_group;
+#include "app_globals.h"
 
 /* The MSC callbacks run on the TinyUSB task and only touch atomics; this timer
  * is the single reader, on the LVGL thread. Nothing here goes near the card. */

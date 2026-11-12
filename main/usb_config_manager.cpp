@@ -24,10 +24,9 @@
 
 #include <atomic>
 #include <string.h>
+#include "audio_rt.h"
 
 static const char *TAG = "usb_cfg_mgr";
-
-extern std::atomic<uint32_t> g_rt_gap_max_us;   /* audio_task.cpp */
 
 static usb_mode_t s_current_mode = USB_MODE_DEFAULT;
 static bool s_initialized = false;

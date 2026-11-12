@@ -43,7 +43,8 @@ crosspad::PatternSequencer& getSequencer();
 #include <atomic>
 #include "crosspad/platform/PlatformServices.hpp"
 #include "processMIDI.hpp"
-extern "C" void audio_rt_note_live(void);   // main/audio/audio_task.cpp
+#include "audio_rt.h"
+#include "app_globals.h"
 
 
 
@@ -70,8 +71,6 @@ MIDI_NAMESPACE::MidiInterface<MIDI_NAMESPACE::EspTinyUsbMidiTransport, EspMidiSe
 static std::atomic<bool> s_usbMidiBegun{false};
 
 
-extern CrosspadSettings *settings;
-extern CrosspadStatus status;
 
 //////   Transport wrappers (platform-specific, handle channel +1 conversion)   //////
 

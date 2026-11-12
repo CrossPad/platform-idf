@@ -34,14 +34,13 @@
 #include "crosspad/settings/SettingsIo.hpp"
 #include "crosspad/settings/SettingsScope.hpp"
 #include "crosspad-sampler/logic/kit_load_task.hpp"
+#include "sample_player_port.hpp"
 
 static const char *TAG = "fw_slots";
 
-/* Not declared in a header (fw_library.cpp and sample_player_port.cpp both
- * forward-declare it locally); every bulk reader of the card yields to the
- * streamer between pieces of work, and hashing a whole package image before
- * the engine is stopped is exactly that. */
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
+/* Hashing a whole package image before the engine is stopped is a bulk read of
+ * the card: it yields to the streamer between pieces
+ * (sample_player_port_yield_to_streamer). */
 
 static constexpr const char *kFwSlotsNs = "fw_slots";
 

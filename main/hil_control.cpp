@@ -152,17 +152,6 @@ crosspad::PatternSequencer& getSequencer();
 #include "instrument_host.h"
 /* The sdr kit's verbs (components/crosspad-sdr), absent from every other image. */
 extern "C" bool sdr_verbs_handle(const char *cmd, void (*reply)(const char *text)) __attribute__((weak));
-extern "C" uint32_t audio_rx_skips(void);
-extern "C" uint32_t audio_rt_unpaced_passes(void);
-extern "C" void     audio_rt_prof_enable(bool on);
-extern "C" void     audio_rt_prof_read(char *out, uint32_t cap);
-extern "C" void     audio_rt_set_queue_frames(uint32_t frames);
-extern "C" uint32_t audio_rt_queue_frames(void);
-extern "C" uint32_t audio_rt_block_frames(void);
-extern "C" uint32_t audio_rt_pacer_resyncs(void);
-extern "C" uint32_t audio_rt_tx_underruns(void);
-extern "C" void     audio_mixer_prof_enable(bool on, void *mixer);
-extern "C" void     audio_mixer_prof_read(void *mixer, char *out, uint32_t cap);
 #include "PitchedSampleNode.hpp"
 #include "crosspad/dsp/FftFactory.hpp"
 #include "crosspad/dsp/PortableFft.hpp"
@@ -175,40 +164,22 @@ extern "C" void     audio_mixer_prof_read(void *mixer, char *out, uint32_t cap);
 #include "performance_monitor.h"
 #include "midi_clock.h"
 #include "crosspad-gui/components/boot_splash.h"
+#include "audio_rt.h"
+#include "include/app_globals.h"
+#include "sample_player_port.hpp"
+#include "SamplerPlatformPort.hpp"
 
 static const char *TAG = "hil_control";
-
-extern crosspad::CrosspadStatus status;
 
 std::atomic<uint32_t> g_hil_pad_press_count{0};
 std::atomic<uint32_t> g_hil_pad_release_count{0};
 std::atomic<uint32_t> g_hil_note_on_count{0};
 std::atomic<uint16_t> g_hil_last_note_on{0};
-extern std::atomic<uint32_t> g_hil_stm_press_count;
-extern std::atomic<uint32_t> g_hil_stm_at_count;
 extern std::atomic<uint32_t> g_stm_uart_ovf;      /* stm32_uart.cpp */
 extern std::atomic<uint32_t> g_stm_sbuf_drop;     /* EspStm32MidiTransport.cpp */
 extern std::atomic<uint32_t> g_usb_midi_tx_ok;    /* midi_esp_tinyusb_transport.cpp */
 extern std::atomic<uint32_t> g_usb_midi_tx_fail;
-extern std::atomic<uint8_t>  g_hil_stm_last_note;
-extern std::atomic<uint8_t>  g_hil_stm_last_pad;
-struct EngineNoteEvent { uint8_t note; uint8_t wavIdx; uint32_t ms; };
-extern EngineNoteEvent g_engine_last[8];
-struct PortCallers { uint32_t audio_bg; uint32_t other; char lastOther[16]; };
-extern PortCallers g_port_opens, g_port_seeks, g_port_closes, g_port_reads;
-extern uint32_t g_port_defer, g_port_defer_lost, g_port_evict;
-extern uint32_t g_port_staged, g_port_stage_fallback;   /* sample_player_port.cpp, since boot */
-extern uint32_t g_port_stream_staged, g_port_stream_fb, g_port_stream_read_max_us;
-extern uint32_t g_late_max_ms, g_late_lost, g_reload_win_max_us;   /* SamplerPlatformPort.cpp: held hits, since the last SMPLLAST */
-extern uint32_t g_port_pf_hits, g_port_pf_misses;   /* sample_player_port.cpp, since boot */
-extern std::atomic<uint32_t> g_port_stream_bytes;
-extern std::atomic<uint32_t> g_note_lat_last_us, g_note_lat_max_us, g_note_lat_count;
-extern std::atomic<uint32_t> g_note_lat_sum_us;
-extern std::atomic<uint32_t> g_engine_noblock, g_engine_underrun;
-extern std::atomic<uint32_t> g_rt_overruns;   /* audio_task.cpp */
-extern std::atomic<uint32_t> g_engine_last_count;
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
-extern void sample_player_port_set_poly_cap(uint8_t cap);   /* sample_player_port.cpp */
 /* Free sample slots of whichever engine holds the kit (-1: none does). */
 static int hil_free_slots(void)
 {
@@ -1405,8 +1376,6 @@ static void handle_touch_trace(const char *arg)
 // Who owns encoder navigation. An app that made its own lv_group must hand
 // the encoder back on teardown, or the launcher is unnavigable until reboot —
 // and nothing else can observe that from outside.
-extern lv_group_t *app_group;          // launcher group (gui.cpp)
-extern lv_indev_t *indev_encoderTop;   // navigation encoder (display.h)
 
 /* A finger the bench does not have: TOUCH_DRAG x1 y1 x2 y2 ms [rest_ms]
  * [hold_ms] presses, holds (a long press, then a drag), moves, rests and lets
@@ -1579,9 +1548,6 @@ static void async_enc_press(void *)
     // held longer, the long press) itself.
     encoderTop_hil_press_until().store(lv_tick_get() + s_enc_press_ms);
 }
-
-extern std::atomic<uint8_t> g_hil_last_pwr_state;
-extern std::atomic<uint32_t> g_hil_pwr_state_count;
 
 // Why the pads are dark: painted black, brightness zero, an animation holding
 // the strip, or no power-state callback ever arrived to repaint.
@@ -1858,8 +1824,6 @@ static bool mem_walker(walker_heap_into_t heap, walker_block_info_t block, void 
     (void)heap;
     return true;
 }
-
-extern uint32_t g_padanim_worst[5];   /* main.cpp */
 
 /* One row per registered worker job; then pad_anim's slowest run since the
  * previous WORKER, split (main.cpp g_padanim_worst; no name=, so a job-table
@@ -4658,7 +4622,6 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         /* SMPL_PACE [ms]: how long the kit loader and the other bulk readers
          * wait for a native streaming pass to end; 0 = they do not give way.
          * Until reboot; the A/B for it. */
-        extern std::atomic<uint32_t> g_port_pace_ms;   /* sample_player_port.cpp */
         if (sscanf(cmd + 9, " %d", &a) == 1 && a >= 0 && a <= 1000) g_port_pace_ms.store((uint32_t)a);
         char out[32];
         snprintf(out, sizeof(out), "SMPLPACE: ms=%u\r\n", (unsigned)g_port_pace_ms.load());

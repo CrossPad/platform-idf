@@ -25,13 +25,9 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include "sample_player_port.hpp"
 
 /* main/sample_player_port.cpp */
-extern uint8_t *sample_player_port_stage_take(bool urgent);
-extern bool sample_player_port_direct_io(void);
-extern void sample_player_port_stage_give(void);
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
-extern void sample_player_port_forget_file(const char *path);
 
 namespace {
 

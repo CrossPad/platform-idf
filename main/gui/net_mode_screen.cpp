@@ -22,9 +22,7 @@
 #include "crosspad-gui/components/power_gesture.h"
 #include "crosspad-gui/components/ui_wifi_bars.h"
 #include "crosspad-gui/widgets/gui_helpers.h"
-
-extern lv_group_t * encoderTop_group;
-extern lv_indev_t * indev_encoderTop;
+#include "app_globals.h"
 
 static const char * TAG = "net_screen";
 

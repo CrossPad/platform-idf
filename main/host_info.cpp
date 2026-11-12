@@ -22,8 +22,7 @@
 #include "crosspad/fw/Semver.hpp"
 #include "crosspad/platform/IClock.hpp"
 #include "crosspad/status/CrosspadStatus.hpp"
-
-extern crosspad::CrosspadStatus status;
+#include "app_globals.h"
 
 static_assert(sizeof(crosspad::CrosspadStatus::fwLatest) >= FWU_VERSION_LEN,
               "a version the updater persists must fit the status field");

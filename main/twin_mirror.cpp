@@ -12,8 +12,7 @@
 
 #include "crosspad/platform/IClock.hpp"
 #include "crosspad/status/CrosspadStatus.hpp"
-
-extern crosspad::CrosspadStatus status;
+#include "include/app_globals.h"
 
 static const char *TAG = "twin_mirror";
 

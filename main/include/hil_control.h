@@ -64,6 +64,19 @@ extern std::atomic<uint32_t> g_hil_note_on_count;
 extern std::atomic<uint16_t> g_hil_last_note_on;
 extern std::atomic<uint32_t> g_hil_pad_inject_drop; /* hits refused, queue full */
 
+/* Physical presses, counted separately from CDC-injected ones (midiCallbacks.cpp). */
+extern std::atomic<uint32_t> g_hil_stm_press_count;
+extern std::atomic<uint32_t> g_hil_stm_at_count;   /* poly aftertouch samples decoded from the STM */
+extern std::atomic<uint8_t>  g_hil_stm_last_note;
+extern std::atomic<uint8_t>  g_hil_stm_last_pad;
+
+/* Last power state the STM pushed, and how many arrived (main.cpp). */
+extern std::atomic<uint8_t>  g_hil_last_pwr_state;
+extern std::atomic<uint32_t> g_hil_pwr_state_count;
+
+/* The slowest pad_anim run since the last WORKER verb (main.cpp). */
+extern uint32_t g_padanim_worst[5];
+
 /* A pad hit from the bench (CDC PAD_*, SysEx 0x1D 0x08/0x09). Queued to the
  * hil_pad task and played there through crosspad::control::applyPadInput(),
  * as the simulator's pad_* verbs are; returns false when the queue is full. */
@@ -91,10 +104,6 @@ void hil_stack_mark(void);
 /* Returns the stack that command left free, in bytes. */
 uint32_t hil_stack_note(const char *line, size_t len);
 
-/* False while listKits() is walking the card (main.cpp: the "kit_scan" task, and
- * the rescan an SD reinsert starts). The scan grows the kit vector in place, so
- * a reader that iterates it mid-scan walks a moved buffer: KIT_LIST and KIT_LOAD
- * answer "ERR scanning" instead of racing it. */
-extern std::atomic<bool> g_kit_scan_done;
+#include "app_globals.h"
 
 #endif

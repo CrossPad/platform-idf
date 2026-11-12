@@ -41,8 +41,7 @@
 #include "net_mode.h"
 #include "usb_transfer.h"
 #include "wifi_link.h"
-
-extern crosspad::CrosspadStatus status;
+#include "app_globals.h"
 
 static const char* TAG = "fw_updater";
 
@@ -143,15 +142,12 @@ static int64_t s_launcherSinceUs;                      // the idle job's own, on
 /* The boot check of a trial boot, held until the image has confirmed itself:
  * a crash in the check (the radio, TLS) would otherwise roll a good image back. */
 static std::atomic<bool> s_bootCheckHeld{false};
-/* main.cpp: the boot's kit scan has finished. The boot check waits for it:
- * the WiFi radio and the scan's file handles asked internal RAM for the same
- * moment, and newlib aborted on a FILE lock it could not have (kit_scan,
- * lock_init_generic, about one boot in five -- 2026-10-28). */
-extern std::atomic<bool> g_kit_scan_done;
-/* main.cpp: a boot that mounted no card has probed it once more. A card that
- * came up a second late was mounted by the hotplug probe and rescanned with
- * the boot check's radio up -- the same abort, in kit_rescan (2026-10-30). */
-extern std::atomic<bool> g_sd_probed;
+/* The boot check waits for the boot's kit scan (g_kit_scan_done): the WiFi
+ * radio and the scan's file handles asked internal RAM for the same moment,
+ * and newlib aborted on a FILE lock it could not have (kit_scan,
+ * lock_init_generic, about one boot in five). It waits for g_sd_probed too: a
+ * card that came up a second late was mounted by the hotplug probe and
+ * rescanned with the boot check's radio up -- the same abort, in kit_rescan. */
 static bsp_worker_job_t* s_idleJob;
 
 static SemaphoreHandle_t s_lock;

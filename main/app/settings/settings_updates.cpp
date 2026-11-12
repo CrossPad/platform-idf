@@ -14,8 +14,7 @@
 #include "crosspad-gui/components/settings_ui.h"
 #include "crosspad-gui/components/ui_toast.h"
 #include "crosspad/status/CrosspadStatus.hpp"
-
-extern crosspad::CrosspadStatus status;
+#include "app_globals.h"
 
 /* The switches and the channel are saved by the updater's own writer
  * (fw_updater.cpp persist()), so the LVGL thread never waits for flash. A

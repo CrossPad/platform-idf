@@ -11,8 +11,7 @@
 #include "crosspad/status/CrosspadStatus.hpp"
 #include "crosspad/stm32/reg_map.h"
 #include "stm32_i2c.h"
-
-extern crosspad::CrosspadStatus status;
+#include "include/app_globals.h"
 
 static const char *TAG = "PWR_BTN";
 

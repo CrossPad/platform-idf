@@ -40,23 +40,16 @@
 #include <string>
 #include <cstdio>
 #include <cstring>
+#include "sample_player_port.hpp"
 
-/* main/sample_player_port.cpp. The accounting every diagnostic already reads
- * -- SMPL_LAST's last eight events and the pad-to-sound latency -- belongs to
+/* The accounting every diagnostic already reads (sample_player_port.hpp:
+ * SMPL_LAST's last eight events and the pad-to-sound latency) belongs to
  * whichever engine is playing, not to the prebuilt one. Without this the
  * native engine's note path is invisible to every verb on the board, and the
  * one claim this design rests on (a resident head makes note-on a pointer
- * assignment) cannot be checked at all. */
-struct EngineNoteEvent { uint8_t note; uint8_t wavIdx; uint32_t ms; };
-extern EngineNoteEvent g_engine_last[8];
-extern std::atomic<uint32_t> g_engine_last_count;
-/* 32-bit, all of them: on_voice_start() runs in the render, and a 64-bit
- * atomic is not lock-free on this core (libatomic takes a lock for it). The
- * request stamp is esp_timer's low 32 bits, 0 meaning none; differences of
- * them are right across the wrap. */
-extern std::atomic<uint32_t> g_note_req_us[128];
-extern std::atomic<uint32_t> g_note_lat_last_us, g_note_lat_max_us, g_note_lat_count;
-extern std::atomic<uint32_t> g_note_lat_sum_us;
+ * assignment) cannot be checked at all. The counters are 32-bit, all of
+ * them: on_voice_start() runs in the render, and a 64-bit atomic is not
+ * lock-free on this core (libatomic takes a lock for it). */
 
 extern "C" {
 /* main/sample_player_port.cpp -- the handle cache, the per-task file slots,
