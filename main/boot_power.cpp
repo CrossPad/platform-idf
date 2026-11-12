@@ -1,102 +1,30 @@
 /* Power and restart: the soft-off boot gate, the qualified wake, what the STM's
  * power states do to the ESP, and the restarts into the ROM bootloader. */
-#include "sd_sector_io.h"
-#include <errno.h>
-#include <dirent.h>
-#include <sys/stat.h>
-#include "esp_partition.h"
-#include "esp_log.h"
-#include "esp_check.h"
-#include "esp_timer.h"
-#include "esp_system.h"
 #include "esp_sleep.h"
-#include <algorithm>
-#include <iterator>
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #include "soc/rtc_cntl_reg.h"
 #include "soc/system_reg.h"
 #endif
 #include "nvs_flash.h"
-#include "nvs.h"
-#include "imu_midi.h"
-#include "NvsSettingsStore.hpp"
-#include "OutputLevelsPort.hpp"
-#include "audio/audio_task.h"
-#include "freertos/idf_additions.h"
-#include "esp_memory_utils.h"
-#include "esp_heap_caps.h"
-#include "esp_attr.h"
-#include "bsp_worker.h"
-#include "bsp_ulp.h"
 #include "tinyusb.h"
-#include "tusb_cdc_acm.h"
-#include "tusb_console.h"
-#include "include/usb_descriptors.h"
-#include "include/usb_config_manager.h"
-#include "include/audio_route_control.h"
 #include "include/hil_control.h"
-#include "BleCompanion.hpp"
-#include "companion_sysex.h"
-#include "host_info.h"
-#include "usb_host_profile.h"
-#include "include/fw_updater.h"
-#include "include/cp_account.h"
-#include "include/cp_remote.h"
-#include "instrument_host.h"
-#include "wifi_creds.h"
-#include "wifi_link.h"
-#include "include/crosspad_deps.h"
-#include "include/reset_log.h"
 #include "include/power_button.h"
-#include "include/lv_async_safe.h"
-#include "include/file_transfer.h"
-#include "include/usb_transfer.h"
-#include "include/net_mode.h"
-#include "include/fw_slots.h"
-#include "include/fw_assets_sync.h"
 #include "bsp/esp-bsp.h"
 #include "bsp_sdmmc.h"
-#include "sdmmc_cmd.h"
-#include "driver/gpio.h"
 #include "driver/rtc_io.h"
-#include "esp_wifi.h"
-#include "esp_mac.h"
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #include "espnow.h"
 #include "espnow_utils.h"
 #endif
-#include <MIDI.h>
-#include "EspTinyUsbMidiTransport.h"
-#include "esp_vfs_fat.h"
-#include "esp_littlefs.h"
-#include "stm32_fw_update.h"
-#include "stm_fw_overlay.h"
-#include "CrossPad.h"
-#include "crosspad/app/AppRegistrar.hpp"
 #include "CrosspadPlatform.hpp"
-#include "crosspad/event/IEventBus.hpp"
 #include "crosspad/pad/PadManager.hpp"
-#include "crosspad/pad/PadLedController.hpp"
-#include "crosspad/led/ILedStrip.hpp"
-#include "crosspad/stm32/Stm32Manager.hpp"
 #include "stm32_pwr_sync.h"   // STM32 power-state IRQ callback (set_callback / ack)
 #include "stm32_i2c.h"        // Early wake qualification reads
 #include "stm32_reg_map.h"
-#include <atomic>    // PWR_STATE_* constants
-#include "stm32_hal_init.h"   // charger telemetry (SoC gauge for the status bar)
-#include "crosspad/kit/KitFolders.hpp"
-#include "crosspad/kit/PortableKitLoader.hpp"
-#include "crosspad/platform/PlatformServices.hpp"
-#include "crosspad-sampler/logic/kit_gate.hpp"
 #ifdef USE_LVGL
 #include "crosspad-gui/components/ui_toast.h"
 #endif
-#include "processMIDI.hpp"
-#include "ota_cdc.h"
-#include "cdc_line.h"
 #include "charge_overlay.h"   // charge-while-off pad gauge + "Charging" screen
-#include "app/settings/settings_app.h"
-#include "sample_player_port.hpp"
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 #include "include/usb_audio_bridge.h"
 #endif
@@ -111,7 +39,6 @@
 #include "engine_arena.hpp"
 #include "SamplerEnginePort.hpp"
 #endif
-#include "include/boot_power.h"
 
 static const char *TAG = "crosspad_main";
 
