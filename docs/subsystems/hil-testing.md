@@ -422,7 +422,7 @@ lost command is indistinguishable from a handler that ignored it.
 - **One read is not one command.** USB does not preserve the host's write
   boundaries; send faster than the prio-1 main loop drains `app_queue` and two
   commands arrive in one read. Every handler matches on a prefix, so
-  `cdc_dispatch_lines()` in `main/main.cpp` frames on newlines and carries a partial tail across
+  `cdc_dispatch_lines()` in `main/cdc_rx.cpp` frames on newlines and carries a partial tail across
   reads, dispatching each command separately. OTA is exempt: once `OTA_BEGIN`
   is accepted the stream is firmware bytes, where `0x0A` is data.
 - **An OTA over CDC can wait for a person.** Unless the Firmware app's

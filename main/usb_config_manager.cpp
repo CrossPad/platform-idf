@@ -25,6 +25,7 @@
 #include <atomic>
 #include <string.h>
 #include "audio_rt.h"
+#include "cdc_rx.h"
 
 static const char *TAG = "usb_cfg_mgr";
 
@@ -32,8 +33,6 @@ static usb_mode_t s_current_mode = USB_MODE_DEFAULT;
 static bool s_initialized = false;
 
 // Forward declaration — CDC callbacks are defined in main.cpp
-extern "C" void tinyusb_cdc_rx_callback(int itf, cdcacm_event_t *event);
-extern "C" void tinyusb_cdc_line_state_changed_callback(int itf, cdcacm_event_t *event);
 
 // Audio mode interface numbers (must match usb_descriptors_audio.c)
 #define UAC_SPK_ITF_NUM  3  // ITF_NUM_AUDIO_STREAMING_SPK

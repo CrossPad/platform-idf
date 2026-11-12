@@ -67,7 +67,9 @@ What an agent must keep in mind on top:
 
 ```
 main/
-├── main.cpp              ← app_main(), hardware init, FreeRTOS tasks
+├── main.cpp              ← app_main(): the boot as named stages in order, the command loop
+├── boot_power.cpp        ← soft-off gate, qualified wake, STM power states, restart into the bootloader
+├── cdc_rx.cpp            ← CDC receive: TinyUSB callback → command queue → line dispatch
 ├── display.h             ← LVGL task, crosspad-gui bootstrap, app registry init
 ├── include/gui.h         ← InitializeAppRegistry(), AddApps(), LoadMainScreen()
 ├── gui/
@@ -102,7 +104,7 @@ components/
 
 ## Init Flow (runtime)
 
-1. `app_main()` → BSP hardware init, WiFi/ESP-NOW, USB TinyUSB, NVS
+1. `app_main()` → the `boot_*()` stages of `main/main.cpp`, called in order (NVS and settings, USB, the platform singletons, the STM32 link and the wake gate, the card, the display, the engines). `Boot` says what kind of boot it is -- transfer mode, network mode, a charge boot, headless -- and `boot.normal()` is the ordinary one
 2. `CrosspadPlatform_Init(settings, status)` → Creates all crosspad-core singletons
 3. LVGL FreeRTOS task starts → `setupLVGL()` → `crosspad_gui::bootstrap()` → `InitializeAppRegistry()` → `AddApps()` → `LoadMainScreen()`
 4. User opens an app from the home screen -- the pad map (its pad, or More on pad 8; the default), the icon grid or the list, Settings → Display → Home screen (`CrosspadSettings::launcherStyle`, NVS `cfg_display/home_view`) -- → `app->start(container)` → `create_()` factory builds UI → `show_()` callback. With the pad map as home, MODE brings the map up over any app; with the grid or the list, MODE goes home. On the map the pads are buttons: a finger picks an app, plays nothing and is not recorded; a pattern and a host's MIDI keep sounding through the logic under it (`IPadLogicHandler::buttonsOnly()`, core 2.7.0).
@@ -295,7 +297,7 @@ already tore down.
 
 ## Power Button
 
-Timing lives in `main/power_button.cpp`; resolution in crosspad-gui
+Timing lives in `main/power_button.cpp` (the qualified wake at boot and the soft-off gate in `main/boot_power.cpp`); resolution in crosspad-gui
 `components/power_gesture.cpp` (`powerBack()`, `powerToggleQuickSettings()`),
 portable to the PC simulator.
 

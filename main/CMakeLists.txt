@@ -119,6 +119,8 @@ idf_component_register(
         "audio/audio_task.cpp"
         "audio/engine_handoff.cpp"
         "gui/gui.cpp"
+        "boot_power.cpp"
+        "cdc_rx.cpp"
         "hil_control.cpp"
         "hil_verbs_ui.cpp"
         "hil_verbs_twin.cpp"
