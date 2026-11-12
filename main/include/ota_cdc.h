@@ -48,6 +48,12 @@ void ota_user_respond(bool accepted);
 void ota_init(void);
 
 /**
+ * Register the OTA progress overlay (gui/ota_overlay.cpp) as the UI of an
+ * update over CDC. With a display, after ota_init().
+ */
+void ota_overlay_init(void);
+
+/**
  * @brief Check if an OTA transfer is currently in progress.
  */
 bool ota_is_active(void);

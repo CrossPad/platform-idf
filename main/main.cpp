@@ -998,22 +998,22 @@ static uint32_t sd_hotplug_job(void *)
     return bsp_sdcard_get_handle() != nullptr ? 1000 : retryDelayMs;
 }
 
-extern "C" void app_main(void)
-{
-    // Literal first statement: a trial boot (running image still
-    // ESP_OTA_IMG_PENDING_VERIFY) gets an RTC watchdog that resets the chip
-    // if fw_confirm_running() never disables it — a hang anywhere in this
-    // function, including before bsp_stm32_init() ever runs, still ends in
-    // the bootloader rolling back to the previous slot. No NVS, no heap, no
-    // scheduler dependency: see fw_slots.h.
-    fw_trial_watchdog_arm();
+/* What kind of boot this is. The two one-shot flags are read first; the rest
+ * is learned on the way and written by the stage that learns it. */
+struct Boot {
+    bool transferMode = false;   // the card is the host's (usb_transfer.h); no engine, no kits, no BLE
+    bool netMode = false;        // WiFi has the RAM (net_mode.h); no engine, no kits, no BLE
+    bool chargeMode = false;     // woken by a charger while off; known past the wake gate
+    bool headless = false;       // no display came up
+    bool recoveryHeld = false;   // pad 16 through the boot, acted on once the card is up
+    /* An ordinary boot: the launcher, the engines, the radios. */
+    bool normal() const { return !transferMode && !netMode && !chargeMode; }
+};
 
-    /* One-shot, and cleared by the read: the rest of the boot is shaped by
-     * this answer, and the next boot is normal whatever happens here. */
-    const bool transferMode = usb_transfer_boot_claim();
-    /* Network mode has the same one-shot shape (net_mode.h). Each request
-     * restarts at once, so at most one of the two flags is ever armed. */
-    const bool netMode = net_mode_boot_claim();
+/* The card's bounce buffer, NVS, the firmware slots and the settings every later
+ * stage reads. */
+static void boot_storage_and_settings(void)
+{
     /* The card's sector bounce, while internal RAM is still whole. */
     sd_bounce_init();
 
@@ -1035,7 +1035,11 @@ extern "C" void app_main(void)
 
     // Early, so overlays can persist changes before Settings is ever opened.
     RegisterSettingsUIPlatform();
+}
 
+/* The queue the command loop drains, and the three sources that wake it. */
+static void boot_command_queue(void)
+{
     /* 64 x 136 B: 9 kB, in PSRAM. The producer is the TinyUSB task's CDC
      * callback (a memcpy, no ISR), the consumer the main loop; neither needs
      * this storage internal, and BLE does. */
@@ -1056,9 +1060,14 @@ extern "C" void app_main(void)
         app_message_t wake{};
         xQueueSend(app_queue, &wake, 0);
     });
-    app_message_t msg;
+}
+
+/* USB in the profile this boot runs in. From here every restart stops USB DMA
+ * first. */
+static void boot_usb(Boot &boot)
+{
     usb_host_profile_init();   // before the first SOF the feedback is shaped for
-    ESP_ERROR_CHECK(usb_config_manager_init(transferMode ? USB_MODE_TRANSFER
+    ESP_ERROR_CHECK(usb_config_manager_init(boot.transferMode ? USB_MODE_TRANSFER
                                                          : USB_MODE_DEFAULT));
 #ifdef BSP_BOARD_CROSSPAD_S3
     /* From here on every esp_restart() -- OTA, slot switch, transfer and
@@ -1066,7 +1075,12 @@ extern "C" void app_main(void)
      * image is loaded. A panic's restart does not run shutdown handlers. */
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_register_shutdown_handler(usb_otg_hw_reset));
 #endif
+}
 
+/* crosspad-core's singletons and the services that hang off them. Needs the
+ * settings. */
+static void boot_platform(void)
+{
     settings->stmRouting.SetUsbPassThru(true);
 
     crosspad::CrosspadPlatform_Init(settings, &status);
@@ -1079,7 +1093,11 @@ extern "C" void app_main(void)
     midiCallbacks_init();
     crosspad::getPadManager().begin();
     hil_pad_inject_init();
+}
 
+/* The assets partition. Ahead of the STM link: the bundled STM image lives here. */
+static void boot_assets_fs(void)
+{
     // Ahead of the STM link: the bundled STM image lives here.
     ESP_LOGI(TAG, "Initializing LittleFS");
     esp_vfs_littlefs_conf_t lfs_conf = {
@@ -1092,8 +1110,13 @@ extern "C" void app_main(void)
         .grow_on_mount = false,
     };
     ESP_ERROR_CHECK(esp_vfs_littlefs_register(&lfs_conf));
+}
 
-    bool recoveryHeld = false;   // pad 16 through the boot, acted on once the card is up
+/* The STM32 link, the wake gate, and what only starts after an intentional wake.
+ * A charge boot is known only past the gate; it and the recovery pad are
+ * written into the boot. */
+static void boot_stm32_and_wake(Boot &boot)
+{
 #ifdef BSP_BOARD_CROSSPAD_S3
     // Black frame before reading the STM state, so an ESP-only USB reset
     // cannot light the pads while the STM is still in soft-off.
@@ -1112,7 +1135,7 @@ extern "C" void app_main(void)
     // ESP drives backlight + ARGB across the STM's low-power transitions.
     stm32_pwr_sync_set_callback(app_pwr_state_cb, nullptr);
     qualify_power_button_wake();
-    recoveryHeld = recovery_pad_held();
+    boot.recoveryHeld = recovery_pad_held();
     // Background services only after an intentional wake.
     crosspad::CrosspadPlatform_StartStm32(); // Start Stm32Manager/config sync
     crosspad::CrosspadPlatform_StartVibration(); // Probe + start DRV2605 haptics (async task)
@@ -1126,8 +1149,8 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "  - STM32: not present on this board");
 #endif
     /* Past the wake gate: a charge boot is known only there. */
-    const bool chargeMode = s_charge_boot_mode;
-    cp_remote_init(!transferMode && !netMode && !chargeMode && CROSSPAD_FW_RADIO);   // none of these boots holds a remote session
+    boot.chargeMode = s_charge_boot_mode;
+    cp_remote_init(boot.normal() && CROSSPAD_FW_RADIO);   // none of these boots holds a remote session
 #if CONFIG_TINYUSB_CDC_COUNT && CONFIG_TINYUSB_CDC_ENABLED
     ESP_LOGI(TAG, "  - USB CDC ACM interface: Ready");
 #endif
@@ -1141,7 +1164,11 @@ extern "C" void app_main(void)
     // internal RAM or boot time on it, and a board with it on gets the same
     // bleMidi_start() the Settings toggle uses, just deferred until there is
     // something running to hand it to.
+}
 
+/* The board I2C bus and whether an IMU answers on it. */
+static void boot_imu_probe(void)
+{
     ESP_LOGI(TAG, "Crosspad initialization complete");
     ESP_LOGI(TAG, "Starting application...");
 
@@ -1161,11 +1188,17 @@ extern "C" void app_main(void)
 #else
     status.imuDetected = false;
 #endif
+}
 
+/* The card, and the firmware work that needs it and NVS both up: a pending slot
+ * switch, recovery, the assets of the running slot. Before the display hands
+ * LVGL an image and before the engine competes for PSRAM. */
+static void boot_card(Boot &boot)
+{
     /* In transfer mode the card belongs to the host, raw — a FATFS mount here
      * would be the second writer on one volume. usb_transfer_storage_attach()
      * already brought it up from the USB install. */
-    if (!transferMode) {
+    if (!boot.transferMode) {
         status.sdCardDetected = (bsp_sdcard_mount_ex(true) == ESP_OK);
         // A pending FW_SWITCH is resolved here: NVS and the SD card (the
         // settings.json a switch may have exported) are both up, and nothing
@@ -1175,7 +1208,7 @@ extern "C" void app_main(void)
         // After the mount: the switch exports the leaving firmware's settings
         // to its package on the card. app_main's stack is internal RAM, which
         // the otadata write needs.
-        if (recoveryHeld) {
+        if (boot.recoveryHeld) {
             const char *why = nullptr;
             if (fw_recovery_switch(&why)) {
                 ESP_LOGW(TAG, "recovery: restarting into the main firmware");
@@ -1199,24 +1232,30 @@ extern "C" void app_main(void)
         // 30 s window, before anything can confirm.
         fw_trial_watchdog_feed();
     }
+}
 
-    // Kit discovery: after the mount, and in its own task — the recursive
-    // scan needs more stack than app_main has.
-
+/* The display. Without one the boot is headless. */
+static void boot_display(Boot &boot)
+{
 #ifdef BSP_BOARD_CROSSPAD_S3
     bsp_display_brightness_set(0);
 #endif
     lv_display_t* disp = bsp_display_start();
-    const bool headless = (disp == NULL);
-    if (headless) {
+    boot.headless = (disp == NULL);
+    if (boot.headless) {
         ESP_LOGW(TAG, "Display unavailable - running headless (MIDI/pads only)");
     }
+}
 
+/* The IMU task (after the display: its touch driver owns the GPIO ISR service)
+ * and the pads' first picture. */
+static void boot_imu_task_and_pads(Boot &boot)
+{
 #ifdef BSP_BOARD_CROSSPAD_S3
     /* After the display: its touch driver owns the GPIO ISR service the IMU's
      * data-ready line hangs off (bsp_imu.cpp, attach_drdy_line). */
     if (status.imuDetected) {
-        imu_ret = bsp_imu_start_task(20, 5, 3096);   // 20 ms poll only without INT2
+        const esp_err_t imu_ret = bsp_imu_start_task(20, 5, 3096);   // 20 ms poll only without INT2
         bsp_imu_set_event_callback(imu_event_cb, nullptr);
         if (imu_ret != ESP_OK) {
             ESP_LOGW(TAG, "IMU task start failed: %s", esp_err_to_name(imu_ret));
@@ -1232,7 +1271,7 @@ extern "C" void app_main(void)
 #ifdef USE_LVGL
     // With a screen the splash is the pads' first picture: black until its
     // first frame, or the controller's default green flashed in between.
-    if (!headless) {
+    if (!boot.headless) {
         const crosspad::RgbColor dark[crosspad::PadAnimator::kPadCount] = {};
         crosspad::getPadAnimator().showFrame(dark);
     }
@@ -1254,14 +1293,23 @@ extern "C" void app_main(void)
 #ifdef BSP_BOARD_CROSSPAD_S3
     if (s_wake_hold_qualified) crosspad::getPadAnimator().stop(s_wake_hold_anim);
 #endif
+}
 
+/* The STM link task and, with a display, the LVGL task. */
+static void boot_link_and_gui_tasks(Boot &boot)
+{
     xTaskCreatePinnedToCoreWithCaps(uartLoop, "UART drv", 4000, NULL, 6, NULL, 0,
                                     MALLOC_CAP_SPIRAM);   // STM link, no flash
 
-    if (!headless) {
+    if (!boot.headless) {
         xTaskCreatePinnedToCore(LVGLTask, "LVGL drv", 5500, NULL, 4, NULL, 0);
     }
+}
 
+/* A trial boot confirms itself once it has stayed up. Past bsp_stm32_init() and
+ * the LVGL task's creation. */
+static void boot_confirm_timer(void)
+{
     // Confirm this boot once it has actually stayed up — a fresh
     // install-and-switch is still ESP_OTA_IMG_PENDING_VERIFY at this point
     // (see fw_slots.h) and the bootloader rolls back to the previous slot on
@@ -1286,8 +1334,13 @@ extern "C" void app_main(void)
         fw_confirm_set_timer(confirmTimer);
         esp_timer_start_periodic(confirmTimer, (uint64_t)kConfirmDelayMs * 1000);
     }
+}
 
-    if (!transferMode && !netMode && !chargeMode) {
+/* The sample engine's arena and the start-up sound. Before the kit list and
+ * before BLE. */
+static void boot_sample_engine(Boot &boot)
+{
+    if (boot.normal()) {
         /* Before BLE takes its block and before the first preload reads. */
         sample_player_port_stage_init();
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
@@ -1309,6 +1362,12 @@ extern "C" void app_main(void)
         }
 #endif
     }
+}
+
+/* The kit list, after the mount and once the launcher is up. On a task of its
+ * own: the recursive scan needs more stack than the main task has. */
+static void boot_kit_scan(Boot &boot)
+{
     // The kit list is a few hundred kB of PSRAM. Scanned before the sample
     // engine had its arena it collided with that allocation and the splash
     // decode -- bad_alloc in listKits(), boot loop. After the engine the
@@ -1325,7 +1384,7 @@ extern "C" void app_main(void)
     // and a display that never comes up must not cost the kit list.
     /* Network mode loads no kit: nothing there plays one, and the list costs
      * PSRAM the network stack would rather have. */
-    if (status.sdCardDetected && !netMode && !chargeMode && CROSSPAD_FW_SAMPLE_ENGINE) {
+    if (status.sdCardDetected && !boot.netMode && !boot.chargeMode && CROSSPAD_FW_SAMPLE_ENGINE) {
         if (xTaskCreatePinnedToCore([](void* arg) {
             const bool noGui = (arg != nullptr);
             for (int i = 0; !noGui && !status.isGuiInitialised && i < 100; ++i) {
@@ -1341,7 +1400,7 @@ extern "C" void app_main(void)
             g_kit_scan_done.store(true);
             if (!noGui) lv_async_call_locked(crosspad_sampler::kit_gate_refresh_if_open, nullptr);
             vTaskDelete(nullptr);
-        }, "kit_scan", 8192, headless ? (void*)1 : nullptr, 2, nullptr, 1) != pdPASS) {
+        }, "kit_scan", 8192, boot.headless ? (void*)1 : nullptr, 2, nullptr, 1) != pdPASS) {
             g_kit_scan_done.store(true);
         }
     } else {
@@ -1349,11 +1408,16 @@ extern "C" void app_main(void)
            KIT_* must not wait for a scan that will never run. */
         g_kit_scan_done.store(true);
     }
+}
+
+/* The audio tasks and, once the codecs are up, the stored USB profile. */
+static void boot_audio(Boot &boot)
+{
     /* Transfer mode starts no engine: the arena stays unallocated, the RT task
      * has no card to stream from, and the profile it enumerated has no audio.
      * Network mode neither: its internal RAM belongs to WiFi. Nor a kit
      * whose profile says "audio": false (its app plays nothing). */
-    if (!transferMode && !netMode && !chargeMode && CROSSPAD_FW_AUDIO) AudioTasks_Start();
+    if (boot.normal() && CROSSPAD_FW_AUDIO) AudioTasks_Start();
 
     /* Persisted USB profile, and USB Audio is the default: the instrument is
      * an audio device first. It has no CDC endpoint, so a board that has never
@@ -1366,7 +1430,7 @@ extern "C" void app_main(void)
      * up stays reachable over CDC, and its stored choice is left alone.
      * Network mode has no engine, so no I2S for the bridge: it stays on CDC
      * the same way. */
-    if (settings->usbAudioEnabled && !transferMode && !netMode && !chargeMode && CROSSPAD_FW_AUDIO) {
+    if (settings->usbAudioEnabled && boot.normal() && CROSSPAD_FW_AUDIO) {
         constexpr TickType_t kAudioReadyMaxMs = 2500;
         const TickType_t waitStart = xTaskGetTickCount();
         while (!AudioTasks_IsReady()
@@ -1380,7 +1444,11 @@ extern "C" void app_main(void)
                      (unsigned)kAudioReadyMaxMs);
         }
     }
+}
 
+/* OTA over CDC, its overlay, and an STM32 update that is due. */
+static void boot_ota_and_overlays(Boot &boot)
+{
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     espnow_storage_init();
 #endif
@@ -1390,16 +1458,15 @@ extern "C" void app_main(void)
 #ifdef USE_LVGL
     /* Transfer mode's screen is the whole UI; an overlay over it would offer a
      * firmware update that reads the assets partition mid-transfer. */
-    if (!headless && !transferMode) {
-        extern void ota_overlay_init(void);
+    if (!boot.headless && !boot.transferMode) {
         ota_overlay_init();
         /* An STM reflash is a normal boot's decision; network mode is a short visit. */
-        if (!netMode && !chargeMode && (s_stm_fw_status.due || s_stm_fw_status.pcb_mismatch)) {
+        if (!boot.netMode && !boot.chargeMode && (s_stm_fw_status.due || s_stm_fw_status.pcb_mismatch)) {
             stm_fw_overlay_show(&s_stm_fw_status);   /* also raised on a PCB mismatch: says so, offers nothing */
         }
     }
 #endif
-    if (headless && !transferMode && !netMode && !chargeMode && s_stm_fw_status.due) {
+    if (boot.headless && boot.normal() && s_stm_fw_status.due) {
         // No screen: the pads are the progress bar, as they are for ESP OTA.
         auto& anim = crosspad::getPadAnimator();
         anim.startProgress();
@@ -1410,19 +1477,30 @@ extern "C" void app_main(void)
         if (ok) anim.playSuccess(); else anim.playError();
     }
     ESP_LOGI(TAG, "All systems operational - Crosspad ready");
+}
 
+/* The card hotplug probe, and LVGL calls from other tasks. */
+static void boot_card_hotplug(Boot &boot)
+{
     /* The hotplug probe mounts the card it finds — never while the host has it —
      * and rescans kits, which network mode does not load. */
     /* A boot that mounted no card holds its update check until the first probe
      * (fw_updater.cpp): a card a second late then scans before the radio starts. */
     if (status.sdCardDetected) g_sd_probed.store(true);
-    if (transferMode || netMode || chargeMode || !bsp_worker_add("sd_hotplug", 1000, sd_hotplug_job, nullptr))
+    if (boot.transferMode || boot.netMode || boot.chargeMode || !bsp_worker_add("sd_hotplug", 1000, sd_hotplug_job, nullptr))
         g_sd_probed.store(true);
     lv_async_safe_start();
+}
 
+/* Drains the CDC command queue, runs the launcher's one-shots, and nothing else.
+ * Anything that can block belongs on another task: this loop is what answers
+ * every off-device query. */
+static void command_loop(Boot &boot)
+{
     /* Main application loop — drains the CDC command queue and nothing else.
      * Anything that can block belongs on another task: this loop is what
      * answers every off-device query. */
+    app_message_t msg;
     while (1) {
         hil_control_ble_poll();
         companion_sysex_poll();
@@ -1438,7 +1516,7 @@ extern "C" void app_main(void)
         // Never in transfer or network mode: nothing there sends MIDI, and the
         // radio would take internal RAM the MSC path / WiFi needs.
         static bool s_bleAutoStartDone = false;
-        if (!s_bleAutoStartDone && !transferMode && !netMode && !chargeMode && (headless || status.isGuiInitialised)) {
+        if (!s_bleAutoStartDone && boot.normal() && (boot.headless || status.isGuiInitialised)) {
             s_bleAutoStartDone = true;
             bleMidi_boot();
         }
@@ -1447,7 +1525,7 @@ extern "C" void app_main(void)
         // the boot check (when enabled) and the daily idle watch. Normal boots
         // only -- network mode has no launcher to be idle in.
         static bool s_fwUpdaterStarted = false;
-        if (!s_fwUpdaterStarted && !transferMode && !netMode && !chargeMode && status.isGuiInitialised) {
+        if (!s_fwUpdaterStarted && boot.normal() && status.isGuiInitialised) {
             s_fwUpdaterStarted = true;
             fw_updater_launcher_ready();
         }
@@ -1459,7 +1537,7 @@ extern "C" void app_main(void)
         // call into LVGL goes through the same locked forwarder BLE/CDC
         // handlers use, never lv_async_call() directly.
         static bool s_fwRollbackToastDone = false;
-        if (!s_fwRollbackToastDone && !transferMode && !chargeMode && status.isGuiInitialised) {
+        if (!s_fwRollbackToastDone && !boot.transferMode && !boot.chargeMode && status.isGuiInitialised) {
             s_fwRollbackToastDone = true;
             static char s_fwRollbackToastMsg[160];
             char failedPkg[FW_PKG_NAME_LEN];
@@ -1478,7 +1556,7 @@ extern "C" void app_main(void)
         // fw_assets_sync() found no matching assets.bin on the card for the
         // slot booted this time — one toast, once the launcher has painted.
         static bool s_fwAssetsToastDone = false;
-        if (!s_fwAssetsToastDone && !transferMode && !chargeMode && status.isGuiInitialised) {
+        if (!s_fwAssetsToastDone && !boot.transferMode && !boot.chargeMode && status.isGuiInitialised) {
             s_fwAssetsToastDone = true;
             static char s_fwAssetsToastMsg[128];
             if (fw_assets_sync_toast_pending(s_fwAssetsToastMsg, sizeof(s_fwAssetsToastMsg))) {
@@ -1550,6 +1628,45 @@ extern "C" void app_main(void)
         }
 
     } // app loop
+}
+
+extern "C" void app_main(void)
+{
+    // Literal first statement: a trial boot (running image still
+    // ESP_OTA_IMG_PENDING_VERIFY) gets an RTC watchdog that resets the chip
+    // if fw_confirm_running() never disables it — a hang anywhere in this
+    // function, including before bsp_stm32_init() ever runs, still ends in
+    // the bootloader rolling back to the previous slot. No NVS, no heap, no
+    // scheduler dependency: see fw_slots.h.
+    fw_trial_watchdog_arm();
+
+    /* One-shot, and cleared by the read: the rest of the boot is shaped by
+     * this answer, and the next boot is normal whatever happens here. */
+    Boot boot;
+    boot.transferMode = usb_transfer_boot_claim();
+    /* Network mode has the same one-shot shape (net_mode.h). Each request
+     * restarts at once, so at most one of the two flags is ever armed. */
+    boot.netMode = net_mode_boot_claim();
+
+    /* The order below is the boot. Each stage says what it needs before it. */
+    boot_storage_and_settings();
+    boot_command_queue();
+    boot_usb(boot);
+    boot_platform();
+    boot_assets_fs();
+    boot_stm32_and_wake(boot);
+    boot_imu_probe();
+    boot_card(boot);
+    boot_display(boot);
+    boot_imu_task_and_pads(boot);
+    boot_link_and_gui_tasks(boot);
+    boot_confirm_timer();
+    boot_sample_engine(boot);
+    boot_kit_scan(boot);
+    boot_audio(boot);
+    boot_ota_and_overlays(boot);
+    boot_card_hotplug(boot);
+    command_loop(boot);
 }  // app_main
 
 
