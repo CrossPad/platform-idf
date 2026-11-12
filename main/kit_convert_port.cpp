@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstring>
 #include "sample_player_port.hpp"
+#include "verb_args.h"
 
 /* main/sample_player_port.cpp */
 
@@ -244,12 +245,6 @@ void quoted(const char *in, char *out, size_t cap) {
     }
     out[n++] = '"';
     out[n] = '\0';
-}
-
-const char *args_of(const char *cmd, const char *verb) {
-    const size_t n = strlen(verb);
-    if (strncmp(cmd, verb, n) != 0 || (cmd[n] != '\0' && cmd[n] != ' ')) return nullptr;
-    return cmd + n;
 }
 
 } // namespace
