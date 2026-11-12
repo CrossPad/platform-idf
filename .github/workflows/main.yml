@@ -141,6 +141,7 @@ jobs:
         run: |
           python3 tools/check_sdkconfig.py
           python3 tools/check_conventions.py
+          python3 tools/gen_verb_catalog.py --check
       - id: m
         shell: bash
         env:

@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import check_conventions
+import gen_verb_catalog
 import check_image_budget
 import check_sdkconfig
 
@@ -109,3 +110,19 @@ def test_each_convention_is_caught(tmp_path):
     found = check_conventions.findings(tmp_path, files)
     assert [f.split(": ")[1].rstrip(":") for f in found] == ["board-rev", "constructor", "constructor", "parent-scope"]
     assert found[0].startswith("main/foo.cpp:1:")
+
+
+def test_the_verb_catalog_matches_the_dispatch_table():
+    control = (ROOT / "main" / "hil_control.cpp").read_text()
+    order = gen_verb_catalog.table_order(control)
+    rows = [r.split("\t") for r in gen_verb_catalog.rows()]
+    top = [r for r in rows if "." not in r[0]]
+    assert [r[1] for r in top] == order
+    assert len(order) == len(set(order))
+    assert all(r[3] in ("exact", "prefix", "scan", "word", "handler") for r in rows)
+    assert all(r[4] for r in rows)
+
+
+def test_the_checked_in_catalog_is_current():
+    text = gen_verb_catalog.HEADER + "\n" + "\n".join(gen_verb_catalog.rows()) + "\n"
+    assert gen_verb_catalog.OUT.read_text() == text

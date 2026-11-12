@@ -150,7 +150,11 @@ crosspad::CrosspadSettings*  cfg     = crosspad::CrosspadSettings::getInstance()
   lock is taken before the loader lock. [Kits and engines](docs/dev/instruments.md)
 - **Verbs match by prefix, in the order of `k_verbs`.** A new verb goes where its
   prefix cannot shadow another, and its replies are built in static buffers:
-  every verb runs on the main task's 5120 B stack. [Bench](docs/dev/bench.md)
+  every verb runs on the main task's 5120 B stack. `docs/dev/verbs.tsv` lists
+  every verb in dispatch order with how it is matched and whether the
+  companion allow-list names it; it is generated
+  (`python3 tools/gen_verb_catalog.py --write`) and CI refuses a stale copy.
+  [Bench](docs/dev/bench.md)
 - **Do not take GPIO 8 into the RTC mux** (it breaks SD card reads), and branch
   on `BSP_HAS_*`, never on the board revision. [Hardware](docs/dev/hardware.md)
 - **MIDI+UAC2 is the default USB profile and has no CDC endpoint.** A board that
