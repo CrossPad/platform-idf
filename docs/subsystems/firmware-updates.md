@@ -418,48 +418,28 @@ measurements below.
 | Boot check after an OTA / a switch (trial) | lease ~0.6–0.9 s after the confirm, link up ~3.5 s later |
 | `ext_ram.dummy` (2026-10-05) | v2 2686944 (41 pages, **712 B** text headroom); v1 2621408 (40 pages, ~32 kB) |
 
-## Known limitations
+## Limits
 
-- **crosspad.app does not serve the routes yet**: until the Worker is deployed
-  every check against the default URL ends `err=catalog:http`. Tests use
-  `FW_UPD_URL` with the local test server.
 - **A two-part version is accepted**: `Semver` reads `9.9` as 9.9.0 on purpose,
   so `FW_DOWNLOAD full 9.9` answers `OK` and the job then fails on its own
   (`not_in_catalog`). If the catalog has `x.y.0`, the job continues with the
   catalog's own string (`x.y.0`) for the package directory, the install and
   `FW_UPD_STATUS`'s target.
-- **The HTTP connect / header phase cannot be abandoned**: the cancel flag is
-  read between reads, so a pad press during a TLS handshake takes effect after
-  it (seen: an abandon logged ~6.5 s after the kit selector opened).
-- **An abandoned background check leaves the radio connecting**: it comes up
-  and lingers its 30 s with `leases=0`.
+- **The cancel flag is read between reads**, so a pad press during a TLS
+  handshake takes effect after it.
 - **A press is not held on a trial boot** -- background checks and the
   Updates view's automatic check are. A view opened in the first ~12 s after a
   switch does not check on its own until it is shown again; *Check* checks at
   once.
-- **WPA3-SAE CacheError panic, seen once.** On the release image
-  `v1.1.0-fwstore.3` (0d95d71), in its trial boot, the boot check's SAE commit
-  panicked in the WiFi task (`cause=71` CacheError in
-  `mbedtls_zeroize_and_free` ← `mbedtls_mpi_grow` ← … ← `sae_prepare_commit`,
-  a free of a valid PSRAM address; no flash operation in progress, the wifi
-  task 3220 B from its stack end). The bootloader rolled the slot back as
-  designed. Not reproduced on the current image: 12 of 12 cold SAE connects
-  (`WIFI_UP` / `WIFI_DOWN` cycles, each a fresh commit because
-  `esp_wifi_deinit` drops the PMKSA cache, `COREDUMP_INFO` seq unchanged). Cause
-  not found; the only WiFi config difference was SAE-PK (on in that image, off
-  now, not on the stack). The trial-boot hold above is the structural answer.
-- **`SCREENSHOT` needs one free 230400 B PSRAM block.** After a radio cycle the
-  largest block drops to ~225 kB and stays, so screenshots answer `no memory`;
-  `SCREENSHOT` also never captures `lv_layer_top` (dialogs, toasts). Prove
-  dialogs with `ENC_GROUP` / `ENC_FOCUS` instead.
+- **`SCREENSHOT` needs one free 230400 B PSRAM block** and never captures
+  `lv_layer_top` (dialogs, toasts). Prove dialogs with `ENC_GROUP` /
+  `ENC_FOCUS` instead.
 - **No "fresh slot" marker.** IDF 5.5.4's `esp_ota_begin()` calls
   `esp_ota_invalidate_inactive_ota_data_slot()` with rollback enabled
   (`app_update/esp_ota_ops.c`), which erases the otadata entry that marked the
   slot invalid; after a reinstall `esp_ota_get_last_invalid_partition()` no
   longer names it, so a reinstalled rolled-back slot is never re-marked
   RolledBack and no false "did not start" toast appears.
-- No touch-injection verb: the views were driven by encoder only.
-- v1: built, not measured.
 
 ## Release automation
 

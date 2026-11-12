@@ -422,24 +422,17 @@ release whose kit packages carry icons). Its teardown removes the test catalog's
   radio cycle the largest free block is ~225-229 kB and it answers `no memory`; it works
   reliably only on a fresh boot.
 
-## Known limitations
+## Limits
 
 - **32 packages.** The scan, the cleanup and the Library hold at most 32 package
   directories (`kFwGcMaxPackages`, 34 tiles with the two slot-only ones); `FW_LIST`
-  prints 16. The 33rd package is on the card but not listed: its card keeps offering
-  Download/Install although the catalog says `on_card`. Delete one package to see it.
-- **Touch swipes between tabs are disabled** in both hosts (a swipe would show a page
-  that is not built, or move to a page without moving the encoder there). The tab bar
-  and the encoder are the only ways.
-- **v2 is 712 B of text from its next 64 kB PSRAM page** (41 pages, see Threads and
-  memory): crossing it costs the launcher 64 kB.
-- **crosspad.app does not serve the catalog and kit routes yet** ([firmware-updates.md](firmware-updates.md), 2026-10-04: a
-  page answers 404), so against the default URL a check ends `err=catalog:http`; the
-  bench serves them with `crosspad_hil.fw_server`.
-- The *Update* rows hide while a slot holds a newer build of the kit; a rolled-back slot
-  holds it too.
-- With WiFi off and an update waiting, the Updates tab shows the installed-in-the-other-slot
-  state and *Run* without the WiFi reason; the row names the newest package on the card as
-  the old side.
-- The scenario's `--switch` step restarts the board: it must wait for the card's *Run* to
-  verify the image and reset (~0.6 s after the press) before reopening the link.
+  prints 16. A 33rd package stays on the card and is not listed.
+- **Tabs change by the tab bar and the encoder only.** Touch swipes between tabs
+  are off in both hosts: a swipe would show a page that is not built, or move to
+  a page without moving the encoder there.
+- The *Update* rows hide while a slot holds a newer build of the kit; a
+  rolled-back slot holds it too.
+- The scenario's `--switch` step restarts the board: it waits for the card's
+  *Run* to verify the image and reset (~0.6 s after the press) before reopening
+  the link.
+
