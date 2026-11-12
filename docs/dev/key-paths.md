@@ -20,7 +20,7 @@ must not break; the pages it links to have the detail.
 | Audio task creation | `main/audio/audio_task.cpp` |
 | Factory provisioning | `tools/factory_provision.py` |
 | Auto-generated registry | `main/app/app_registry_init.cpp` (never edit) |
-| Audio routing / USB capture | `main/audio_route_control.{h,cpp}` |
+| Audio routing / USB capture | `main/audio_route_control.cpp`, `main/include/audio_route_control.h` |
 | Audio engine rate (BSP clock, UAC rate, HIL tone kit) | `components/bsp/crosspad/i2s_driver.c`, `main/audio/audio_control.cpp`, `tools/make_tone_kit.py` |
 | Kit-swap audio fixture (two interleaved sine kits, `crosspad-hil run kit_swap_audio`) | `tools/make_sine_kits.py` |
 | Bench entry point (check / ready / flash / test) | `tools/bench.py` |
@@ -30,7 +30,7 @@ must not break; the pages it links to have the detail.
 | Assets flashing / file transfer (device) | `main/file_transfer.cpp`, `main/include/file_transfer.h` |
 | Assets flashing / file transfer (host) | `tools/fs_transfer.py` |
 | USB transfer mode (boot flag + MSC callbacks, screen, descriptors) | `main/usb_transfer.cpp`, `main/gui/usb_transfer_screen.cpp`, `main/usb_descriptors_transfer.c` |
-| Firmware library / A/B switch (image descriptor, package scan, slots + rollback, assets resync, Firmware app) | `main/fw_image_desc.{h,c}`, `main/fw_library.{h,cpp}`, `main/fw_slots.{h,cpp}`, `main/fw_assets_sync.{h,cpp}`, `main/app/update/update_app.cpp`, `main/gui/fw_flow_overlay.cpp`, `tools/make_fw_package.py` |
+| Firmware library / A/B switch (image descriptor, package scan, slots + rollback, assets resync, Firmware app) | `main/fw_image_desc.c`, `main/fw_library.cpp`, `main/fw_slots.cpp`, `main/fw_assets_sync.cpp` (headers in `main/include/`), `main/app/update/update_app.cpp`, `main/gui/fw_flow_overlay.cpp`, `tools/make_fw_package.py` |
 | Firmware updates (catalog, download, cleanup, triggers, verbs, Updates view, Settings page) | `main/fw_updater.cpp`, `main/fw_updater_verbs.cpp`, `main/fw_download.cpp`, `main/fw_catalog.cpp`, `main/fw_http.cpp`, `main/fw_gc.cpp`, crosspad-gui `src/fw/fw_updates_view.cpp`, `main/app/settings/settings_updates.cpp`, [docs/subsystems/firmware-updates.md](../subsystems/firmware-updates.md) |
 | Firmware signing and CI kits | `tools/fw_sign.py`, `tools/make_fw_package.py`, `tools/ci_matrix.py`, `tools/ci_release_assets.py`, `config/fw_signing/`, `main/fw_sign_pubkey.h`, `main/fw_verify.cpp` |
 | STM32 in-field update | `components/stm32_hal/stm32_fw_update.c`, UI `main/gui/stm_fw_overlay.cpp`, image `main/stm32_fw/stm32_fw.bin` |

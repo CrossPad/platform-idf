@@ -121,7 +121,7 @@ class MyPadLogic : public crosspad::IPadLogicHandler {
     void onPadPressure(crosspad::PadManager& pm, uint8_t padIdx, uint8_t pressure) override { /* aftertouch */ }
 };
 
-// Register once in createFn. With REGISTER_APP_PL/REGISTER_LVGL_APP_PAD, that's
+// Register once in createFn. With REGISTER_APP_PL, that's
 // it — AppBase activates/restores it via pushPadLogic()/popPadLogic() on
 // start()/destroyApp(). Only call setActivePadLogic() manually for plain
 // REGISTER_APP apps that don't declare a padLogicName.

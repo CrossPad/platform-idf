@@ -15,7 +15,7 @@ the SysEx one all write `usbAudioEnabled` — so a development board stays on CD
 reboots and `factory_provision.py` flips to CDC for its checks and back to audio
 before it logs a serial.
 
-`main/audio_route_control.{h,cpp}` is the one implementation behind the GUI
+`main/audio_route_control.cpp` (header in `main/include/`) is the one implementation behind the GUI
 (Settings → USB), SysEx `F0 7D 1D …` and CDC `AUDIO_*`. Presets name real signal
 paths: `MICS` = codec0 LINE2, `LINE_IN` = codec1 LINE2, `SPEAKER_BUS` /
 `HEADPHONE_BUS` = LINE1 on codec 0/1 (DAC→ADC loop), `MIX` = both codecs'

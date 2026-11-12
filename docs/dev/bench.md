@@ -58,7 +58,8 @@ card stays there until a restart; `USB_MSC` says which.
 
 ## Hardware-in-the-loop Testing
 
-There are no unit tests here. The test suite is
+Host tests cover only parts of the firmware (`main/tests/`, `tools/tests/`, the
+submodules' own suites). The test suite for the firmware as a whole is
 [**crosspad-hil**](https://github.com/CrossPad/crosspad-hil) (pip package: library
 + CLI + daemon) run against a real board; exit **0** passed, **1** firmware
 failed, **2** setup problem (host, cable, board state). Install: `pip install -r tools/requirements-hil.txt`

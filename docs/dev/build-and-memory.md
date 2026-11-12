@@ -11,7 +11,7 @@ must not break; the pages it links to have the detail.
 - **WHOLE_ARCHIVE** is set on main component — required for REGISTER_APP functions to survive linking.
 - **CMake variable scoping:** App `set(SOURCES ...)` must NOT use `PARENT_SCOPE`. Parent CMake auto-collects.
 - **Compile definitions must be set BEFORE `project()`.** ESP-IDF adds every component as a subdirectory from inside `project()`, and directory compile properties only propagate into subdirectories created afterwards. `add_compile_definitions()` after `project()` reaches a few late targets in `compile_commands.json` and no component source, so a definition set there silently does nothing. Kconfig is not parsed that early, so anything revision-dependent reads the `sdkconfig` file directly.
-- **`sdkconfig.defaults` silently wins a Kconfig `choice` over `sdkconfig.v*`.** `main/lvgl_mem_psram.c` is gated on `LV_USE_STDLIB_MALLOC == CUSTOM`, but `sdkconfig.defaults` sets `CONFIG_LV_USE_CLIB_MALLOC=y`, which wins in every build dir — `sdkconfig.v2`'s `CUSTOM` choice included — and every LVGL widget then costs ~48 B of internal RAM (internal RAM free: launcher 28 kB without the PSRAM allocator, 63 kB with it; Sampler+kit 4.7 kB against 63 kB). So `lv_malloc_core`/`lv_realloc_core`/`lv_free_core` are routed through `-Wl,--wrap` in `main/CMakeLists.txt`, outside the Kconfig guard — that holds regardless of how a regenerated sdkconfig lands the choice. Verify with `crosspad-hil` `mem --blocks`: the `<=64`/`<=128` used-block counts should match the launcher baseline, and the internal-RAM win should show up as `psram_blocks` growing instead. Other `sdkconfig.defaults` vs `sdkconfig.v*` choices may be in the same state — check before trusting one.
+- **`sdkconfig.defaults` silently wins a Kconfig `choice` over `sdkconfig.v*`.** `main/lvgl_mem_psram.c` is gated on `LV_USE_STDLIB_MALLOC == CUSTOM`, but `sdkconfig.defaults` sets `CONFIG_LV_USE_CLIB_MALLOC=y`, and a build that ends up with it (`sdkconfig.v1` selects it; v2's checked-in `CUSTOM` choice holds, as `build_v2/config/sdkconfig.h` shows) pays for every LVGL widget in internal RAM: each then costs ~48 B of internal RAM (internal RAM free: launcher 28 kB without the PSRAM allocator, 63 kB with it; Sampler+kit 4.7 kB against 63 kB). So `lv_malloc_core`/`lv_realloc_core`/`lv_free_core` are routed through `-Wl,--wrap` in `main/CMakeLists.txt`, outside the Kconfig guard — that holds regardless of how a regenerated sdkconfig lands the choice. Verify with `crosspad-hil` `mem --blocks`: the `<=64`/`<=128` used-block counts should match the launcher baseline, and the internal-RAM win should show up as `psram_blocks` growing instead. Other `sdkconfig.defaults` vs `sdkconfig.v*` choices may be in the same state — check before trusting one.
 - **PSRAM, not internal RAM, is what the UI runs out of.** The heap pool is
   6.2 MB. The engines take PSRAM as a kit needs it (64 kB heads, a stream pool that grows with the voices
   playing and shrinks after 4 s of quiet, `engine_arena.cpp` floor 512 kB) --
@@ -85,9 +85,12 @@ must not break; the pages it links to have the detail.
   atomics and an `lv_timer`; platform follow-up work goes in
   `SamplerAudioCallbacks::onKitLoadFinished`. Anything touching storage belongs
   on that side of the boundary.
-- **No unit tests on this side** — `crosspad-hil run <scenario>` against real
-  hardware is the test suite (see [docs/subsystems/hil-testing.md](../subsystems/hil-testing.md)). No linting
-  configured.
+- **The firmware as a whole is tested on hardware** — `crosspad-hil run <scenario>`
+  against a real board (see [docs/subsystems/hil-testing.md](../subsystems/hil-testing.md)). Host
+  tests cover the parts that run without one: `main/tests/` (CDC line framing,
+  verb text, the LVGL async wrapper), `python3 -m pytest tools/tests` (the
+  tools), and the ctest suites of crosspad-core, crosspad-gui and crosspad-mixer.
+  `python3 tools/check_conventions.py` is the only lint.
 
 ## API Documentation (Doxygen)
 

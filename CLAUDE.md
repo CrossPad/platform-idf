@@ -74,7 +74,7 @@ main/
 ├── main.cpp              ← app_main(): the boot as named stages in order, the command loop
 ├── boot_power.cpp        ← soft-off gate, qualified wake, STM power states, restart into the bootloader
 ├── cdc_rx.cpp            ← CDC receive: TinyUSB callback → command queue → line dispatch
-├── display.h             ← LVGL task, crosspad-gui bootstrap, app registry init
+├── include/display.h     ← LVGL task, crosspad-gui bootstrap, app registry init
 ├── include/gui.h         ← InitializeAppRegistry(), AddApps(), LoadMainScreen()
 ├── gui/
 │   ├── gui.cpp           ← Launcher UI, app lifecycle management
@@ -96,8 +96,10 @@ components/
 │   │   ├── event/        ← IEventBus, EventTypes, EventData
 │   │   ├── pad/          ← PadManager, PadLedController, PadAnimator, IPadLogicHandler
 │   │   ├── settings/     ← CrosspadSettings, IKeyValueStore
-│   │   ├── stm32/        ← Stm32Manager, Stm32CommandSender
-│   │   └── platform/     ← IClock, ILedStrip, IMidiOutput, IStm32Transport
+│   │   ├── stm32/        ← Stm32Manager, the STM32 register map
+│   │   ├── protocol/     ← Stm32CommandSender, IStm32Transport, SysEx
+│   │   ├── led/, midi/   ← ILedStrip, IMidiOutput
+│   │   └── platform/     ← IClock, PlatformServices
 │   └── src/              ← Implementation files
 ├── crosspad-gui/         ← [SUBMODULE] LVGL UI framework (AppBase CRTP, launcher, styles)
 ├── crosspad-platform-idf/ ← ESP-IDF adapters: EspClock, EspLedStrip, EspMidiOutput, CrosspadPlatform
