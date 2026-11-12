@@ -27,7 +27,7 @@ gotchas, driving a board.
 - **Portability first.** Apps must depend on crosspad-core interfaces (`IEventBus`, `IPadLogicHandler`, `IKeyValueStore`, etc.), never on ESP-IDF APIs directly. This ensures they compile on both ESP-IDF and Arduino.
 - **LVGL thread safety.** All LVGL mutations from non-LVGL tasks must go through `IGuiPlatform::postToGui()` / `lv_async_call_locked()` (raw `lv_async_call()` is itself not thread-safe). Deletion via `lv_obj_delete_async()`. Lock with `lvgl_port_lock(timeout_ms)` / `lvgl_port_unlock()`. A pad-logic callback or an event-bus handler must never block on the LVGL lock (the LVGL thread may be waiting for it) — post GUI work with `IGuiPlatform::postToGui()` / `lv_async_call_locked()`, which never make the caller wait.
 - **Long-term solutions over quick hacks.** Even if it means more initial work (event system > raw callbacks, REGISTER_APP > manual wiring).
-- **Build verification.** After code changes, build to confirm. Known harmless warnings: ArduinoJson deprecations (`DynamicJsonDocument`, `createNestedObject`).
+- **Build verification.** After code changes, build to confirm. Known harmless warnings: ArduinoJson deprecations (`DynamicJsonDocument`, `createNestedObject`). `python3 tools/check_sdkconfig.py` (Kconfig values a measured budget depends on, each with its reason in `config/sdkconfig_invariants.json`) and `python3 tools/check_conventions.py` (the rules above a compiler does not check) run in CI before anything compiles; run them after regenerating an `sdkconfig.v*`.
 - **Docs move with the code.** A change in subsystem behaviour updates its page in docs/subsystems/ in the same PR; a change that breaks a docs page (command, output, path) opens an issue in CrossPad/crosspad-docs.
 
 ## Build Environment
@@ -644,8 +644,8 @@ Verbs: `WIFI_STATUS|ENABLE|SET|LIST|FORGET|UP|DOWN|SCAN|PING`, `NET_MODE
 characters. Saved networks live in NVS `wifi/nets`, shared by both slots.
 Testing: `WIFI_ENABLE 1` first; the test network comes from `CROSSPAD_WIFI_SSID`
 / `CROSSPAD_WIFI_PASS` in the environment (keep credentials out of every repo),
-then `python3 tools/bench.py test wifi`. The TLS client costs a 64 kB PSRAM page: check `ext_ram.dummy`
-(2949088) after touching the network code.
+then `python3 tools/bench.py test wifi`. The TLS client costs a 64 kB PSRAM page: run
+`python3 tools/check_image_budget.py --rev v2` after touching the network code.
 Details, numbers, limitations, traps: [docs/subsystems/wifi.md](docs/subsystems/wifi.md).
 
 ## Pitched Instrument (one sample, sixteen notes)
@@ -1006,10 +1006,10 @@ recycled). The views are crosspad-gui's (`crosspad-gui/fw/`) and reach the board
 only through `IFwViewService` (`main/fw_view_service.cpp`, a forward to the
 `fw_*` C APIs); the PC simulator registers the same app over a fake service. Budget: <= 128 kB (131072 B) of PSRAM over the launcher with 30
 packages, the WiFi radio included, the kit card not (it costs ~47 kB open and
-gives it back); measured 97-122 kB on the Store tab. At most 32 packages; v2 is
-41 PSRAM pages with 1220 B of text headroom (`ext_ram.dummy` 2686944, `.flash.text`
-2030364, the page ends at 2031584 from 0x42000020; measured 2026-10-05 with
-LVGL's themes, observer and text entry at `-Os`) -- check it after adding code. `SCREENSHOT` cannot
+gives it back); measured 97-122 kB on the Store tab. At most 32 packages; the
+image's PSRAM pages and the text headroom to the next one are budgeted in
+`config/image_budget.json` (`python3 tools/check_image_budget.py --rev v2`;
+LVGL's themes, observer and text entry are at `-Os` for it) -- check it after adding code. `SCREENSHOT` cannot
 capture the overlay layer (cards, dialogs). `FW_UI` over CDC;
 `crosspad-hil run firmware_app`. Details:
 [docs/subsystems/firmware-app.md](docs/subsystems/firmware-app.md).
@@ -1242,8 +1242,11 @@ Before/after evidence for anything that touches fonts, styles or layout: the
   per-file list of non-RT files), mixer; at `-Os` a UAC2 loopback glitched
   ~10×/s. 256 kB free. Keep `crosspad-core` off that list: it costs a 64 kB
   page (141 kB free), too little for the explorer.
-  Check `xtensa-esp32s3-elf-size -A build_v2/CrossPad.elf | grep ext_ram.dummy`
-  after anything big.
+  `python3 tools/check_image_budget.py --rev v2` prints the pages the image
+  takes and how far `.flash.text` is from the next one (crossing it moves
+  `.rodata` a whole page), against `config/image_budget.json`; CI fails a full
+  kit that needs more pages. Run it after anything big; raising the budget is
+  a decision made in the pull request that needs it.
 - **LVGL's software blend lives in flash, and only the renderers we draw with
   are built.** `LV_ATTRIBUTE_FAST_MEM_USE_IRAM` put ~68 kB of blend code in
   IRAM, and the AL88/L8/I1 renderers nothing produces cost 41 kB more. Both are
@@ -1336,4 +1339,5 @@ documentation ships with the code. Full text: [docs/MANIFESTO.md](docs/MANIFESTO
 | Partition table | `partitions_16mb.csv` |
 | Subsystem deep-dives (source of truth for the summaries above) | `docs/subsystems/*.md`, `docs/MANIFESTO.md` |
 | SDK config defaults | `sdkconfig.defaults` |
+| Repository checks (Kconfig invariants, image budget, conventions) | `tools/check_sdkconfig.py` + `config/sdkconfig_invariants.json`, `tools/check_image_budget.py` + `config/image_budget.json`, `tools/check_conventions.py` |
 | Open work (short list) | `TODO.md` |

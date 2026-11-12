@@ -132,6 +132,15 @@ jobs:
       - name: Kit pins match the gitlinks
         shell: bash
         run: python3 tools/app_bump.py check
+
+      # Kconfig values a measured budget depends on, and the project rules a
+      # compiler does not check (config/sdkconfig_invariants.json,
+      # tools/check_conventions.py). Before anything compiles.
+      - name: Repository checks
+        shell: bash
+        run: |
+          python3 tools/check_sdkconfig.py
+          python3 tools/check_conventions.py
       - id: m
         shell: bash
         env:
@@ -303,6 +312,17 @@ jobs:
             echo '```'
             echo "ccache: $(ccache -s 2>/dev/null | grep -E 'Hits:|Misses:' | tr -s ' ' | paste -sd ' ')"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The image is copied into PSRAM in 64 kB pages; a page more is 64 kB
+      # the UI loses (config/image_budget.json). The full kit is the one the
+      # budget is written for; other kits carry other apps.
+      - name: Image budget (rev ${{ matrix.rev }})
+        if: matrix.kit == 'full'
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          python3 tools/check_image_budget.py --rev ${{ matrix.rev }} | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
 
       # assets.bin travels here too: app OTA never touches that partition, so
       # a release needs it beside the app image (tools/fs_transfer.py assets);

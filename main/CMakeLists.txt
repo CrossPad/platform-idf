@@ -201,8 +201,9 @@ idf_component_register(
 )
 
 # Force the linker to include all object files from this component, even when
-# their symbols are not referenced externally. Required for REGISTER_APP
-# static constructors (AppRegistrar) to survive linking.
+# their symbols are not referenced externally. Required for the
+# _register_<name>_app() functions REGISTER_APP defines: only the generated
+# app_registry_init.cpp names them.
 set_property(TARGET ${COMPONENT_LIB} PROPERTY WHOLE_ARCHIVE ON)
 
 add_custom_target(twin_source_id
