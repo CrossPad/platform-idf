@@ -13,6 +13,7 @@
 #include "crosspad/stm32/Stm32Manager.hpp"
 #include "crosspad/stm32/reg_map.h"
 #include "stm32_hal_init.h"
+#include "crosspad_s3.h"
 #include "crosspad/settings/InfoRowTable.hpp"
 #include "crosspad_deps.h"
 #include "EspBleMidi.hpp"
@@ -63,6 +64,12 @@ public:
     const char* getPlatformInfo() override { return CONFIG_BSP_BOARD_REV_STR; }
     void enterStm32Dfu() override {
         crosspad::getStm32CommandSender().sendDfuRequest(true);
+    }
+    // The ROM bootloader reads no encoder or power button; the DFU screen's
+    // tap lands here. A hardware reset boots the STM's app from the DFU
+    // return marker in BKP0R.
+    void leaveStm32Dfu() override {
+        bsp_stm32_reset();
     }
 
     const char* getBackupDir() override { return "/sdcard"; }

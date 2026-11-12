@@ -5367,9 +5367,7 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
          * STOP1 with debug off (a release build after a dirty jump out of the ROM DFU),
          * this is the only reset a host can reach. The STM console and the
          * link go away for a moment; the ESP stays up. */
-        gpio_set_level((gpio_num_t)BSP_STM_RST_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        gpio_set_level((gpio_num_t)BSP_STM_RST_PIN, 0);
+        bsp_stm32_reset();
         cdc_reply("OK\r\n");
         return true;
     }
