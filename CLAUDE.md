@@ -83,7 +83,7 @@ main/
 │   ├── CMakeLists.txt    ← Auto-discovers main/app/*/CMakeLists.txt, generates app_registry_init.cpp (core cmake/crosspad_app_registry.cmake)
 │   ├── app_registry_init.cpp    ← AUTO-GENERATED — never edit manually
 │   ├── example/          ← Template app (copy this for new apps; off by default)
-│   ├── settings/         ← Settings app (7 categories: display/audio/pads/vibration/connectivity/midi/system)
+│   ├── settings/         ← Settings app (built-in categories in crosspad-gui `settings_ui.cpp`; the board adds Motion MIDI, BLE MIDI, USB host, WiFi, Updates)
 │   └── update/           ← Firmware app: A/B slot switch, SD-card firmware library, OTA
 ├── ota_cdc.cpp           ← OTA-over-CDC protocol handler
 ├── midiCallbacks.cpp     ← MIDI event routing
