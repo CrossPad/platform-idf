@@ -13,7 +13,7 @@ where they disagree. Fix this page in the same commit.
 
 | Side | Code |
 |---|---|
-| Board | `main/twin_mirror.cpp`, `main/motion_stream.cpp`, `main/companion_sysex.cpp`, the `TWIN_*` verbs in `main/hil_control.cpp`, `main/include/twin_state.h` |
+| Board | `main/twin_mirror.cpp`, `main/motion_stream.cpp`, `main/companion_sysex.cpp`, the `TWIN_*` verbs in `main/hil_verbs_twin.cpp`, `main/include/twin_state.h` |
 | Host | crosspad-web-twin `web/boardlink.js`, crosspad-pc `src/wasm/wasm_bridge.cpp`, mucha `stage/live.js` |
 
 ## Versions: `TWIN_HELLO`

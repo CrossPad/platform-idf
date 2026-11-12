@@ -1,0 +1,258 @@
+/* CDC verbs: the firmware library and A/B slots. Dispatch order is in hil_control.cpp. */
+#include "hil_verbs.h"
+
+/* fw_library_scan() opens up to 16 images off the SD card — the same card the
+ * sample engine streams from — so it never runs on the priority-1 CDC drain
+ * loop. No worker already takes foreign jobs (fx_worker's switch is closed
+ * over file_transfer.cpp's own ops), so a short-lived task does the scan and
+ * replies for itself, the same shape as PITCHED_BENCH's own task below. */
+static volatile bool s_fw_list_busy = false;
+
+static void handle_fw_list(void)
+{
+    EXT_RAM_BSS_ATTR static FwPackage pkgs[16];
+    size_t n = fw_library_scan(pkgs, 16);
+    char row[224];
+    for (size_t i = 0; i < n; i++) {
+        /* A local copy rather than pkgs[i] directly: the compiler cannot
+         * bound a %s read through a runtime-indexed array element, and
+         * treats every such field as unboundedly long, which overflows its
+         * own truncation check across four %s directives in one call. */
+        FwPackage p = pkgs[i];
+        /* crosspad::fwPkgVerdictText() returns a literal from another translation
+         * unit, so its length is not visible here either; copy it into a
+         * buffer sized for the longest verdict text instead of handing
+         * snprintf a raw pointer of unknown length. */
+        char verdict[40];
+        strlcpy(verdict, crosspad::fwPkgVerdictText(p.verdict), sizeof(verdict));
+        snprintf(row, sizeof(row), "FWPKG: name=%s kit=%s ver=%s rev=%u size=%u assets=%d settings=%d verdict=%s\r\n",
+                 p.name, p.kit, p.version, p.boardRev,
+                 (unsigned)p.imageSize, p.hasAssets, p.hasSettings, verdict);
+        cdc_reply(row);
+    }
+    snprintf(row, sizeof(row), "FWPKG: count=%u\r\n", (unsigned)n);
+    cdc_reply(row);
+}
+
+static void fw_list_task(void *)
+{
+    handle_fw_list();
+    s_fw_list_busy = false;
+    /* Created WithCaps, so it must be deleted WithCaps or the stack leaks. */
+    vTaskDeleteWithCaps(nullptr);
+}
+
+static void handle_fw_slots(void)
+{
+    static const char *kStateNames[] = { "empty", "installed", "trial", "confirmed", "rolledback" };
+    FwSlotInfo slots[2];
+    fw_slots_get(slots);
+    for (int i = 0; i < 2; i++) {
+        /* A local copy, not slots[i] directly: same reason as handle_fw_list()
+         * above — a runtime-indexed array element defeats the compiler's
+         * format-truncation bound on every %s pulled through it. */
+        FwSlotInfo s = slots[i];
+        char row[160];
+        snprintf(row, sizeof(row), "FWSLOT: slot=%c running=%d state=%s pkg=%s ver=%s kit=%s\r\n",
+                 s.label, s.running ? 1 : 0, kStateNames[(int)s.state],
+                 s.package[0] ? s.package : "-", s.version[0] ? s.version : "-",
+                 s.kit[0] ? s.kit : "-");
+        cdc_reply(row);
+    }
+    char trailer[32];
+    snprintf(trailer, sizeof(trailer), "FWSLOT: rollback=%d\r\n", fw_rollback_supported() ? 1 : 0);
+    cdc_reply(trailer);
+}
+
+/* fw_confirm_running() never writes flash itself — it hands off to its own
+ * internal-RAM-stack task (see fw_slots.cpp) — so, unlike FW_INSTALL/FW_SWITCH,
+ * FW_CONFIRM needs no task of its own here. */
+static void handle_fw_confirm(void)
+{
+    fw_confirm_running();
+    cdc_reply("OK\r\n");
+}
+
+/* fw_install_start() looks a package up (fw_library_find() -> fill_package(),
+ * which alone carries an esp_app_desc_t — 256 B — plus a couple of path
+ * buffers and a struct stat, on top of fw_install_start()'s and
+ * handle_fw_install()'s own locals) before it can answer OK/ERR. Measured on
+ * the bench: that whole chain, run straight off the CDC drain loop, panics
+ * the "main" task with a NULL-deref inside vfprintf the moment a *found*
+ * package reaches fill_package() (FW_INSTALL against a name that is not on
+ * the card returns before that point and is fine; FW_INSTALL test-v1 and
+ * test-v2, both found, both took the board down). FW_SLOTS' own
+ * esp_app_desc_t use survives on that same stack because its call chain is
+ * shorter — this one needs the extra headroom a dedicated task has, the
+ * same reasoning FW_LIST already runs on one. */
+static volatile bool s_fw_install_cmd_busy = false;
+
+struct FwInstallCmdArgs {
+    char name[FW_PKG_NAME_LEN];
+    bool force;
+};
+static FwInstallCmdArgs s_fw_install_cmd_args;
+
+static void fw_install_cmd_task(void *)
+{
+    const char *error = nullptr;
+    if (fw_install_start(s_fw_install_cmd_args.name, s_fw_install_cmd_args.force, &error)) {
+        cdc_reply(fw_install_stm_proto_older() ? "OK warn=stm_proto_older\r\n" : "OK\r\n");
+    } else {
+        /* From the call, not from the status: a refusal because another
+         * install is running deliberately leaves that install's own status
+         * alone. */
+        char reply[96];
+        snprintf(reply, sizeof(reply), "ERR %s\r\n", (error && error[0]) ? error : "refused");
+        cdc_reply(reply);
+    }
+    s_fw_install_cmd_busy = false;
+    vTaskDeleteWithCaps(nullptr);
+}
+
+static void handle_fw_install(const char *args)
+{
+    char name[FW_PKG_NAME_LEN] = {0};
+    char extra[16] = {0};
+    sscanf(args, "%47s %15s", name, extra);
+    if (!name[0]) {
+        cdc_reply("ERR FW_INSTALL <name> [FORCE]\r\n");
+        return;
+    }
+    if (s_fw_install_cmd_busy) {
+        cdc_reply("ERR busy\r\n");
+        return;
+    }
+    s_fw_install_cmd_busy = true;
+    strlcpy(s_fw_install_cmd_args.name, name, sizeof(s_fw_install_cmd_args.name));
+    s_fw_install_cmd_args.force = strcmp(extra, "FORCE") == 0;
+
+    if (xTaskCreatePinnedToCoreWithCaps(fw_install_cmd_task, "fw_install_cmd", 8192,
+                                        nullptr, 1, nullptr, 0,
+                                        MALLOC_CAP_SPIRAM) != pdPASS) {
+        s_fw_install_cmd_busy = false;
+        cdc_reply("ERR no task\r\n");
+    }
+}
+
+static void handle_fw_install_status(void)
+{
+    static const char *kPhaseNames[] = { "idle", "verifying", "writing", "done", "failed" };
+    const FwInstallStatus st = fw_install_status();
+    char reply[128];
+    snprintf(reply, sizeof(reply), "FWINST: phase=%s percent=%u error=%s\r\n",
+             kPhaseNames[(int)st.phase], (unsigned)st.percent,
+             st.error[0] ? st.error : "-");
+    cdc_reply(reply);
+}
+
+/* Same reasoning as fw_install_cmd_task() above: fw_switch_request() can
+ * walk the settings JsonDocument + stdio machinery (exporting the leaving
+ * slot's own settings before it moves the boot partition), so it never runs
+ * on the CDC drain loop's own stack. Success replies before the restart it
+ * then triggers — SETTINGS_RESET's own reply-then-reboot shape — because
+ * fw_switch_request() has no CDC of its own to flush first.
+ *
+ * Internal RAM, not PSRAM, unlike fw_install_cmd_task/fw_list_task: those
+ * only look things up and hand the real work to a task of their own, but
+ * fw_switch_request() itself writes flash directly (nvs_commit(), then
+ * esp_ota_set_boot_partition()) — measured on hardware as a coredump
+ * (task=fw_switch_cmd, cause=0, vaddr=0x0, right in that tail) every single
+ * time. A PSRAM-backed stack is unusable the moment its own call frame
+ * reaches into a flash write: the write's critical section disables the
+ * cache the CPU also needs for every push/pop on that stack, unlike a plain
+ * PSRAM *data* buffer (fw_install_task's chunk, or ArduinoJson's own heap),
+ * which the driver stages before entering that section. */
+static volatile bool s_fw_switch_cmd_busy = false;
+
+static void fw_switch_cmd_task(void *)
+{
+    const char *error = nullptr;
+    if (fw_switch_request(&error)) {
+        cdc_reply("OK reboot=1\r\n");
+        vTaskDelay(pdMS_TO_TICKS(200));
+        esp_restart();
+    }
+    char reply[96];
+    snprintf(reply, sizeof(reply), "ERR %s\r\n", error && error[0] ? error : "refused");
+    cdc_reply(reply);
+    s_fw_switch_cmd_busy = false;
+    vTaskDeleteWithCaps(nullptr);
+}
+
+static void handle_fw_switch(void)
+{
+    if (s_fw_switch_cmd_busy) {
+        cdc_reply("ERR busy\r\n");
+        return;
+    }
+    s_fw_switch_cmd_busy = true;
+    if (xTaskCreatePinnedToCoreWithCaps(fw_switch_cmd_task, "fw_switch_cmd", 8192,
+                                        nullptr, 1, nullptr, 0,
+                                        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) != pdPASS) {
+        s_fw_switch_cmd_busy = false;
+        cdc_reply("ERR no task\r\n");
+    }
+}
+
+bool verb_fw_list(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    if (strncmp(cmd, "FW_LIST", 7) == 0) {
+        if (s_fw_list_busy) { cdc_reply("FWPKG: ERR busy\r\n"); return true; }
+        s_fw_list_busy = true;
+        /* Stack from PSRAM, sized like PITCHED_BENCH's own task: this task
+         * never runs with the flash cache disabled. */
+        if (xTaskCreatePinnedToCoreWithCaps(fw_list_task, "fw_list", 8192,
+                                            nullptr, 1, nullptr, 0,
+                                            MALLOC_CAP_SPIRAM) != pdPASS) {
+            s_fw_list_busy = false;
+            cdc_reply("FWPKG: ERR no task\r\n");
+        }
+        return true;
+    }
+    return false;
+}
+
+bool verb_fw_slots(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    if (strncmp(cmd, "FW_SLOTS", 8) == 0) {
+        handle_fw_slots();
+        return true;
+    }
+    return false;
+}
+
+bool verb_fw_install(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    if (strncmp(cmd, "FW_INSTALL", 10) == 0) {
+        const char *args = cmd + 10;
+        while (*args == ' ') args++;
+        if (*args) handle_fw_install(args);
+        else       handle_fw_install_status();
+        return true;
+    }
+    return false;
+}
+
+bool verb_fw_switch(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    if (strncmp(cmd, "FW_SWITCH", 9) == 0) {
+        handle_fw_switch();
+        return true;
+    }
+    return false;
+}
+
+bool verb_fw_confirm(VerbLine &l)
+{
+    char *cmd = l.cmd;
+    if (strncmp(cmd, "FW_CONFIRM", 10) == 0) {
+        handle_fw_confirm();
+        return true;
+    }
+    return false;
+}

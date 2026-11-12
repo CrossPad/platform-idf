@@ -120,6 +120,14 @@ idf_component_register(
         "audio/engine_handoff.cpp"
         "gui/gui.cpp"
         "hil_control.cpp"
+        "hil_verbs_ui.cpp"
+        "hil_verbs_twin.cpp"
+        "hil_verbs_audio.cpp"
+        "hil_verbs_kit.cpp"
+        "hil_verbs_song.cpp"
+        "hil_verbs_system.cpp"
+        "hil_verbs_fw.cpp"
+        "hil_verbs_midi.cpp"
         "sd_bench.cpp"
         "sd_sector_io.cpp"
         "hil_text.cpp"
@@ -362,11 +370,13 @@ set_source_files_properties(${_pidf_dir}/EspBleMidi.cpp ${_pidf_dir}/SequenceSto
     ${_pidf_dir}/EspEventBus.cpp ${_pidf_dir}/Drv2605Driver.cpp
     DIRECTORY ${_pidf_dir} PROPERTIES COMPILE_OPTIONS -Os)
 
-# Every verb runs inside hil_control_handle_cdc()'s frame, on the main task's
-# stack (CONFIG_ESP_MAIN_TASK_STACK_SIZE, internal RAM): a frame in that file
-# past this is a build error here rather than a stack overflow on the board.
-# The dispatcher is 1216 B; CDC_STATS stack_min= is what the verbs leave.
-set_source_files_properties(hil_control.cpp PROPERTIES COMPILE_OPTIONS -Werror=stack-usage=1280)
+# Every verb runs under hil_control_handle_cdc(), on the main task's stack
+# (CONFIG_ESP_MAIN_TASK_STACK_SIZE, internal RAM): a frame in these files past
+# this is a build error here rather than a stack overflow on the board.
+# CDC_STATS stack_min= is what the verbs leave.
+set_source_files_properties(hil_control.cpp
+    hil_verbs_ui.cpp hil_verbs_twin.cpp hil_verbs_audio.cpp hil_verbs_kit.cpp hil_verbs_song.cpp hil_verbs_system.cpp hil_verbs_fw.cpp hil_verbs_midi.cpp
+    PROPERTIES COMPILE_OPTIONS -Werror=stack-usage=1280)
 
 if(IDF_TARGET STREQUAL "esp32s3")
     # Endpoint FIFO, deliberately NOT derived from CONFIG_UAC_MIC_INTERVAL_MS.

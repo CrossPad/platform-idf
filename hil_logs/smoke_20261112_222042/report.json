@@ -1,0 +1,39 @@
+{
+  "scenario": "smoke",
+  "device": "dev_1ede",
+  "passed": true,
+  "summary": "note: optional marker absent: ES8388 [1] started\nHIL SMOKE: PASS",
+  "exit_code": 0,
+  "data": {
+    "pass": true,
+    "missing": [],
+    "optional_missing": [
+      "ES8388 [1] started"
+    ],
+    "errors": [],
+    "fatal": [],
+    "bootloops": 0,
+    "seconds": 7.92972383601591,
+    "port": "/dev/ttyACM1"
+  },
+  "artifacts": [
+    {
+      "path": "hil_logs/smoke_20261112_222042/console.log",
+      "mime": "text/plain",
+      "role": "console"
+    },
+    {
+      "path": "hil_logs/smoke_20261112_222042/report.json",
+      "mime": "application/json",
+      "role": "report"
+    }
+  ],
+  "params": {
+    "flash": null,
+    "timeout": 25
+  },
+  "workdir": "hil_logs/smoke_20261112_222042",
+  "started": 1794518442.624525,
+  "finished": 1794518450.6763825,
+  "seconds": 8.052
+}

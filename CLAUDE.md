@@ -1123,7 +1123,11 @@ python3 tools/hil_track_capacity.py            # a song built track by track to 
 python3 tools/hil_track_transitions.py --tracks 5   # kit loads, ARM, TRACKKIT, edits, PUNCH under a playing song: underruns, card time by task
 ```
 
-Device side of the command set: `main/hil_control.cpp` (add verbs there); the
+Device side of the command set: one function per verb in `main/hil_verbs_<domain>.cpp`
+(ui, twin, audio, kit, song, system, fw, midi), offered a line in the order of
+`k_verbs` in `main/hil_control.cpp` -- the order is part of the protocol, verbs match
+by prefix. A new verb is a function in its domain's file, a line in `main/hil_verbs.h`
+and an entry in `k_verbs`; the
 state of the verbs the simulator answers too comes from crosspad-core
 `crosspad/control/`, their CDC text from `main/hil_text.cpp` (host goldens in
 `main/tests/`); host side: `crosspad_hil/verbs.py` + `knowledge/cdc.yaml`. No finger needed:
@@ -1310,7 +1314,7 @@ documentation ships with the code. Full text: [docs/MANIFESTO.md](docs/MANIFESTO
 | Bench entry point (check / ready / flash / test) | `tools/bench.py` |
 | Board revision resolver (`idf.py board`) | `tools/crosspad_board.py` |
 | ULP RISC-V program / BSP API | `components/bsp/crosspad/ulp/ulp_background.c`, `components/bsp/crosspad/include/bsp_ulp.h` |
-| HIL command set (device side) | `main/hil_control.cpp` |
+| HIL command set (device side) | `main/hil_control.cpp` (reply path, dispatch table `k_verbs`, companion allow-list), `main/hil_verbs_<domain>.cpp` (the verbs), `main/hil_verbs.h` |
 | Assets flashing / file transfer (device) | `main/file_transfer.cpp`, `main/include/file_transfer.h` |
 | Assets flashing / file transfer (host) | `tools/fs_transfer.py` |
 | USB transfer mode (boot flag + MSC callbacks, screen, descriptors) | `main/usb_transfer.cpp`, `main/gui/usb_transfer_screen.cpp`, `main/usb_descriptors_transfer.c` |
