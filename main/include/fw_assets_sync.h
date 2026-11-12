@@ -41,7 +41,10 @@ FwAssetsResult fw_assets_sync(void);
 
 /** True once, right after a fw_assets_sync() call that returned
  * MismatchNoSource — never twice for the same event. Copies the one-line
- * toast text ("Icons belong to the other firmware - insert the card with
- * <pkg>") into buf. Meant to be polled once the launcher is up, the same
- * shape as fw_rollback_toast_pending(). */
+ * toast text into buf: "Icons are from another firmware - insert the card
+ * with <pkg>" when the running slot is a package of the library, else (an
+ * OTA over USB, the browser updater before it wrote assets) "Icons are from
+ * an older firmware - update them at play.crosspad.app/device". Meant to be
+ * polled once the launcher is up, the same shape as
+ * fw_rollback_toast_pending(). */
 bool fw_assets_sync_toast_pending(char *buf, size_t len);

@@ -34,6 +34,7 @@
 #include "CrosspadPlatform.hpp"
 #include "crosspad/pad/PadAnimator.hpp"
 #include "cdc_line.h"
+#include "fw_slots.h"
 
 static const char *TAG = "file_xfer";
 
@@ -792,6 +793,9 @@ static bool handle_assets_begin(const char *cmd)
     if (!part)             { fx_reply("ASSETS_ERROR no_partition\r\n"); return true; }
     if (size > part->size) { fx_replyf("ASSETS_ERROR too_big_%u\r\n", (unsigned)part->size); return true; }
     if (!worker_ready())   { reply_no_worker("ASSETS_ERROR"); return true; }
+    /* ASSETS_OK restarts the board, and a restart before the running image
+     * confirmed itself rolls it back to the other slot. */
+    if (fw_running_on_trial()) { fx_reply("ASSETS_ERROR trial\r\n"); return true; }
 
     if (!slots_alloc()) {
         fx_replyf("ASSETS_ERROR nomem_%u\r\n",

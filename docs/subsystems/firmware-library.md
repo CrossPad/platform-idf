@@ -434,8 +434,24 @@ partition:
 - **Mismatch, no source** (`MismatchNoSource`) — the running slot has no
   package name, or that package has no `assets.bin`, or its `assets_id`
   doesn't match. The partition is **left alone** (no destructive rewrite it
-  couldn't complete) and one toast fires: *"Icons belong to the other
-  firmware - insert the card with `<pkg>`"*.
+  couldn't complete) and one toast fires, every boot until it is fixed:
+  *"Icons are from another firmware - insert the card with `<pkg>`"* when
+  the slot came from a package, *"Icons are from an older firmware - update
+  them at play.crosspad.app/device"* when it has no package name (an OTA
+  over USB).
+
+**An OTA over USB writes the firmware, not its assets.** The browser
+updaters (play.crosspad.app/device, the crosspad.app update card) and
+`ota_flash.py` send `CrossPad.bin` only, so the new firmware first boots on
+the old partition and the slot has no package to rewrite it from. The
+browser updaters then finish the job over the same link: once `FW_SLOTS`
+shows the running slot `confirmed`, they read `/assets/.assets_id` (`FS_GET`),
+compare it with the release manifest's `assets_id` and, when it differs,
+write the release's `assets.bin` (`ASSETS_BEGIN`, sha256 checked against the
+manifest). play.crosspad.app/device also offers it as *Built-in files →
+Repair* for a board left in that state. `ASSETS_BEGIN` answers
+`ASSETS_ERROR trial` while the running image is on trial: `ASSETS_OK`
+restarts the board, and that restart would roll the new firmware back.
 
 **The known cost of an UNNAMED slot.** A slot flashed by `bench.py flash` (a
 plain OTA over CDC, no package involved) has `pkg=-` in the registry. Switch

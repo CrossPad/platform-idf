@@ -36,10 +36,10 @@ static constexpr const char *kAssetsMarkerPath = "/assets/.assets_id";
 static constexpr size_t kAssetsPathMax =
     sizeof(FW_PKG_ROOT) + 1 + FW_PKG_NAME_LEN + 1 + sizeof("assets.bin");
 
-/* Fixed literal ("Icons belong ... insert the card with ") is 58 B, plus up
- * to FW_PKG_NAME_LEN - 1 for the package name: 128 covers the worst case with
- * margin, the way main.cpp's own rollback toast buffer does for its two
- * package names. */
+/* Fixed literal ("Icons are from another ... insert the card with ") is 54 B,
+ * plus up to FW_PKG_NAME_LEN - 1 for the package name: 128 covers the worst
+ * case with margin, the way main.cpp's own rollback toast buffer does for its
+ * two package names. */
 static bool s_toastPending = false;
 static char s_toastMsg[128];
 
@@ -123,10 +123,16 @@ static FwAssetsResult fw_assets_sync_body(void)
                             pkg.hasAssets &&
                             memcmp(pkg.assetsId, running->assets_id, FW_ASSETS_ID_LEN) == 0;
     if (!haveSource) {
-        const char *pkgName = (runningSlot && runningSlot->package[0])
-                                   ? runningSlot->package : "the matching package";
-        snprintf(s_toastMsg, sizeof(s_toastMsg),
-                 "Icons belong to the other firmware - insert the card with %s", pkgName);
+        /* A slot with no package name was written by an OTA over USB (the
+         * browser updater, ota_flash.py): there is no package to insert, the
+         * host that flashed it is where the assets come from. */
+        if (runningSlot && runningSlot->package[0]) {
+            snprintf(s_toastMsg, sizeof(s_toastMsg),
+                     "Icons are from another firmware - insert the card with %s", runningSlot->package);
+        } else {
+            snprintf(s_toastMsg, sizeof(s_toastMsg),
+                     "Icons are from an older firmware - update them at play.crosspad.app/device");
+        }
         s_toastPending = true;
         ESP_LOGW(TAG, "assets: mismatch, no source package on the card");
         return FwAssetsResult::MismatchNoSource;

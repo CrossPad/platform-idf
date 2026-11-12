@@ -85,7 +85,7 @@ the header — a header CRC would mean reading a 4 MB WAV twice. CRC32 is
 
 | Verb | Reply |
 |------|-------|
-| `ASSETS_BEGIN <size> <crc32hex> [FORCE]` | `ASSETS_READY`, then payload, `OK n/size` per 4096 B, then `ASSETS_OK` (reboots) or `ASSETS_ERROR <reason>` |
+| `ASSETS_BEGIN <size> <crc32hex> [FORCE]` | `ASSETS_READY`, then payload, `OK n/size` per 4096 B, then `ASSETS_OK` (reboots) or `ASSETS_ERROR <reason>`; `ASSETS_ERROR trial` at once while the running image has not confirmed itself (the reboot would roll it back) |
 | `FS_PUT <size> <crc32hex> <path>` | `FS_READY`, then payload, `OK n/size` per 4096 B, then `FS_OK <crc32hex>` or `FS_ERR <reason>` |
 | `FS_GET <off> <len> <path>` (`0 0` reads the whole file) | `FS_DATA <len>`, payload, `FS_OK <crc32hex>` (or `FS_TRUNC <got>/<len>`) |
 | `FS_LIST <dir>` | rows `FS_LIST: F\|D <size> <name>`, then `FS_END` |
