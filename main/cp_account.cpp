@@ -67,6 +67,7 @@ static SemaphoreHandle_t s_lock;
 static std::atomic<uint8_t> s_pair{CPA_IDLE};
 static std::atomic<bool> s_busy{false};
 static std::atomic<bool> s_cancel{false};
+static std::atomic<bool> s_again{false};   // a start asked for while a cancelled pairing was still ending
 static std::atomic<bool> s_notice{false};
 static std::atomic<bool> s_nvsDirty{false};
 static std::atomic<bool> s_nvsRunning{false};
@@ -142,6 +143,7 @@ static bool wipe(bool notice) {
         Lock l;
         had = s.token[0] != '\0';
         s_cancel = true;
+        s_again = false;
         ++s.gen;
         memset(s.token, 0, sizeof s.token);
         memset(s.name, 0, sizeof s.name);
@@ -304,29 +306,47 @@ static const char* run_pair(void) {
 }
 
 static void pair_task(void*) {
-    const char* why = run_pair();
-    memset(s_body, 0, sizeof s_body);   // held the poll secret while polling
+    for (;;) {
+        const char* why = run_pair();
+        memset(s_body, 0, sizeof s_body);   // held the poll secret while polling
+        ESP_LOGI(TAG, "pairing ended: %s", why ? why : "linked");
+        Lock l;
+        s.code[0] = '\0';
+        // A start that came while this cancelled pairing was ending: a fresh one, on the same lease.
+        if (why && s_again.exchange(false)) {
+            s.err[0] = '\0';
+            s.deadlineUs = 0;
+            s_cancel = false;
+            s_pair = CPA_STARTING;
+            continue;
+        }
+        s_again = false;
+        strlcpy(s.err, why && strcmp(why, kCancelled) != 0 && strcmp(why, kExpired) != 0 ? why : "", sizeof s.err);
+        if (!why) s_pair = CPA_LINKED;
+        else if (strcmp(why, kCancelled) == 0) s_pair = CPA_IDLE;
+        else if (strcmp(why, kExpired) == 0) s_pair = CPA_EXPIRED;
+        else s_pair = CPA_FAILED;
+        s_busy = false;   // under the lock: a start sees a pairing that can still take s_again, or none
+        break;
+    }
     s_stackFree = uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t);
     wifi_link_release();
-    {
-        Lock l;
-        strlcpy(s.err, why && strcmp(why, kCancelled) != 0 && strcmp(why, kExpired) != 0 ? why : "", sizeof s.err);
-        s.code[0] = '\0';
-    }
-    if (!why) s_pair = CPA_LINKED;
-    else if (strcmp(why, kCancelled) == 0) s_pair = CPA_IDLE;
-    else if (strcmp(why, kExpired) == 0) s_pair = CPA_EXPIRED;
-    else s_pair = CPA_FAILED;
-    ESP_LOGI(TAG, "pairing ended: %s", why ? why : "linked");
-    s_busy = false;
     vTaskDeleteWithCaps(nullptr);
 }
 
 bool cp_account_pair_start(char* refusal, size_t n) {
-    bool idle = false;
-    if (!s_busy.compare_exchange_strong(idle, true)) {
-        strlcpy(refusal, kRefusalBusy, n);
-        return false;
+    {
+        Lock l;
+        if (s_busy) {
+            if (!s_cancel) {
+                strlcpy(refusal, kRefusalBusy, n);
+                return false;
+            }
+            // Cancelled, but its task is still inside a request: it starts the new pairing when that returns.
+            s_again = true;
+            return true;
+        }
+        s_busy = true;
     }
     // On the caller's task, so a refusal (WiFi off, no_mem) is its answer at once.
     if (!wifi_link_acquire(kLeaseReason)) {
@@ -354,11 +374,14 @@ bool cp_account_pair_start(char* refusal, size_t n) {
 }
 
 void cp_account_pair_cancel(void) {
+    Lock l;
     s_cancel = true;
-    if (!s_busy) s_pair = CPA_IDLE;   // a running pairing ends in idle itself, within one slice
+    s_again = false;
+    if (!s_busy) s_pair = CPA_IDLE;   // a running pairing ends in idle itself, once its request returns
 }
 
-cpa_pair_t cp_account_pair_state(void) { return static_cast<cpa_pair_t>(s_pair.load()); }
+/* A cancelled pairing with a start waiting behind it is that start: its code is never shown. */
+cpa_pair_t cp_account_pair_state(void) { return s_again ? CPA_STARTING : static_cast<cpa_pair_t>(s_pair.load()); }
 
 const char* cp_account_pair_state_name(cpa_pair_t st) {
     switch (st) {
@@ -375,11 +398,11 @@ const char* cp_account_pair_state_name(cpa_pair_t st) {
 void cp_account_pair_code(char* out, size_t n) {
     if (n == 0) return;
     Lock l;
-    strlcpy(out, s_pair == CPA_CODE ? s.code : "", n);
+    strlcpy(out, cp_account_pair_state() == CPA_CODE ? s.code : "", n);
 }
 
 uint32_t cp_account_pair_left_s(void) {
-    if (s_pair != CPA_CODE) return 0;
+    if (cp_account_pair_state() != CPA_CODE) return 0;
     int64_t deadline;
     {
         Lock l;
