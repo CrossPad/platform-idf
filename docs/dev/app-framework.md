@@ -197,6 +197,10 @@ if (lvgl_port_lock(3000)) {
 // Safe object deletion
 lv_obj_delete_async(obj);  // NEVER lv_obj_delete() from callbacks
 
+// A value repainted from a timer: set the text only when it changed
+// (lv_label_set_text() frees, allocates and lays out again even for equal text)
+lv_label_update_text_fmt(label, "%u/%u", active, limit);   // crosspad-gui/widgets/gui_helpers.h
+
 // Hardware access — always through BSP, never direct registers
 bsp_display_brightness_set(80);
 bsp_i2s_es8388_start(BSP_I2S_INTERFACE_0);
