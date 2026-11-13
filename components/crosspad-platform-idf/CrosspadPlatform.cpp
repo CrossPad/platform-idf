@@ -166,6 +166,9 @@ static Stm32MessageHandler* s_stm32MsgHandler = nullptr;
 static Stm32Manager*    s_stm32Manager = nullptr;
 static TaskHandle_t     s_stm32MaintTask = nullptr;
 static MidiInputHandler* s_midiInputHandler = nullptr;
+#ifdef BSP_BOARD_CROSSPAD_S3
+static IdfAudioModule* s_audioModule = nullptr;   /* for the codec volume callback, which takes no context */
+#endif
 #if defined(BSP_BOARD_CROSSPAD_S3) && CONFIG_CROSSPAD_SAMPLER_MARCEL
 static MarcelSampleNode* s_marcelSampleNode = nullptr;
 #endif
@@ -223,9 +226,13 @@ MarcelSampleNode* getMarcelSampleNode() {
 
 // ── Initialization ──────────────────────────────────────────────────────
 
-CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* status) {
-    if (s_eventBus) return; // already initialized
+// CrosspadPlatform_Init() runs the steps below once, in this order. Each step
+// keeps its objects as function statics: they live as long as the firmware
+// and are built when the step runs.
 
+/** Event bus, clock, LED strip, pads and the core's own init; then the IMU
+ *  and the kit manager. */
+CP_COLD static void init_core(CrosspadSettings* settings, CrosspadStatus* status) {
     static EspEventBus eventBus({
         .queueSize = 64,
         .taskName = "crosspad_events",
@@ -310,15 +317,241 @@ CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* s
     // Kit manager, over the SD card VFS mount. listKits() must wait for the
     // mount (main.cpp).
     static IdfKitLoader kitLoader("/sdcard");
-    auto& svc = getPlatformServices();
-    svc.kitManager = &kitLoader;
+    getPlatformServices().kitManager = &kitLoader;
+}
 
 #ifdef BSP_BOARD_CROSSPAD_S3
+#ifdef IDF_HAS_MIXER
+/** The mixer channels a bounce and the song engine name. */
+struct EngineChannels {
+    uint8_t sampler;
+    uint8_t pitched;
+    uint8_t sampler2;   ///< kMixerInvalidChannelId with one sample engine
+    uint8_t click;
+};
+
+/** Sends a channel to the first @p outputs buses; nothing for a channel the
+ *  mixer had no slot for. */
+static void route_to_outputs(AudioMixerEngine& mixerEngine, uint8_t channel, uint8_t outputs) {
+    if (channel == kMixerInvalidChannelId) return;
+    for (uint8_t o = 0; o < outputs; ++o) mixerEngine.setRouteEnabled(channel, o, true);
+}
+
+CP_COLD static void mixer_follow_codec_volume(AudioMixerEngine& mixerEngine, IdfAudioModule& audioModule) {
+    /* Outputs 0 and 1 are codecs 0 and 1. At the top of a jack's volume the
+     * codec's analog stage cannot carry a full-scale peak, so the output that
+     * feeds it is limited to what it can: kept in step from wherever the
+     * volume is set, and taken once here for a codec that is already up. The
+     * limiter runs before the board's fix on an output (codec 1's shelf), so
+     * the ceiling leaves room for that fix's boost. */
+    bsp_es8388_set_volume_callback([](bsp_i2s_interface_t codec, int volume) {
+        if (s_mixerEngine) s_mixerEngine->setOutputCeiling((uint8_t)codec,
+            bsp_es8388_out_ceiling(volume) * s_audioModule->boardFixHeadroom((uint8_t)codec));
+    });
+    for (int c = 0; c < 2; ++c) {
+        int volume = 0;
+        if (bsp_es8388_get_volume((bsp_i2s_interface_t)c, &volume) == ESP_OK) {
+            mixerEngine.setOutputCeiling((uint8_t)c,
+                bsp_es8388_out_ceiling(volume) * audioModule.boardFixHeadroom((uint8_t)c));
+        }
+    }
+}
+
+/** Sampler, Pitched, USB playback and the click, in the slots a saved desk
+ *  expects them in. */
+CP_COLD static EngineChannels mixer_add_engines(AudioMixerEngine& mixerEngine, IAudioNode* samplerNode) {
+    // Sampler → both codecs, as the legacy single-bus path did (headphones
+    // and speaker share the mix).
+    auto chSampler = mixerEngine.addChannel(samplerNode, "Sampler");
+    route_to_outputs(mixerEngine, chSampler, IdfAudioModule::NUM_OUTPUTS);
+    // Pitched instrument beside the sampler, same routing. Only one of the two
+    // ever holds voices (the kit says which engine plays), so the bus headroom
+    // is unchanged.
+    auto chPitched = mixerEngine.addChannel(&getPitchedSampleNode(), "Pitched");
+    route_to_outputs(mixerEngine, chPitched, IdfAudioModule::NUM_OUTPUTS);
+#if CONFIG_CROSSPAD_SAMPLER_MARCEL
+    /* The native streaming engine, beside the other two. Its channel exists
+     * from boot and renders nothing until a kit is taken into it, so the two
+     * sample engines can be swapped at runtime without rebuilding the graph.
+     * It moves every channel after it one slot on; a desk saved by firmware
+     * without it is put back by channel name (crosspad-mixer, desk v4). */
+    auto chSampler2 = mixerEngine.addChannel(native_sampler_node(), "Sampler2");
+    route_to_outputs(mixerEngine, chSampler2, IdfAudioModule::NUM_OUTPUTS);
+#else
+    const uint8_t chSampler2 = kMixerInvalidChannelId;   /* one sampler channel, chSampler */
+#endif
+    PitchedInstrument& pitched = getPitchedSampleNode().instrument();
+    pitched.setVoiceCap(PitchedSampleNode::kVoiceCap);
+    crosspad::getPlatformServices().setPitchedInstrument(&pitched);
+    // Host playback over USB audio enters here, not I2S: the UAC task fills
+    // a ring and this channel drains it in the render, so the bus is the one
+    // place the host's audio and the pads meet. Both codecs, like the sampler.
+    static AudioInputNode usbNode(&usbPlaybackInput(), "USB");
+    auto chUsb = mixerEngine.addChannel(&usbNode, "USB");
+    /* Physical outputs only, deliberately not the capture bus: that is what
+     * lets the USB mic record the pads alone. Routing it here too would put
+     * the host's own playback back into the recording -- a DAW monitoring a
+     * metronome would hear it in the take. */
+    route_to_outputs(mixerEngine, chUsb, IdfAudioModule::NUM_STREAM_OUTPUTS);
+    /* The click is a reference for playing, not part of the take: physical
+     * outputs only, never the capture bus, so a recording comes back without
+     * the metronome on it. Same reasoning as the USB channel above. */
+    static crosspad::MetronomeNode metronome;
+    crosspad::s_metronome = &metronome;
+    auto chClick = mixerEngine.addChannel(&metronome, "Click");
+    route_to_outputs(mixerEngine, chClick, IdfAudioModule::NUM_STREAM_OUTPUTS);
+    return {chSampler, chPitched, chSampler2, chClick};
+}
+
+/** The pattern sequencer on the click's clock, its controller, and the
+ *  transport's home. */
+CP_COLD static void init_sequencer() {
+    /* The loop recorder rides the same clock the click is counted from, and
+     * plays back through handlePadPress() -- the entry point a physical pad
+     * uses -- so a recorded take sounds exactly like the performance did,
+     * through whichever app owns pad logic. It says it is the sequencer, so
+     * pad logic that must tell a finger from a take (held erase, Pad Mixer's
+     * selection) can. */
+    /* In PSRAM, not a static: 12.6 kB of pattern in internal .data is what
+     * took BLE's start margin. Only tasks touch it, never an ISR. */
+    static crosspad::PatternSequencer& sequencer = []() -> crosspad::PatternSequencer& {
+        void* mem = heap_caps_malloc(sizeof(crosspad::PatternSequencer), MALLOC_CAP_SPIRAM);
+        assert(mem);
+        return *new (mem) crosspad::PatternSequencer;
+    }();
+    crosspad::s_sequencer = &sequencer;
+    sequencer.attach(s_metronome);
+    sequencer.setSink([](void*, uint8_t route, uint8_t pad, uint8_t vel, bool on, crosspad::PadPerformance perf) {
+        auto& pads = crosspad::getPadManager();
+        /* A Pitch seq track's notes, beside the kits': the instrument, whatever
+         * screen is up (SeqTrackSound.hpp). */
+        if (route == 2) {
+            crosspad::seqTrackSound().playPitch(pads, pad, vel, on);
+            return;
+        }
+        /* With what the hit sounded as when it was recorded: a part taken in
+         * 16 levels plays its source pad at its levels, mode on or off now. */
+        if (on) pads.handlePadPress(pad, vel, crosspad::EventSource::SequencerCallback, perf);
+        else    pads.handlePadRelease(pad, crosspad::EventSource::SequencerCallback);
+    }, nullptr);
+    /* And at every hit, before the pad logic plays it: what the pads make of
+     * it right now is what the take keeps. */
+    sequencer.setPerformanceSource([](void*, uint8_t pad, uint8_t& vel) {
+        return crosspad::getPadManager().performanceFor(pad, vel);
+    }, nullptr);
+    /* The controller is the portable face of the sequencer: apps and the UI
+     * drive it through PlatformServices and never see this platform's engine.
+     * Four bars to start with, which is a kit loop rather than a one-bar riff. */
+    static crosspad::SequencerController seqController;
+    seqController.setSeqLength(crosspad::SequencerLimits::MAX_SEQ_LENGTH);
+    seqController.init(sequencer);
+    sequencer.setController(&seqController);
+    crosspad::getPlatformServices().sequencer       = &seqController;
+    crosspad::getPlatformServices().sequencerEngine = &sequencer;
+    /* The pattern is the transport's home: it holds it until an app takes it,
+     * and gets it back when that app is left stopped -- a board at the home
+     * screen or in the Sampler still has PLAY and REC mean something, which
+     * is the whole point of one transport in the top bar. */
+    crosspad::transportSetHome(crosspad::sequencerTransport());
+    crosspad::transportRestoreClick();
+    crosspad::sequencer_poll_start();
+    crosspad::sequence_store_start();
+}
+
+CP_COLD static void mixer_name_outputs(AudioMixerEngine& mixerEngine) {
+    /* The engine knows buses by number; where each one goes is this board's
+     * business, and it is what the Mixer shows: the codecs as the output
+     * pairs of a four-channel interface -- the phones (and the speakers
+     * beside them) on 1/2, the line out on 3/4 -- and the recording bus a
+     * host reads as "USB". */
+    mixerEngine.setOutputName(0, "Out 1/2");
+    mixerEngine.setOutputName(1, "Out 3/4");
+    mixerEngine.setOutputName(IdfAudioModule::CAPTURE_BUS, "USB");
+    mixerEngine.setOutputHeard(IdfAudioModule::CAPTURE_BUS, false);
+    /* It has no fader in front of it (Settings -> USB gives gain, never
+     * less), so this is where the limiter works hardest -- and only a host
+     * reads it, where a block of latency is nothing and a click is in the
+     * take. */
+    mixerEngine.setOutputLookahead(IdfAudioModule::CAPTURE_BUS, true);
+    /* Presets on the card, not in NVS: a desk is ~2 kB and NVS is 24 kB. */
+    crosspad::getMixerPresets().setDir("/sdcard/crosspad/mixer");
+}
+
+/** The inputs as channels, the song engine's strips, then the saved desk over
+ *  all of it. @p inNodes are IN1, IN2 and IN3. */
+CP_COLD static void mixer_add_inputs_and_desk(AudioMixerEngine& mixerEngine, const EngineChannels& ch,
+                                              AudioInputNode* const inNodes[kInputSources]) {
+    uint8_t chIn[kInputSources] = {
+        mixerEngine.addChannel(inNodes[kInputMic], "IN1"),
+        mixerEngine.addChannel(inNodes[kInputLine12], "IN2"),
+        kMixerInvalidChannelId,
+    };
+    mixer_name_outputs(mixerEngine);
+
+#if CROSSPAD_HAS_SONG_ENGINE
+    /* Before the saved desk is applied, so the "Song" and "Preview" strips
+     * get their levels back like every other. */
+    song_engine_init(mixerEngine, ch.sampler, ch.sampler2, ch.pitched);
+    sample_tools_init(mixerEngine);
+    input_pairs_init();
+    input_gain_init();
+    output_levels_init();
+    /* A bus whose speakers and jacks have levels of their own in the hardware
+     * plays at unity: its level is theirs. Before the saved desk, which
+     * would otherwise put an old fader back on it. */
+    if (IOutputLevels* ol = getPlatformServices().outputLevels) {
+        for (int i = 0; i < ol->outputs(); ++i) {
+            for (uint8_t o = 0; o < mixerEngine.numOutputs(); ++o) {
+                if (std::strcmp(mixerEngine.getOutputName(o), ol->mixerOutput(i)) == 0) {
+                    mixerEngine.setOutputUnity(o, true);
+                }
+            }
+        }
+    }
+#endif
+    /* Last of all: a saved desk finds its channels by slot and name, so Line
+     * 3/4 must not move the channels registered before it existed. */
+    if (BSP_HAS_SHARED_LINE_IN) chIn[kInputLine34] = mixerEngine.addChannel(inNodes[kInputLine34], "IN3");
+    // IN channels off by default: with nothing plugged in, the passthrough put
+    // raw ADC noise on the bus. Sent from the Mixer (MONITOR), each holds its
+    // codec's ADC on its input while it is sent anywhere.
+    input_monitor_start(mixerEngine, chIn);
+
+    /* The desk as it was left, over the defaults above: a board that never
+     * saved one, or a blob that does not parse, keeps them. */
+    mixer_state_load(mixerEngine);
+    /* A desk older than the mixer's format was migrated on the way in (and
+     * may have had its only sample engine rescued): saved back once, so the
+     * rescue is not repeated over what the player does next. Not here -- the
+     * save is ArduinoJson on a 4 kB main task -- but on the LVGL thread once
+     * the first screen is up (mixer_state_save_deferred()). */
+    s_mixerSaveDeferred = mixerEngine.deskMigrated();
+    if (s_mixerSaveDeferred) ESP_LOGI(TAG, "mixer desk migrated: saved back once the UI is up");
+    /* Never on the caller's stack. Serialising the desk is ArduinoJson plus a
+     * std::string, which is kilobytes, and a setter called from the CDC
+     * dispatcher runs on the main task's four -- it overflowed it, inside
+     * ArduinoJson's allocator, the first time an EQ was set from a host. The
+     * save goes to the LVGL thread, which has the stack for it and is where
+     * the Mixer's own close already saved from. Posted with the lock: MIX_EQ
+     * (main task), INPUT_MON and MIX_PRESET (their own tasks) get here off the
+     * LVGL thread, and a bare lv_async_call() there edits LVGL's timer list
+     * under a running lv_timer_handler (LV_OS_NONE: LVGL has no lock of its own). */
+    mixerEngine.setStateChangedCallback([]() {
+        if (!s_mixerEngine || !lv_is_initialized()) return;
+        lv_async_call_locked([](void*) { if (s_mixerEngine) mixer_state_save(*s_mixerEngine); }, nullptr);
+    });
+}
+#endif // IDF_HAS_MIXER
+
+/** The two codecs' audio module, the inputs, and the mixer with every channel
+ *  on it (or the plain node chain without the mixer component). */
+CP_COLD static void init_audio(CrosspadSettings* settings) {
     // Audio pipeline: IdfAudioModule wraps the dual ES8388 I2S streams. With
     // the optional crosspad-mixer present, apps register as mixer channels and
     // AudioMixerEngine renders a bus per codec; without it, the path falls
     // back to AbstractAudioModule's single-bus node chain.
     static IdfAudioModule audioModule;
+    s_audioModule = &audioModule;
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
     static MarcelSampleNode marcelSampleNode;
     s_marcelSampleNode = &marcelSampleNode;
@@ -355,214 +588,17 @@ CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* s
         IdfI2sInput* const inputs[] = {&i2sInput0, &i2sInput1, &i2sInput2};
         audio_buffer_init(audioModule, mixerEngine, inputs, 3);
     }
-    /* Outputs 0 and 1 are codecs 0 and 1. At the top of a jack's volume the
-     * codec's analog stage cannot carry a full-scale peak, so the output that
-     * feeds it is limited to what it can: kept in step from wherever the
-     * volume is set, and taken once here for a codec that is already up. The
-     * limiter runs before the board's fix on an output (codec 1's shelf), so
-     * the ceiling leaves room for that fix's boost. */
-    bsp_es8388_set_volume_callback([](bsp_i2s_interface_t codec, int volume) {
-        if (s_mixerEngine) s_mixerEngine->setOutputCeiling((uint8_t)codec,
-            bsp_es8388_out_ceiling(volume) * audioModule.boardFixHeadroom((uint8_t)codec));
-    });
-    for (int c = 0; c < 2; ++c) {
-        int volume = 0;
-        if (bsp_es8388_get_volume((bsp_i2s_interface_t)c, &volume) == ESP_OK) {
-            mixerEngine.setOutputCeiling((uint8_t)c,
-                bsp_es8388_out_ceiling(volume) * audioModule.boardFixHeadroom((uint8_t)c));
-        }
-    }
-    // Sampler → both codecs, as the legacy single-bus path did (headphones
-    // and speaker share the mix).
-    auto chSampler = mixerEngine.addChannel(samplerNode, "Sampler");
-    if (chSampler != kMixerInvalidChannelId) {
-        for (uint8_t o = 0; o < IdfAudioModule::NUM_OUTPUTS; ++o) {
-            mixerEngine.setRouteEnabled(chSampler, o, true);
-        }
-    }
-    // Pitched instrument beside the sampler, same routing. Only one of the two
-    // ever holds voices (the kit says which engine plays), so the bus headroom
-    // is unchanged.
-    auto chPitched = mixerEngine.addChannel(&getPitchedSampleNode(), "Pitched");
-    if (chPitched != kMixerInvalidChannelId) {
-        for (uint8_t o = 0; o < IdfAudioModule::NUM_OUTPUTS; ++o) {
-            mixerEngine.setRouteEnabled(chPitched, o, true);
-        }
-    }
-#if CONFIG_CROSSPAD_SAMPLER_MARCEL
-    /* The native streaming engine, beside the other two. Its channel exists
-     * from boot and renders nothing until a kit is taken into it, so the two
-     * sample engines can be swapped at runtime without rebuilding the graph.
-     * It moves every channel after it one slot on; a desk saved by firmware
-     * without it is put back by channel name (crosspad-mixer, desk v4). */
-    auto chSampler2 = mixerEngine.addChannel(native_sampler_node(), "Sampler2");
-    if (chSampler2 != kMixerInvalidChannelId) {
-        for (uint8_t o = 0; o < IdfAudioModule::NUM_OUTPUTS; ++o) {
-            mixerEngine.setRouteEnabled(chSampler2, o, true);
-        }
-    }
-#else
-    const uint8_t chSampler2 = 0xFF;   /* one sampler channel, chSampler */
-#endif
-    PitchedInstrument& pitched = getPitchedSampleNode().instrument();
-    pitched.setVoiceCap(PitchedSampleNode::kVoiceCap);
-    crosspad::getPlatformServices().setPitchedInstrument(&pitched);
-    // Host playback over USB audio enters here, not I2S: the UAC task fills
-    // a ring and this channel drains it in the render, so the bus is the one
-    // place the host's audio and the pads meet. Both codecs, like the sampler.
-    static AudioInputNode usbNode(&usbPlaybackInput(), "USB");
-    auto chUsb = mixerEngine.addChannel(&usbNode, "USB");
-    if (chUsb != kMixerInvalidChannelId) {
-        /* Physical outputs only, deliberately not the capture bus: that is what
-         * lets the USB mic record the pads alone. Routing it here too would put
-         * the host's own playback back into the recording -- a DAW monitoring a
-         * metronome would hear it in the take. */
-        for (uint8_t o = 0; o < IdfAudioModule::NUM_STREAM_OUTPUTS; ++o) {
-            mixerEngine.setRouteEnabled(chUsb, o, true);
-        }
-    }
-    /* The click is a reference for playing, not part of the take: physical
-     * outputs only, never the capture bus, so a recording comes back without
-     * the metronome on it. Same reasoning as the USB channel above. */
-    static crosspad::MetronomeNode metronome;
-    crosspad::s_metronome = &metronome;
-    auto chClick = mixerEngine.addChannel(&metronome, "Click");
-    if (chClick != kMixerInvalidChannelId) {
-        for (uint8_t o = 0; o < IdfAudioModule::NUM_STREAM_OUTPUTS; ++o) {
-            mixerEngine.setRouteEnabled(chClick, o, true);
-        }
-    }
-    /* The loop recorder rides the same clock the click is counted from, and
-     * plays back through handlePadPress() -- the entry point a physical pad
-     * uses -- so a recorded take sounds exactly like the performance did,
-     * through whichever app owns pad logic. It says it is the sequencer, so
-     * pad logic that must tell a finger from a take (held erase, Pad Mixer's
-     * selection) can. */
-    /* In PSRAM, not a static: 12.6 kB of pattern in internal .data is what
-     * took BLE's start margin. Only tasks touch it, never an ISR. */
-    static crosspad::PatternSequencer& sequencer = []() -> crosspad::PatternSequencer& {
-        void* mem = heap_caps_malloc(sizeof(crosspad::PatternSequencer), MALLOC_CAP_SPIRAM);
-        assert(mem);
-        return *new (mem) crosspad::PatternSequencer;
-    }();
-    crosspad::s_sequencer = &sequencer;
-    sequencer.attach(&metronome);
-    sequencer.setSink([](void*, uint8_t route, uint8_t pad, uint8_t vel, bool on, crosspad::PadPerformance perf) {
-        auto& pads = crosspad::getPadManager();
-        /* A Pitch seq track's notes, beside the kits': the instrument, whatever
-         * screen is up (SeqTrackSound.hpp). */
-        if (route == 2) {
-            crosspad::seqTrackSound().playPitch(pads, pad, vel, on);
-            return;
-        }
-        /* With what the hit sounded as when it was recorded: a part taken in
-         * 16 levels plays its source pad at its levels, mode on or off now. */
-        if (on) pads.handlePadPress(pad, vel, crosspad::EventSource::SequencerCallback, perf);
-        else    pads.handlePadRelease(pad, crosspad::EventSource::SequencerCallback);
-    }, nullptr);
-    /* And at every hit, before the pad logic plays it: what the pads make of
-     * it right now is what the take keeps. */
-    sequencer.setPerformanceSource([](void*, uint8_t pad, uint8_t& vel) {
-        return crosspad::getPadManager().performanceFor(pad, vel);
-    }, nullptr);
-    /* The controller is the portable face of the sequencer: apps and the UI
-     * drive it through PlatformServices and never see this platform's engine.
-     * Four bars to start with, which is a kit loop rather than a one-bar riff. */
-    static crosspad::SequencerController seqController;
-    seqController.setSeqLength(crosspad::SequencerLimits::MAX_SEQ_LENGTH);
-    seqController.init(sequencer);
-    sequencer.setController(&seqController);
-    crosspad::getPlatformServices().sequencer       = &seqController;
-    crosspad::getPlatformServices().sequencerEngine = &sequencer;
-    /* The pattern is the transport's home: it holds it until an app takes it,
-     * and gets it back when that app is left stopped -- a board at the home
-     * screen or in the Sampler still has PLAY and REC mean something, which
-     * is the whole point of one transport in the top bar. */
-    crosspad::transportSetHome(crosspad::sequencerTransport());
-    crosspad::transportRestoreClick();
-    crosspad::sequencer_poll_start();
-    crosspad::sequence_store_start();
-
-    uint8_t chIn[kInputSources] = {
-        mixerEngine.addChannel(&in1Node, "IN1"),
-        mixerEngine.addChannel(&in2Node, "IN2"),
-        kMixerInvalidChannelId,
-    };
-    /* The engine knows buses by number; where each one goes is this board's
-     * business, and it is what the Mixer shows: the codecs as the output
-     * pairs of a four-channel interface -- the phones (and the speakers
-     * beside them) on 1/2, the line out on 3/4 -- and the recording bus a
-     * host reads as "USB". */
-    mixerEngine.setOutputName(0, "Out 1/2");
-    mixerEngine.setOutputName(1, "Out 3/4");
-    mixerEngine.setOutputName(IdfAudioModule::CAPTURE_BUS, "USB");
-    mixerEngine.setOutputHeard(IdfAudioModule::CAPTURE_BUS, false);
-    /* It has no fader in front of it (Settings -> USB gives gain, never
-     * less), so this is where the limiter works hardest -- and only a host
-     * reads it, where a block of latency is nothing and a click is in the
-     * take. */
-    mixerEngine.setOutputLookahead(IdfAudioModule::CAPTURE_BUS, true);
-    /* Presets on the card, not in NVS: a desk is ~2 kB and NVS is 24 kB. */
-    crosspad::getMixerPresets().setDir("/sdcard/crosspad/mixer");
-
-#if CROSSPAD_HAS_SONG_ENGINE
-    /* Before the saved desk is applied, so the "Song" and "Preview" strips
-     * get their levels back like every other. */
-    song_engine_init(mixerEngine, chSampler, chSampler2, chPitched);
-    sample_tools_init(mixerEngine);
-    input_pairs_init();
-    input_gain_init();
-    output_levels_init();
-    /* A bus whose speakers and jacks have levels of their own in the hardware
-     * plays at unity: its level is theirs. Before the saved desk, which
-     * would otherwise put an old fader back on it. */
-    if (IOutputLevels* ol = getPlatformServices().outputLevels) {
-        for (int i = 0; i < ol->outputs(); ++i) {
-            for (uint8_t o = 0; o < mixerEngine.numOutputs(); ++o) {
-                if (std::strcmp(mixerEngine.getOutputName(o), ol->mixerOutput(i)) == 0) {
-                    mixerEngine.setOutputUnity(o, true);
-                }
-            }
-        }
-    }
-#endif
-    /* Last of all: a saved desk finds its channels by slot and name, so Line
-     * 3/4 must not move the channels registered before it existed. */
-    if (BSP_HAS_SHARED_LINE_IN) chIn[kInputLine34] = mixerEngine.addChannel(&in3Node, "IN3");
-    // IN channels off by default: with nothing plugged in, the passthrough put
-    // raw ADC noise on the bus. Sent from the Mixer (MONITOR), each holds its
-    // codec's ADC on its input while it is sent anywhere.
-    input_monitor_start(mixerEngine, chIn);
-
-    /* The desk as it was left, over the defaults above: a board that never
-     * saved one, or a blob that does not parse, keeps them. */
-    mixer_state_load(mixerEngine);
-    /* A desk older than the mixer's format was migrated on the way in (and
-     * may have had its only sample engine rescued): saved back once, so the
-     * rescue is not repeated over what the player does next. Not here -- the
-     * save is ArduinoJson on a 4 kB main task -- but on the LVGL thread once
-     * the first screen is up (mixer_state_save_deferred()). */
-    s_mixerSaveDeferred = mixerEngine.deskMigrated();
-    if (s_mixerSaveDeferred) ESP_LOGI(TAG, "mixer desk migrated: saved back once the UI is up");
-    /* Never on the caller's stack. Serialising the desk is ArduinoJson plus a
-     * std::string, which is kilobytes, and a setter called from the CDC
-     * dispatcher runs on the main task's four -- it overflowed it, inside
-     * ArduinoJson's allocator, the first time an EQ was set from a host. The
-     * save goes to the LVGL thread, which has the stack for it and is where
-     * the Mixer's own close already saved from. Posted with the lock: MIX_EQ
-     * (main task), INPUT_MON and MIX_PRESET (their own tasks) get here off the
-     * LVGL thread, and a bare lv_async_call() there edits LVGL's timer list
-     * under a running lv_timer_handler (LV_OS_NONE: LVGL has no lock of its own). */
-    mixerEngine.setStateChangedCallback([]() {
-        if (!s_mixerEngine || !lv_is_initialized()) return;
-        lv_async_call_locked([](void*) { if (s_mixerEngine) mixer_state_save(*s_mixerEngine); }, nullptr);
-    });
+    mixer_follow_codec_volume(mixerEngine, audioModule);
+    const EngineChannels ch = mixer_add_engines(mixerEngine, samplerNode);
+    init_sequencer();
+    AudioInputNode* const inNodes[kInputSources] = {&in1Node, &in2Node, &in3Node};
+    mixer_add_inputs_and_desk(mixerEngine, ch, inNodes);
 
     /* The sampler engines and the pitched one: whichever holds the kit is
      * what a bounce and a PADS take have to hear. */
-    audioModule.setPadChannels(chSampler, chPitched, chSampler2);
-    song_engine_set_pads_tap(audioModule, chSampler, chPitched, chSampler2);
-    audioModule.setClockChannel(chClick);
+    audioModule.setPadChannels(ch.sampler, ch.pitched, ch.sampler2);
+    song_engine_set_pads_tap(audioModule, ch.sampler, ch.pitched, ch.sampler2);
+    audioModule.setClockChannel(ch.click);
     audioModule.setMixerEngine(&mixerEngine);
     ESP_LOGI(TAG, "Audio pipeline: mixer mode (Sampler+Pitched→all outs, IN1/IN2 muted)");
 #else
@@ -570,11 +606,13 @@ CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* s
     audioModule.addNode(&getPitchedSampleNode());
     ESP_LOGI(TAG, "Audio pipeline: node-chain mode (no mixer component)");
 #endif
-    svc.setAudioModule(&audioModule);
-#endif
+    getPlatformServices().setAudioModule(&audioModule);
+}
+#endif // BSP_BOARD_CROSSPAD_S3
 
+CP_COLD static void wire_pad_animation_and_midi(CrosspadSettings* settings) {
     // ESP-IDF specific: animation state callback
-    padAnimator.setAnimationStateCallback([](bool active) {
+    s_padAnimator->setAnimationStateCallback([](bool active) {
         if (active) {
             s_padLedController->setAnimating(true);
         } else {
@@ -583,15 +621,19 @@ CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* s
     });
 
     // ESP-IDF specific: MidiInputHandler needs PadManager reference
-    midiInputHandler.init(padManager, eventBus, settings);
+    s_midiInputHandler->init(*s_padManager, *s_eventBus, settings);
+}
 
+/** Transport, message handler, command sender and manager of the STM32. The
+ *  manager is started later, by CrosspadPlatform_StartStm32(). */
+CP_COLD static void init_stm32(CrosspadSettings* settings, CrosspadStatus* status) {
     // STM32 transport (UART_NUM_1)
     static EspStm32Transport stm32Transport(UART_NUM_1);
     s_stm32Transport = &stm32Transport;
 
     // STM32 message handler (RX dispatch)
     static Stm32MessageHandler stm32MsgHandler;
-    stm32MsgHandler.init(padManager, *status);
+    stm32MsgHandler.init(*s_padManager, *status);
     stm32MsgHandler.setDfuRequestCallback([](bool stm32Dfu) {
         if (stm32Dfu) {
             ESP_LOGI("CrosspadPlatform", "STM32 entering DFU mode");
@@ -623,12 +665,23 @@ CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* s
 
     // STM32 manager (portable maintenance logic)
     static Stm32Manager stm32Manager;
-    stm32Manager.init(stm32CmdSender, settings, clock);
+    stm32Manager.init(stm32CmdSender, settings, *s_clock);
 #if defined(BSP_HAS_STM32_I2C) && BSP_HAS_STM32_I2C
     stm32Manager.setConfigSync(&stm32ConfigSync);                // NEW
 #endif
     // start() is called later by CrosspadPlatform_StartStm32() after UART HAL init
     s_stm32Manager = &stm32Manager;
+}
+
+CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* status) {
+    if (s_eventBus) return; // already initialized
+
+    init_core(settings, status);
+#ifdef BSP_BOARD_CROSSPAD_S3
+    init_audio(settings);
+#endif
+    wire_pad_animation_and_midi(settings);
+    init_stm32(settings, status);
 
     ESP_LOGI(TAG, "Platform fully initialized");
 }
