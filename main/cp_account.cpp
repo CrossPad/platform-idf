@@ -313,11 +313,12 @@ static void pair_task(void*) {
         Lock l;
         s.code[0] = '\0';
         // A start that came while this cancelled pairing was ending: a fresh one, on the same lease.
-        if (why && s_again.exchange(false)) {
+        if (why && s_again) {
             s.err[0] = '\0';
             s.deadlineUs = 0;
             s_cancel = false;
-            s_pair = CPA_STARTING;
+            s_pair = CPA_STARTING;   // before s_again drops: a reader never sees the ended pairing's state
+            s_again = false;
             continue;
         }
         s_again = false;
