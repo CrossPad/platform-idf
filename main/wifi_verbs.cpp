@@ -152,6 +152,10 @@ static void ping_task(void*) {
                      device_serial());
         else if (r > 0)
             snprintf(line, sizeof(line), "ERR status=%d\r\n", r);
+        else if (r == WIFI_PING_NO_LINK)   // never joined: the reason is the link's, not the server's
+            snprintf(line, sizeof(line), "ERR err=%s tls=0x0000 fail=%s\r\n",
+                     esp_err_to_name((esp_err_t)-r),
+                     crosspad::wifiFailName((crosspad::WifiFail)wifi_link_fail()));
         else   // mbedTLS codes are negative: tls=-0x2700
             snprintf(line, sizeof(line), "ERR err=%s tls=%s0x%04X\r\n",
                      esp_err_to_name((esp_err_t)-r), tls < 0 ? "-" : "",

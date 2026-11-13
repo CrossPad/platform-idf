@@ -7,6 +7,7 @@
 #include "esp_err.h"
 #include "esp_timer.h"
 #include "esp_tls.h"
+#include "esp_wifi.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -83,9 +84,14 @@ static void version_for_query(const char* in, char* out, size_t size) {
     out[n] = '\0';
 }
 
+static_assert(WIFI_PING_NO_LINK == -(int)ESP_ERR_WIFI_NOT_CONNECT, "wifi_ping.h: WIFI_PING_NO_LINK");
+
 int wifi_ping(uint32_t* ms, int* tlsCode) {
     if (tlsCode) *tlsCode = 0;
-    if (!wifi_link_wait_up(kLinkTimeoutMs)) return -(int)ESP_ERR_TIMEOUT;
+    if (ms) *ms = 0;
+    /* A code of its own: -ESP_ERR_TIMEOUT is also a TLS step that ran out of
+     * time, and that one does mean the server. */
+    if (!wifi_link_wait_up(kLinkTimeoutMs)) return WIFI_PING_NO_LINK;
     esp_tls_t* tls = esp_tls_init();
     if (!tls) return -(int)ESP_ERR_NO_MEM;
     esp_tls_cfg_t c = {};
