@@ -443,6 +443,107 @@ static void reload_current_kit(void)
                   "the pads are silent until the next kit change", kReloadAttempts, kitId);
 }
 
+/* Room for an install failure's reason: an IDF call's name and its error. */
+static constexpr size_t kInstallWhyMax = 64;
+
+/* The image is the authority; a manifest.json that disagrees with what
+ * fw_image_desc_read_file() already read out of the image itself means the
+ * package directory holds a mismatched pair. Returns the reason the package is
+ * refused, nullptr when it may be installed (a package without a manifest may).
+ *
+ * Read through the install task's own chunk buffer (plain FILE*, not
+ * std::ifstream): a manifest is a few hundred bytes, and kit_load_task.cpp
+ * measured std::ifstream + JsonDocument together at close to 7 kB of
+ * stack for the same small-file-into-JsonDocument shape — more than this
+ * task's whole internal-RAM stack. deserializeJson() copies every string
+ * it keeps into the document's own pool, so reusing `chunk` for the raw
+ * image bytes afterwards is safe. */
+static const char *install_verify_manifest(const FwPackage &pkg, uint8_t *chunk)
+{
+    char manifestPath[kInstallPathMax];
+    fw_library_path(pkg, "manifest.json", manifestPath, sizeof(manifestPath));
+    if (access(manifestPath, F_OK) != 0) return nullptr;
+
+    FILE *mf = fopen(manifestPath, "rb");
+    const size_t mlen = mf ? fread(chunk, 1, kInstallChunk - 1, mf) : 0;
+    if (mf) fclose(mf);
+    chunk[mlen] = '\0';
+
+    JsonDocument doc;
+    /* mlen == kInstallChunk - 1: the file may have been larger than the
+     * buffer and got truncated — a real manifest is tiny, so treat that
+     * the same as a parse failure rather than judge a cut-off document. */
+    if (!mf || mlen == 0 || mlen == kInstallChunk - 1 ||
+        deserializeJson(doc, reinterpret_cast<const char *>(chunk), mlen)) {
+        return "manifest disagrees with the image";
+    }
+    const int manifestBoardRev = doc["board_rev"] | -1;
+    const char *manifestKit = doc["kit"] | "";
+    if (manifestBoardRev != static_cast<int>(pkg.boardRev) || strcmp(manifestKit, pkg.kit) != 0) {
+        return "manifest disagrees with the image";
+    }
+    const char *wantHex = doc["files"]["CrossPad.bin"]["sha256"] | "";
+    if (wantHex[0]) {
+        char imagePath[kInstallPathMax];
+        fw_library_path(pkg, "CrossPad.bin", imagePath, sizeof(imagePath));
+        if (!sha256_matches(imagePath, wantHex, chunk)) return "image does not match its manifest";
+    }
+    return nullptr;
+}
+
+/* Copies the package's image from the card into `target`, reporting progress
+ * as it goes. False with the reason in `why` (kInstallWhyMax bytes) when the
+ * slot does not hold a whole, valid image afterwards. */
+static bool install_write_image(const FwPackage &pkg, const esp_partition_t *target, uint8_t *chunk, char *why)
+{
+    char imagePath[kInstallPathMax];
+    fw_library_path(pkg, "CrossPad.bin", imagePath, sizeof(imagePath));
+    FILE *f = fopen(imagePath, "rb");
+    if (!f) {
+        strlcpy(why, "cannot open the image", kInstallWhyMax);
+        return false;
+    }
+
+    esp_ota_handle_t handle;
+    esp_err_t err = esp_ota_begin(target, pkg.imageSize, &handle);
+    if (err != ESP_OK) {
+        fclose(f);
+        snprintf(why, kInstallWhyMax, "esp_ota_begin: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    set_status(FwInstallPhase::Writing, 0, nullptr);
+    size_t done = 0;
+    size_t n;
+    int chunksSinceYield = 0;
+    while ((n = fread(chunk, 1, kInstallChunk, f)) > 0) {
+        err = esp_ota_write(handle, chunk, n);
+        if (err != ESP_OK) break;
+        done += n;
+        const uint8_t percent = pkg.imageSize ? static_cast<uint8_t>(done * 100 / pkg.imageSize) : 100;
+        set_status(FwInstallPhase::Writing, percent, nullptr);
+        if (++chunksSinceYield >= 16) {
+            vTaskDelay(1);
+            chunksSinceYield = 0;
+        }
+    }
+    fclose(f);
+
+    if (err != ESP_OK || done != pkg.imageSize) {
+        esp_ota_abort(handle);
+        if (err != ESP_OK) snprintf(why, kInstallWhyMax, "esp_ota_write: %s", esp_err_to_name(err));
+        else                strlcpy(why, "short read from the card", kInstallWhyMax);
+        return false;
+    }
+
+    err = esp_ota_end(handle);
+    if (err != ESP_OK) {
+        snprintf(why, kInstallWhyMax, "esp_ota_end: %s", esp_err_to_name(err));
+        return false;
+    }
+    return true;
+}
+
 static void fw_install_task(void *)
 {
     const FwPackage pkg = s_installPkg;
@@ -482,52 +583,11 @@ static void fw_install_task(void *)
         vTaskDeleteWithCaps(nullptr);
     };
 
-    /* Step 1: Verifying — the image is the authority; a manifest.json that
-     * disagrees with what fw_image_desc_read_file() already read out of the
-     * image itself means the package directory holds a mismatched pair.
-     *
-     * Read through the install task's own chunk buffer (plain FILE*, not
-     * std::ifstream): a manifest is a few hundred bytes, and kit_load_task.cpp
-     * measured std::ifstream + JsonDocument together at close to 7 kB of
-     * stack for the same small-file-into-JsonDocument shape — more than this
-     * task's whole internal-RAM stack. deserializeJson() copies every string
-     * it keeps into the document's own pool, so reusing `chunk` for the raw
-     * image bytes afterwards is safe. */
-    char manifestPath[kInstallPathMax];
-    fw_library_path(pkg, "manifest.json", manifestPath, sizeof(manifestPath));
-    if (access(manifestPath, F_OK) == 0) {
-        FILE *mf = fopen(manifestPath, "rb");
-        const size_t mlen = mf ? fread(chunk, 1, kInstallChunk - 1, mf) : 0;
-        if (mf) fclose(mf);
-        chunk[mlen] = '\0';
-
-        JsonDocument doc;
-        /* mlen == kInstallChunk - 1: the file may have been larger than the
-         * buffer and got truncated — a real manifest is tiny, so treat that
-         * the same as a parse failure rather than judge a cut-off document. */
-        if (!mf || mlen == 0 || mlen == kInstallChunk - 1 ||
-            deserializeJson(doc, reinterpret_cast<const char *>(chunk), mlen)) {
-            abort_with("manifest disagrees with the image");
-            return;
-        }
-        const int manifestBoardRev = doc["board_rev"] | -1;
-        const char *manifestKit = doc["kit"] | "";
-        if (manifestBoardRev != static_cast<int>(pkg.boardRev) || strcmp(manifestKit, pkg.kit) != 0) {
-            abort_with("manifest disagrees with the image");
-            return;
-        }
-        const char *wantHex = doc["files"]["CrossPad.bin"]["sha256"] | "";
-        if (wantHex[0]) {
-            char imagePath[kInstallPathMax];
-            fw_library_path(pkg, "CrossPad.bin", imagePath, sizeof(imagePath));
-            if (!sha256_matches(imagePath, wantHex, chunk)) {
-                abort_with("image does not match its manifest");
-                return;
-            }
-        }
+    if (const char *refused = install_verify_manifest(pkg, chunk)) {
+        abort_with(refused);
+        return;
     }
 
-    /* Step 2 */
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
     if (wasRunning) {
         marcel_engine_stop();
@@ -541,67 +601,19 @@ static void fw_install_task(void *)
         return;
     }
 
-    char imagePath[kInstallPathMax];
-    fw_library_path(pkg, "CrossPad.bin", imagePath, sizeof(imagePath));
-    FILE *f = fopen(imagePath, "rb");
-    if (!f) {
-        abort_with("cannot open the image");
-        return;
-    }
-
-    esp_ota_handle_t handle;
-    esp_err_t err = esp_ota_begin(target, pkg.imageSize, &handle);
-    if (err != ESP_OK) {
-        fclose(f);
-        char why[64];
-        snprintf(why, sizeof(why), "esp_ota_begin: %s", esp_err_to_name(err));
+    char why[kInstallWhyMax];
+    if (!install_write_image(pkg, target, chunk, why)) {
         abort_with(why);
         return;
     }
 
-    /* Step 3: Writing */
-    set_status(FwInstallPhase::Writing, 0, nullptr);
-    size_t done = 0;
-    size_t n;
-    int chunksSinceYield = 0;
-    while ((n = fread(chunk, 1, kInstallChunk, f)) > 0) {
-        err = esp_ota_write(handle, chunk, n);
-        if (err != ESP_OK) break;
-        done += n;
-        const uint8_t percent = pkg.imageSize ? static_cast<uint8_t>(done * 100 / pkg.imageSize) : 100;
-        set_status(FwInstallPhase::Writing, percent, nullptr);
-        if (++chunksSinceYield >= 16) {
-            vTaskDelay(1);
-            chunksSinceYield = 0;
-        }
-    }
-    fclose(f);
-
-    if (err != ESP_OK || done != pkg.imageSize) {
-        esp_ota_abort(handle);
-        char why[64];
-        if (err != ESP_OK) snprintf(why, sizeof(why), "esp_ota_write: %s", esp_err_to_name(err));
-        else                strlcpy(why, "short read from the card", sizeof(why));
-        abort_with(why);
-        return;
-    }
-
-    err = esp_ota_end(handle);
-    if (err != ESP_OK) {
-        char why[64];
-        snprintf(why, sizeof(why), "esp_ota_end: %s", esp_err_to_name(err));
-        abort_with(why);
-        return;
-    }
-
-    /* Step 4 — the target slot's registry entry. The boot partition is not
-     * touched: only fw_switch_request() ever moves it. */
+    /* The target slot's registry entry. The boot partition is not touched:
+     * only fw_switch_request() ever moves it. */
     uint8_t sha[32];
     esp_partition_get_sha256(target, sha);
     slot_store(partition_label(target), pkg.name, sha, FwSlotState::Installed);
     other_slot_refresh();
 
-    /* Step 5 */
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
     if (wasRunning) marcel_engine_start();
 #endif
