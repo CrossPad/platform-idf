@@ -304,6 +304,230 @@ bool verb_asong_dbg(VerbLine &l)
     return false;
 }
 
+/* A track's fader in percent, or its M -- as Arrange's MIX sets them. */
+static bool asong_track_mix(crosspad::ISongEngine* se, const char* arg, int a, int b)
+{
+    bool ok = true;
+    ok = a >= 0 && a < crosspad::AudioSong::kTracks;
+    if (ok) {
+        {
+            std::lock_guard<std::recursive_mutex> l(se->songMutex());
+            auto& t = se->song().tracks[a];
+            if (arg[0] == 'V') t.volume = (float)(b < 0 ? 0 : b) / 100.0f;
+            else               t.muted = b != 0;
+        }
+        se->commit();
+    }
+    return ok;
+}
+
+/* A kit track on the lowest free track, armed, with a scene of
+ * its own -- what Arrange's ADD TRACK > KITS does -- playing the
+ * kit named (a kit.json as the kit list names it), or the song's.
+ * It plays live once Arrange hands it the kits' engine. */
+static bool asong_add_kit_track(crosspad::ISongEngine* se, const char* arg)
+{
+    bool ok = true;
+    const char* kit = arg[8] == ' ' ? arg + 9 : "";
+    auto* sq = crosspad::getPlatformServices().sequencer;
+    const bool added = sq && sq->addScene();
+    {
+        std::lock_guard<std::recursive_mutex> l(se->songMutex());
+        auto& song = se->song();
+        const int scene = song.sceneForNewSeq(sq ? sq->getSceneCount() : 1, added);
+        const int t = song.freeTrack();
+        ok = t >= 0 && scene >= 0 && song.addSeqTrack(t, crosspad::SeqSource::Kit, (uint8_t)scene, kit);
+        if (ok) song.armed = (int8_t)t;
+    }
+    if (ok) se->commit();
+    return ok;
+}
+
+/* A Pitch track on the lowest free track, armed, with a scene of
+ * its own, playing the instrument named (an instrument.json, or a
+ * pitched kit.json, from the card's root) -- Arrange's KITS >
+ * PITCH with the instrument already picked. Beside two kit tracks
+ * since core 2.6 (route 2). */
+static bool asong_add_pitch_track(crosspad::ISongEngine* se, const char* arg)
+{
+    bool ok = true;
+    auto* sq = crosspad::getPlatformServices().sequencer;
+    const bool added = sq && sq->addScene();
+    {
+        std::lock_guard<std::recursive_mutex> l(se->songMutex());
+        auto& song = se->song();
+        const int scene = song.sceneForNewSeq(sq ? sq->getSceneCount() : 1, added);
+        const int t = song.freeTrack();
+        ok = t >= 0 && scene >= 0 && song.addSeqTrack(t, crosspad::SeqSource::Pitch, (uint8_t)scene);
+        if (ok) {
+            song.armed = (int8_t)t;
+            song.instrument = arg + 11;
+        }
+    }
+    if (ok) {
+        se->commit();
+        /* What a pick in Pitch Play leaves behind: Arrange keeps this
+         * instrument loaded for the track (its sound keeper). */
+        crosspad::InstrumentPlayState& ps = crosspad::instrumentPlayState();
+        ps.instrumentPath = arg + 11;
+        crosspad::instrumentPlayStatePublished();
+    }
+    return ok;
+}
+
+/* DEL on a track's header, confirmed: its clips leave the song,
+ * the tracks under it move up. */
+static bool asong_del_track(crosspad::ISongEngine* se, int a)
+{
+    bool ok = true;
+    {
+        std::lock_guard<std::recursive_mutex> l(se->songMutex());
+        auto& song = se->song();
+        ok = a >= 0 && a < crosspad::AudioSong::kTracks && song.tracks[a].inUse;
+        if (ok) song.removeTrack(a);
+    }
+    if (ok) se->commit();
+    return ok;
+}
+
+/* A block's DUP (a copy straight after it), DEL, or MOVE to bar c3:
+ * block b of track a, as the keys a block opens in Arrange. */
+static bool asong_block_edit(crosspad::ISongEngine* se, const char* arg, int a, int b, int c3)
+{
+    bool ok = true;
+    {
+        std::lock_guard<std::recursive_mutex> l(se->songMutex());
+        auto& song = se->song();
+        ok = a >= 0 && a < crosspad::AudioSong::kTracks && b >= 0 &&
+             b < (int)song.tracks[a].clips.size() && c3 >= 0;
+        if (ok) {
+            auto& cs = song.tracks[a].clips;
+            if (arg[1] == 'U') {
+                crosspad::SongClip copy = cs[(size_t)b];
+                copy.bar = cs[(size_t)b].bar + cs[(size_t)b].bars;
+                cs.push_back(copy);
+            } else if (arg[0] == 'D') {
+                cs.erase(cs.begin() + b);
+            } else {
+                cs[(size_t)b].bar = (uint32_t)c3;
+            }
+            song.sortTrack(a);
+        }
+    }
+    if (ok) se->commit();
+    return ok;
+}
+
+/* EDIT's copy of bars [a, b) and paste at bar c3: what was there
+ * moves on, cut where the paste starts if it crossed it. */
+static bool asong_paste(crosspad::ISongEngine* se, int a, int b, int c3)
+{
+    bool ok = true;
+    {
+        std::lock_guard<std::recursive_mutex> l(se->songMutex());
+        auto& song = se->song();
+        ok = a >= 0 && b > a && c3 >= 0;
+        if (ok) {
+            song.seqBlocksExplicit(se->playEndBars());
+            const uint32_t spb = se->framesPerBar();
+            const auto part = song.copyRange((uint32_t)a, (uint32_t)b, spb);
+            song.insertBars((uint32_t)c3, (uint32_t)(b - a), spb);
+            song.pasteRange(part, (uint32_t)c3);
+        }
+    }
+    if (ok) se->commit();
+    return ok;
+}
+
+/* EDIT's "Cut track T at bar B": the block of track a running
+ * across bar b in two there (ok=0 when none does). */
+static bool asong_cut(crosspad::ISongEngine* se, int a, int b)
+{
+    bool ok = true;
+    int second = -1;
+    if (a >= 0 && a < crosspad::AudioSong::kTracks && b >= 0) {
+        std::lock_guard<std::recursive_mutex> l(se->songMutex());
+        auto& song = se->song();
+        song.seqBlocksExplicit(se->playEndBars());
+        second = song.cutClip(a, (uint32_t)b, se->framesPerBar());
+    }
+    ok = second >= 0;
+    if (ok) se->commit();
+    return ok;
+}
+
+/* EDIT's "Duplicate the region x2": the region's bars again right
+ * after it, every track, and the region twice as long. */
+static bool asong_dup_region(crosspad::ISongEngine* se)
+{
+    bool ok = true;
+    {
+        std::lock_guard<std::recursive_mutex> l(se->songMutex());
+        auto& song = se->song();
+        ok = song.hasRegion();
+        if (ok) {
+            const uint32_t w = song.loopEnd - song.loopStart;
+            song.seqBlocksExplicit(se->playEndBars());
+            const uint32_t spb = se->framesPerBar();
+            const auto part = song.copyRange(song.loopStart, song.loopEnd, spb);
+            song.insertBars(song.loopEnd, w, spb);
+            song.pasteRange(part, song.loopEnd);
+            song.loopEnd += w;
+        }
+    }
+    if (ok) se->commit();
+    return ok;
+}
+
+/** The ASONG status line every action ends with. */
+static void asong_reply_status(crosspad::ISongEngine* se, bool ok)
+{
+    const crosspad::BounceStatus bs = se->bounceStatus();
+    std::lock_guard<std::recursive_mutex> songLock(se->songMutex());
+    const crosspad::AudioSong& song = se->song();
+    /* Static and integer-only: this runs on the 5 kB main task, where a
+     * 300-byte frame plus printf's float path is enough to overflow it. */
+    EXT_RAM_BSS_ATTR static char reply[448];   /* PSRAM: the bounce fields stand before file=/err= */
+    constexpr int kTail = 3;   // "\r\n" and the terminator always fit
+    const int posCenti = (int)(se->positionBars() * 100.0);
+    /* Names last: a project may have spaces and an error always does, so
+     * everything before them is key=value a host splits on spaces, and
+     * "project=" / " err=" take the rest of the line. */
+    int n = snprintf(reply, sizeof(reply) - kTail,
+                     "ASONG: ok=%d open=%d edit=%d eprog=%u rgn=%u-%u bpm=%d len=%u sync=%d play=%d pos=%d.%02d under=%u "
+                     "openfail=%u bounce=%d done=%u total=%u clips=",
+                     ok ? 1 : 0, (int)se->openState(), (int)se->editState(), (unsigned)se->editProgress(),
+                     (unsigned)song.loopStart, (unsigned)song.loopEnd, (int)lroundf(song.bpm),
+                     (unsigned)song.playEnd(), song.syncSeq ? 1 : 0, se->playing() ? 1 : 0,
+                     posCenti / 100, posCenti % 100, (unsigned)se->underruns(),
+                     (unsigned)se->openFailures(), (int)bs.state,
+                     (unsigned)bs.framesDone, (unsigned)bs.framesTotal);
+    /* snprintf answers what it would have written: a long name or error
+     * makes that more than the buffer, and every offset after it must be
+     * clamped or the next write lands past the end. */
+    n = std::min(n, (int)sizeof(reply) - kTail);
+    for (int t = 0; t < std::max(song.usedTracks(), crosspad::AudioSong::kTracksV5); ++t) {
+        n += snprintf(reply + n, sizeof(reply) - kTail - n, "%s%u", t ? "/" : "",
+                      (unsigned)song.tracks[t].clips.size());
+        n = std::min(n, (int)sizeof(reply) - kTail);
+    }
+    /* How the card kept up with the last bounce: what it could take is
+     * 4096000 / chunk_avg_us kB/s; drain_kbps is the bus's own rate
+     * while it keeps up. io_fb: pieces through stdio, since boot. */
+    n += snprintf(reply + n, sizeof(reply) - kTail - n,
+                  " chunks=%u chunk_avg_us=%u chunk_max_us=%u drain_kbps=%u io_fb=%u pieces=%u/%u",
+                  (unsigned)bs.chunks, (unsigned)bs.chunkAvgUs, (unsigned)bs.chunkMaxUs,
+                  (unsigned)bs.drainKBps, (unsigned)crosspad::song_engine_io_fallbacks(),
+                  (unsigned)bs.piecesDone, (unsigned)bs.pieces);
+    n = std::min(n, (int)sizeof(reply) - kTail);
+    n += snprintf(reply + n, sizeof(reply) - kTail - n, " file=%s project=%s%s%s",
+                  bs.file.empty() ? "-" : bs.file.c_str(), song.name.c_str(),
+                  bs.error.empty() ? "" : " err=", bs.error.c_str());
+    n = std::min(n, (int)sizeof(reply) - kTail);
+    snprintf(reply + n, sizeof(reply) - n, "\r\n");
+    cdc_reply(reply);
+}
+
 bool verb_asong(VerbLine &l)
 {
     char *cmd = l.cmd;
@@ -317,17 +541,7 @@ bool verb_asong(VerbLine &l)
         if      (strncmp(arg, "OPEN ", 5) == 0)             ok = se->requestOpen(arg + 5);
         else if (sscanf(arg, "BOUNCESEQ %d", &a) == 1)      ok = se->bounceSeqTrack((uint8_t)a);   // as Arrange's BOUNCE
         else if (sscanf(arg, "VOL %d %d", &a, &b) == 2 || sscanf(arg, "MUTE %d %d", &a, &b) == 2) {
-            /* A track's fader in percent, or its M -- as Arrange's MIX sets them. */
-            ok = a >= 0 && a < crosspad::AudioSong::kTracks;
-            if (ok) {
-                {
-                    std::lock_guard<std::recursive_mutex> l(se->songMutex());
-                    auto& t = se->song().tracks[a];
-                    if (arg[0] == 'V') t.volume = (float)(b < 0 ? 0 : b) / 100.0f;
-                    else               t.muted = b != 0;
-                }
-                se->commit();
-            }
+            ok = asong_track_mix(se, arg, a, b);
         }
         else if (sscanf(arg, "FREEZE %d", &a) == 1) {
             /* Freeze track a now (Arrange does it when ARM moves on): renders
@@ -347,103 +561,20 @@ bool verb_asong(VerbLine &l)
             se->commit();
         }
         else if (strncmp(arg, "SEQTRACK ", 9) == 0 || strcmp(arg, "SEQTRACK") == 0) {
-            /* A kit track on the lowest free track, armed, with a scene of
-             * its own -- what Arrange's ADD TRACK > KITS does -- playing the
-             * kit named (a kit.json as the kit list names it), or the song's.
-             * It plays live once Arrange hands it the kits' engine. */
-            const char* kit = arg[8] == ' ' ? arg + 9 : "";
-            auto* sq = crosspad::getPlatformServices().sequencer;
-            const bool added = sq && sq->addScene();
-            {
-                std::lock_guard<std::recursive_mutex> l(se->songMutex());
-                auto& song = se->song();
-                const int scene = song.sceneForNewSeq(sq ? sq->getSceneCount() : 1, added);
-                const int t = song.freeTrack();
-                ok = t >= 0 && scene >= 0 && song.addSeqTrack(t, crosspad::SeqSource::Kit, (uint8_t)scene, kit);
-                if (ok) song.armed = (int8_t)t;
-            }
-            if (ok) se->commit();
+            ok = asong_add_kit_track(se, arg);
         }
         else if (strncmp(arg, "PITCHTRACK ", 11) == 0) {
-            /* A Pitch track on the lowest free track, armed, with a scene of
-             * its own, playing the instrument named (an instrument.json, or a
-             * pitched kit.json, from the card's root) -- Arrange's KITS >
-             * PITCH with the instrument already picked. Beside two kit tracks
-             * since core 2.6 (route 2). */
-            auto* sq = crosspad::getPlatformServices().sequencer;
-            const bool added = sq && sq->addScene();
-            {
-                std::lock_guard<std::recursive_mutex> l(se->songMutex());
-                auto& song = se->song();
-                const int scene = song.sceneForNewSeq(sq ? sq->getSceneCount() : 1, added);
-                const int t = song.freeTrack();
-                ok = t >= 0 && scene >= 0 && song.addSeqTrack(t, crosspad::SeqSource::Pitch, (uint8_t)scene);
-                if (ok) {
-                    song.armed = (int8_t)t;
-                    song.instrument = arg + 11;
-                }
-            }
-            if (ok) {
-                se->commit();
-                /* What a pick in Pitch Play leaves behind: Arrange keeps this
-                 * instrument loaded for the track (its sound keeper). */
-                crosspad::InstrumentPlayState& ps = crosspad::instrumentPlayState();
-                ps.instrumentPath = arg + 11;
-                crosspad::instrumentPlayStatePublished();
-            }
+            ok = asong_add_pitch_track(se, arg);
         }
         else if (sscanf(arg, "DELTRACK %d", &a) == 1) {
-            /* DEL on a track's header, confirmed: its clips leave the song,
-             * the tracks under it move up. */
-            {
-                std::lock_guard<std::recursive_mutex> l(se->songMutex());
-                auto& song = se->song();
-                ok = a >= 0 && a < crosspad::AudioSong::kTracks && song.tracks[a].inUse;
-                if (ok) song.removeTrack(a);
-            }
-            if (ok) se->commit();
+            ok = asong_del_track(se, a);
         }
         else if (sscanf(arg, "DUP %d %d", &a, &b) == 2 || sscanf(arg, "DELBLOCK %d %d", &a, &b) == 2 ||
                  sscanf(arg, "MOVE %d %d %d", &a, &b, &c3) == 3) {
-            /* A block's DUP (a copy straight after it), DEL, or MOVE to bar c3:
-             * block b of track a, as the keys a block opens in Arrange. */
-            {
-                std::lock_guard<std::recursive_mutex> l(se->songMutex());
-                auto& song = se->song();
-                ok = a >= 0 && a < crosspad::AudioSong::kTracks && b >= 0 &&
-                     b < (int)song.tracks[a].clips.size() && c3 >= 0;
-                if (ok) {
-                    auto& cs = song.tracks[a].clips;
-                    if (arg[1] == 'U') {
-                        crosspad::SongClip copy = cs[(size_t)b];
-                        copy.bar = cs[(size_t)b].bar + cs[(size_t)b].bars;
-                        cs.push_back(copy);
-                    } else if (arg[0] == 'D') {
-                        cs.erase(cs.begin() + b);
-                    } else {
-                        cs[(size_t)b].bar = (uint32_t)c3;
-                    }
-                    song.sortTrack(a);
-                }
-            }
-            if (ok) se->commit();
+            ok = asong_block_edit(se, arg, a, b, c3);
         }
         else if (sscanf(arg, "PASTE %d %d %d", &a, &b, &c3) == 3) {
-            /* EDIT's copy of bars [a, b) and paste at bar c3: what was there
-             * moves on, cut where the paste starts if it crossed it. */
-            {
-                std::lock_guard<std::recursive_mutex> l(se->songMutex());
-                auto& song = se->song();
-                ok = a >= 0 && b > a && c3 >= 0;
-                if (ok) {
-                    song.seqBlocksExplicit(se->playEndBars());
-                    const uint32_t spb = se->framesPerBar();
-                    const auto part = song.copyRange((uint32_t)a, (uint32_t)b, spb);
-                    song.insertBars((uint32_t)c3, (uint32_t)(b - a), spb);
-                    song.pasteRange(part, (uint32_t)c3);
-                }
-            }
-            if (ok) se->commit();
+            ok = asong_paste(se, a, b, c3);
         }
         else if (int at = 0; sscanf(arg, "TRACKKIT %d %n", &a, &at) == 1 && at > 0 && arg[at]) {
             /* A kit track's kit picked again in Arrange's kit loader: the
@@ -483,36 +614,10 @@ bool verb_asong(VerbLine &l)
             se->commit();
         }
         else if (sscanf(arg, "CUT %d %d", &a, &b) == 2) {
-            /* EDIT's "Cut track T at bar B": the block of track a running
-             * across bar b in two there (ok=0 when none does). */
-            int second = -1;
-            if (a >= 0 && a < crosspad::AudioSong::kTracks && b >= 0) {
-                std::lock_guard<std::recursive_mutex> l(se->songMutex());
-                auto& song = se->song();
-                song.seqBlocksExplicit(se->playEndBars());
-                second = song.cutClip(a, (uint32_t)b, se->framesPerBar());
-            }
-            ok = second >= 0;
-            if (ok) se->commit();
+            ok = asong_cut(se, a, b);
         }
         else if (strcmp(arg, "DUPREGION") == 0) {
-            /* EDIT's "Duplicate the region x2": the region's bars again right
-             * after it, every track, and the region twice as long. */
-            {
-                std::lock_guard<std::recursive_mutex> l(se->songMutex());
-                auto& song = se->song();
-                ok = song.hasRegion();
-                if (ok) {
-                    const uint32_t w = song.loopEnd - song.loopStart;
-                    song.seqBlocksExplicit(se->playEndBars());
-                    const uint32_t spb = se->framesPerBar();
-                    const auto part = song.copyRange(song.loopStart, song.loopEnd, spb);
-                    song.insertBars(song.loopEnd, w, spb);
-                    song.pasteRange(part, song.loopEnd);
-                    song.loopEnd += w;
-                }
-            }
-            if (ok) se->commit();
+            ok = asong_dup_region(se);
         }
         else if (strncmp(arg, "RENAME ", 7) == 0)           ok = se->requestRename(arg + 7);
         else if (strcmp(arg, "DELETE") == 0)                 ok = se->requestDelete();   // the open project, clips and all
@@ -541,50 +646,7 @@ bool verb_asong(VerbLine &l)
         }
         else if (*arg) { cdc_reply("ERR ASONG OPEN name|BOUNCE scene track|PLAY [bar]|STOP|CANCEL|LEN bars|SYNC 0|1|TEMPO bpm|RENAME name|REGION a b|MERGE mask from to|IMPORT path a b track bar lead|EXPORT|EXPORTWAV|REPORT|REC bar [beats]|DUB bar [beats]|PUNCH R|D|N|BOUNCESEQ track|VOL track pct|MUTE track 0|1|CUT track bar|DUPREGION|ARM track|SEQTRACK [kitjson]|DELTRACK t|DUP t b|DELBLOCK t b|MOVE t b bar|PASTE a b at|TRACKKIT t kitjson\r\n"); return true; }
 
-        const crosspad::BounceStatus bs = se->bounceStatus();
-        std::lock_guard<std::recursive_mutex> songLock(se->songMutex());
-        const crosspad::AudioSong& song = se->song();
-        /* Static and integer-only: this runs on the 5 kB main task, where a
-         * 300-byte frame plus printf's float path is enough to overflow it. */
-        EXT_RAM_BSS_ATTR static char reply[448];   /* PSRAM: the bounce fields stand before file=/err= */
-        constexpr int kTail = 3;   // "\r\n" and the terminator always fit
-        const int posCenti = (int)(se->positionBars() * 100.0);
-        /* Names last: a project may have spaces and an error always does, so
-         * everything before them is key=value a host splits on spaces, and
-         * "project=" / " err=" take the rest of the line. */
-        int n = snprintf(reply, sizeof(reply) - kTail,
-                         "ASONG: ok=%d open=%d edit=%d eprog=%u rgn=%u-%u bpm=%d len=%u sync=%d play=%d pos=%d.%02d under=%u "
-                         "openfail=%u bounce=%d done=%u total=%u clips=",
-                         ok ? 1 : 0, (int)se->openState(), (int)se->editState(), (unsigned)se->editProgress(),
-                         (unsigned)song.loopStart, (unsigned)song.loopEnd, (int)lroundf(song.bpm),
-                         (unsigned)song.playEnd(), song.syncSeq ? 1 : 0, se->playing() ? 1 : 0,
-                         posCenti / 100, posCenti % 100, (unsigned)se->underruns(),
-                         (unsigned)se->openFailures(), (int)bs.state,
-                         (unsigned)bs.framesDone, (unsigned)bs.framesTotal);
-        /* snprintf answers what it would have written: a long name or error
-         * makes that more than the buffer, and every offset after it must be
-         * clamped or the next write lands past the end. */
-        n = std::min(n, (int)sizeof(reply) - kTail);
-        for (int t = 0; t < std::max(song.usedTracks(), crosspad::AudioSong::kTracksV5); ++t) {
-            n += snprintf(reply + n, sizeof(reply) - kTail - n, "%s%u", t ? "/" : "",
-                          (unsigned)song.tracks[t].clips.size());
-            n = std::min(n, (int)sizeof(reply) - kTail);
-        }
-        /* How the card kept up with the last bounce: what it could take is
-         * 4096000 / chunk_avg_us kB/s; drain_kbps is the bus's own rate
-         * while it keeps up. io_fb: pieces through stdio, since boot. */
-        n += snprintf(reply + n, sizeof(reply) - kTail - n,
-                      " chunks=%u chunk_avg_us=%u chunk_max_us=%u drain_kbps=%u io_fb=%u pieces=%u/%u",
-                      (unsigned)bs.chunks, (unsigned)bs.chunkAvgUs, (unsigned)bs.chunkMaxUs,
-                      (unsigned)bs.drainKBps, (unsigned)crosspad::song_engine_io_fallbacks(),
-                      (unsigned)bs.piecesDone, (unsigned)bs.pieces);
-        n = std::min(n, (int)sizeof(reply) - kTail);
-        n += snprintf(reply + n, sizeof(reply) - kTail - n, " file=%s project=%s%s%s",
-                      bs.file.empty() ? "-" : bs.file.c_str(), song.name.c_str(),
-                      bs.error.empty() ? "" : " err=", bs.error.c_str());
-        n = std::min(n, (int)sizeof(reply) - kTail);
-        snprintf(reply + n, sizeof(reply) - n, "\r\n");
-        cdc_reply(reply);
+        asong_reply_status(se, ok);
         return true;
     }
     return false;
