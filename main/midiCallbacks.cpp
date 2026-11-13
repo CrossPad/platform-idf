@@ -564,61 +564,14 @@ void bleMidi_boot()
 
 //////   UART MIDI task   //////
 
-void uartLoop(void *pvParameters)
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+/* What the STM sends: pad notes, SysEx, and each held pad's pressure and balance. */
+static void register_stm_handlers()
 {
-#ifdef CONFIG_IDF_TARGET_ESP32S3
-    // Initialize STM32 UART MIDI
-    STM32MIDI.begin();
-    // Woken by every chunk the UART event task stores (see the wait at the
-    // bottom of the loop).
-    midi::EspStm32MidiTransport::wakeOnRx(xTaskGetCurrentTaskHandle());
-#endif
-
-    // Initialize USB MIDI — listen on all channels
-    USB_MIDI.begin(MIDI_CHANNEL_OMNI);
-    s_usbMidiBegun.store(true, std::memory_order_release);
-    USB_MIDI.setHandleClock(midi_clock_host_tick);
-    USB_MIDI.setHandleStart(midi_clock_host_start);
-    USB_MIDI.setHandleContinue(midi_clock_host_continue);
-    USB_MIDI.setHandleStop(midi_clock_host_stop);
-
-#ifdef CONFIG_IDF_TARGET_ESP32S3
-    // Register MIDI callbacks for STM32 interface
     STM32MIDI.setHandleNoteOn(onNoteOn2Audio);
     STM32MIDI.setHandleNoteOff(onNoteOff2Audio);
     STM32MIDI.setHandleSystemExclusive(handleSysEx);
-#endif
 
-    // USB MIDI in: a pad's note plays the pad, the same as over BLE
-    /* Each host message is also handed to the browser twin as it is
-     * dispatched here (twin_mirror.h, kind 4), so its apps see the same. */
-    USB_MIDI.setHandleNoteOn([](midi::Channel ch, uint8_t note, uint8_t vel) {
-        const uint8_t m[3] = {(uint8_t)(0x90 | ((ch - 1) & 0x0F)), note, vel};
-        twin_mirror_host(m, 3);
-        host_note_on(static_cast<uint8_t>(ch - 1), note, vel);
-    });
-    USB_MIDI.setHandleNoteOff([](midi::Channel ch, uint8_t note, uint8_t vel) {
-        const uint8_t m[3] = {(uint8_t)(0x80 | ((ch - 1) & 0x0F)), note, vel};
-        twin_mirror_host(m, 3);
-        host_note_off(static_cast<uint8_t>(ch - 1), note, vel);
-    });
-    USB_MIDI.setHandleSystemExclusive([](byte* array, unsigned size) {
-        if (s_usbSysExEcho && size >= 2 && array[1] != CROSSPAD_SYSEX_MANUFACTURER) {
-            // A frame longer than SysExMaxSize arrives as unframed pieces;
-            // re-sending those would put bare data bytes on the wire.
-            if (array[0] == CROSSPAD_SYSEX_START && array[size - 1] == CROSSPAD_SYSEX_END) {
-                USB_MIDI.sendSysEx(size, array, true);
-            }
-            return;
-        }
-        /* Not the companion channel (0x1F): that is the twin's own traffic,
-         * and what it changes the twin takes from TWIN_STATE. */
-        if (!(size > 2 && array[2] == 0x1F)) twin_mirror_host(array, size);
-        crosspad::getStm32MessageHandler().handleMessage(array, size);
-    });
-
-#ifdef CONFIG_IDF_TARGET_ESP32S3
-    // Wire additional MIDI message types for STM32 interface
     auto ccHandler = [](midi::Channel ch, uint8_t ctrl, uint8_t val) {
         // The STM streams each held pad's left/right balance as CC
         // ccPanBase+pad (kPanWireCentre = centred). That is pad state for the
@@ -650,7 +603,38 @@ void uartLoop(void *pvParameters)
     STM32MIDI.setHandleAfterTouchPoly(stm32AtHandler);
     STM32MIDI.setHandlePitchBend(pbHandler);
     STM32MIDI.setHandleProgramChange(pcHandler);
+}
 #endif
+
+/* What a USB host sends. Each message is also handed to the browser twin as
+ * it is dispatched (twin_mirror.h, kind 4), so its apps see the same. */
+static void register_usb_handlers()
+{
+    // A pad's note plays the pad, the same as over BLE
+    USB_MIDI.setHandleNoteOn([](midi::Channel ch, uint8_t note, uint8_t vel) {
+        const uint8_t m[3] = {(uint8_t)(0x90 | ((ch - 1) & 0x0F)), note, vel};
+        twin_mirror_host(m, 3);
+        host_note_on(static_cast<uint8_t>(ch - 1), note, vel);
+    });
+    USB_MIDI.setHandleNoteOff([](midi::Channel ch, uint8_t note, uint8_t vel) {
+        const uint8_t m[3] = {(uint8_t)(0x80 | ((ch - 1) & 0x0F)), note, vel};
+        twin_mirror_host(m, 3);
+        host_note_off(static_cast<uint8_t>(ch - 1), note, vel);
+    });
+    USB_MIDI.setHandleSystemExclusive([](byte* array, unsigned size) {
+        if (s_usbSysExEcho && size >= 2 && array[1] != CROSSPAD_SYSEX_MANUFACTURER) {
+            // A frame longer than SysExMaxSize arrives as unframed pieces;
+            // re-sending those would put bare data bytes on the wire.
+            if (array[0] == CROSSPAD_SYSEX_START && array[size - 1] == CROSSPAD_SYSEX_END) {
+                USB_MIDI.sendSysEx(size, array, true);
+            }
+            return;
+        }
+        /* Not the companion channel (0x1F): that is the twin's own traffic,
+         * and what it changes the twin takes from TWIN_STATE. */
+        if (!(size > 2 && array[2] == 0x1F)) twin_mirror_host(array, size);
+        crosspad::getStm32MessageHandler().handleMessage(array, size);
+    });
 
     auto usbCcHandler = [](midi::Channel ch, uint8_t ctrl, uint8_t val) {
         const uint8_t m[3] = {(uint8_t)(0xB0 | ((ch - 1) & 0x0F)), ctrl, val};
@@ -677,6 +661,71 @@ void uartLoop(void *pvParameters)
     USB_MIDI.setHandleAfterTouchPoly(usbAtHandler);
     USB_MIDI.setHandlePitchBend(usbPbHandler);
     USB_MIDI.setHandleProgramChange(usbPcHandler);
+}
+
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+/* The encoder as MIDI for the host: CC 1 on a detent, CC 64 on its switch. */
+static void pump_encoder_cc()
+{
+    static int8_t enc_last  = -1;   // -1 forces first update
+    static bool   btn_last  = false;
+    auto& handler = crosspad::getStm32MessageHandler();
+
+    int8_t enc = handler.encoderDetent() & 0x0F;   // detents turned, 0..15 -- not the STM's slipping count
+    bool   btn = !gpio_get_level(GPIO_NUM_0);       // active-low, GPIO_NUM_0 = BSP_BUTTON_2 (encoder switch)
+
+    if (enc != enc_last) {
+        enc_last = enc;
+        crosspad::getMidiInputHandler().sendControlChange(1, enc, 0);
+    }
+
+    if (btn != btn_last) {
+        btn_last = btn;
+        // CC 64 (Sustain Pedal): 127 on press, 0 on release
+        crosspad::getMidiInputHandler().sendControlChange(64, btn ? 127 : 0, 0);
+    }
+}
+
+/* Frames for a host page, each sent as SysEx on USB MIDI. */
+static void pump_host_mirrors()
+{
+    // Touch mirror — press / drag / release as SysEx (touch_trace.h). Only for a
+    // host that asked (the twin's keepalive, twin_mirror_active()): otherwise every
+    // tap, the on-screen keyboard's too (a WiFi password), would go to any program
+    // that opens the MIDI port.
+    if (twin_mirror_active())
+        touch_mirror_pump([](const uint8_t *frame, size_t len) { USB_MIDI.sendSysEx((unsigned)len, frame, true); });
+    // Power button mirror — press / release as SysEx (power_button.h)
+    power_button_mirror_pump([](const uint8_t *frame, size_t len) { USB_MIDI.sendSysEx((unsigned)len, frame, true); });
+    // Browser twin input lockstep (twin_mirror.h)
+    twin_mirror_pump([](const uint8_t *frame, size_t len) { USB_MIDI.sendSysEx((unsigned)len, frame, true); });
+    // The board's motion for a host page (motion_stream.h)
+    motion_stream_pump([](const uint8_t *frame, size_t len) { USB_MIDI.sendSysEx((unsigned)len, frame, true); });
+}
+#endif
+
+void uartLoop(void *pvParameters)
+{
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    // Initialize STM32 UART MIDI
+    STM32MIDI.begin();
+    // Woken by every chunk the UART event task stores (see the wait at the
+    // bottom of the loop).
+    midi::EspStm32MidiTransport::wakeOnRx(xTaskGetCurrentTaskHandle());
+#endif
+
+    // Initialize USB MIDI — listen on all channels
+    USB_MIDI.begin(MIDI_CHANNEL_OMNI);
+    s_usbMidiBegun.store(true, std::memory_order_release);
+    USB_MIDI.setHandleClock(midi_clock_host_tick);
+    USB_MIDI.setHandleStart(midi_clock_host_start);
+    USB_MIDI.setHandleContinue(midi_clock_host_continue);
+    USB_MIDI.setHandleStop(midi_clock_host_stop);
+
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    register_stm_handlers();
+#endif
+    register_usb_handlers();
 
     ESP_LOGI("MIDI", "USB MIDI callbacks registered");
 
@@ -704,39 +753,8 @@ void uartLoop(void *pvParameters)
             usb_config_manager_set_mode(mode);
         }
 
-        // Encoder MIDI — poll encoder state, emit CC on change
-        {
-            static int8_t enc_last  = -1;   // -1 forces first update
-            static bool   btn_last  = false;
-            auto& handler = crosspad::getStm32MessageHandler();
-
-            int8_t enc = handler.encoderDetent() & 0x0F;   // detents turned, 0..15 -- not the STM's slipping count
-            bool   btn = !gpio_get_level(GPIO_NUM_0);       // active-low, GPIO_NUM_0 = BSP_BUTTON_2 (encoder switch)
-
-            if (enc != enc_last) {
-                enc_last = enc;
-                crosspad::getMidiInputHandler().sendControlChange(1, enc, 0);
-            }
-
-            if (btn != btn_last) {
-                btn_last = btn;
-                // CC 64 (Sustain Pedal): 127 on press, 0 on release
-                crosspad::getMidiInputHandler().sendControlChange(64, btn ? 127 : 0, 0);
-            }
-        }
-
-        // Touch mirror — press / drag / release as SysEx (touch_trace.h). Only for a
-        // host that asked (the twin's keepalive, twin_mirror_active()): otherwise every
-        // tap, the on-screen keyboard's too (a WiFi password), would go to any program
-        // that opens the MIDI port.
-        if (twin_mirror_active())
-            touch_mirror_pump([](const uint8_t *frame, size_t len) { USB_MIDI.sendSysEx((unsigned)len, frame, true); });
-        // Power button mirror — press / release as SysEx (power_button.h)
-        power_button_mirror_pump([](const uint8_t *frame, size_t len) { USB_MIDI.sendSysEx((unsigned)len, frame, true); });
-        // Browser twin input lockstep (twin_mirror.h)
-        twin_mirror_pump([](const uint8_t *frame, size_t len) { USB_MIDI.sendSysEx((unsigned)len, frame, true); });
-        // The board's motion for a host page (motion_stream.h)
-        motion_stream_pump([](const uint8_t *frame, size_t len) { USB_MIDI.sendSysEx((unsigned)len, frame, true); });
+        pump_encoder_cc();
+        pump_host_mirrors();
 #endif
 
         // Bytes from the STM wake this at once (EspStm32MidiTransport
