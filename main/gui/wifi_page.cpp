@@ -74,6 +74,7 @@ EXT_RAM_BSS_ATTR static struct {
     int count;
     wifi_ap_t aps[WIFI_LINK_SCAN_MAX];
     int pingResult;          // > 0 HTTP status, < 0 -(esp_err_t), 0 lease refused
+    uint8_t pingFail;        // crosspad::WifiFail as the test left it: why there was no link
     uint32_t pingMs;
     bool forgetOk;
     char ssid[kSsidBuf];     // the Forget argument
@@ -134,6 +135,13 @@ static const char * fail_text(crosspad::WifiFail f)
         case crosspad::WifiFail::Disabled:  return "WiFi is off";
         default:                            return crosspad::wifiFailName(f);
     }
+}
+
+/* Why a test had no link. None = the 10 s ran out with the connect sequence
+ * still trying (several saved networks, 15 s each). */
+static const char * no_link_text(crosspad::WifiFail f)
+{
+    return f == crosspad::WifiFail::None ? fail_text(crosspad::WifiFail::Timeout) : fail_text(f);
 }
 
 static void note(const char * fmt, ...)
@@ -224,6 +232,9 @@ static void test_job(void *)
         s_box.pingResult = wifi_ping(&s_box.pingMs, nullptr);
         wifi_link_release();
     }
+    /* Read here, not when the page picks the result up: under the page's own
+     * lease the connect sequence goes on and may have moved by then. */
+    s_box.pingFail = wifi_link_fail();
     s_jobDone.store((uint8_t)Job::Test);
     vTaskDeleteWithCaps(nullptr);
 }
@@ -499,10 +510,10 @@ static void take_result(void)
                 note("Connection OK (%u ms)", (unsigned)s_box.pingMs);
             else if (s_box.pingResult > 0)
                 note("crosspad.app answered %d", s_box.pingResult);
-            else if (s_box.pingResult < 0)
+            else if (s_box.pingResult < 0 && s_box.pingResult != WIFI_PING_NO_LINK)
                 note("crosspad.app unreachable (%s)", esp_err_to_name((esp_err_t)-s_box.pingResult));
-            else
-                note("No connection: %s", fail_text((crosspad::WifiFail)wifi_link_fail()));
+            else   // lease refused, or the board never joined a network: the server was not tried
+                note("No connection: %s", no_link_text((crosspad::WifiFail)s_box.pingFail));
             break;
         case Job::None:
             break;
