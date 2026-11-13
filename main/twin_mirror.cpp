@@ -147,7 +147,7 @@ void put_tick(uint8_t *f, uint32_t t)
 void twin_mirror_attach(lv_indev_t *indev)
 {
     if (!indev || s_nTaps >= kMaxIndev) return;
-    s_taps[s_nTaps++] = Tap{indev, lv_indev_get_read_cb(indev), LV_INDEV_STATE_RELEASED};
+    s_taps[s_nTaps++] = Tap{indev, lv_indev_get_read_cb(indev), LV_INDEV_STATE_RELEASED, false};
     lv_indev_set_read_cb(indev, read_cb);
 }
 
