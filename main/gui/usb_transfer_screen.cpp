@@ -8,6 +8,7 @@
 #include "crosspad-gui/components/power_gesture.h"
 #include "crosspad-gui/components/ui_modal.h"
 #include "app_globals.h"
+#include "crosspad-gui/widgets/gui_helpers.h"
 
 /* The MSC callbacks run on the TinyUSB task and only touch atomics; this timer
  * is the single reader, on the LVGL thread. Nothing here goes near the card. */
@@ -89,14 +90,14 @@ static void poll_cb(lv_timer_t * t)
     usb_transfer_status_t st;
     usb_transfer_get_status(&st);
 
-    lv_label_set_text(s_state_label, state_text(st.state));
+    lv_label_update_text(s_state_label, state_text(st.state));
     lv_obj_set_style_text_color(s_state_label, state_color(st.state), 0);
 
     char moved[48];
     snprintf(moved, sizeof(moved), "Read %lu.%u MB   Written %lu.%u MB",
              (unsigned long)(st.readKiB / kKiBPerMiB), tenths(st.readKiB, kKiBPerMiB),
              (unsigned long)(st.writeKiB / kKiBPerMiB), tenths(st.writeKiB, kKiBPerMiB));
-    lv_label_set_text(s_moved_label, moved);
+    lv_label_update_text(s_moved_label, moved);
 }
 
 static lv_obj_t * add_label(lv_obj_t * parent, const char * text, const lv_font_t * font,

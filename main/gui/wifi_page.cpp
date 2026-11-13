@@ -519,7 +519,7 @@ static void refresh_cb(lv_timer_t * t)
     s_lastState = st;
     char text[kStatusMax];
     status_text(text, sizeof(text));
-    if (strcmp(lv_label_get_text(s_status_value), text) != 0) lv_label_set_text(s_status_value, text);
+    lv_label_update_text(s_status_value, text);
     account_sync();
 }
 
