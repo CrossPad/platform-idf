@@ -135,6 +135,9 @@ worst; SHIMMER + HALL 528 / 1069; PITCH + GRAIN 518 / 959; GLITCH + SCRATCH
   the display refresh to 16 ms while it runs (`lv_display_get_refr_timer`)
   and puts LVGL's back on destroy; a drag measured 2.2 ms a refresh, ~325 px
   a flush (`LVGL_STATS`).
+- **The XY pad owns a sideways drag** (`kDragsHorizontal`): without it
+  crosspad-gui's screen-wide swipe took a quick finger run across the pad as
+  back, which is KILL here, and every effect stopped mid-gesture.
 - **USB REC** (ROUTE) switches USB to its audio profile (UAC2, class
   compliant: a phone or a computer records the USB output) and turns that
   output on; again, back to the data profile (CDC + MIDI). The profile
