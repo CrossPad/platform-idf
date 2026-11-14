@@ -1,0 +1,17 @@
+{
+  "name": "fxpad",
+  "display_name": "FX Pad",
+  "icon": "icons/fxpad.png",
+  "description": "The CrossPad as a performance multi-effect: line in, the mics and the computer over USB through sixteen effects the pads hold, an XY surface for their parameters, synced to the tempo. No sampler and no radio (no WiFi, BLE or remote session): the whole render and the CPU are the inputs, the effects and the outputs. MAIN FW on the FX tab goes back to the full firmware.",
+  "platform": "esp-idf",
+  "features": {},
+  "standalone": "FxPad",
+  "top_bar": true,
+  "sample_engine": false,
+  "radio": false,
+  "apps": {
+    "fxpad": {
+      "track": "branch"
+    }
+  }
+}

@@ -60,6 +60,7 @@
 #include "InputPairPort.hpp"
 #endif
 #include "InputMonitorPort.hpp"
+#include "FxBusPort.hpp"
 #if __has_include(<crosspad-mixer/AudioMixerEngine.hpp>)
 #include <crosspad-mixer/MixerPresets.hpp>
 #include <crosspad-mixer/AudioMixerEngine.hpp>
@@ -534,6 +535,7 @@ CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* s
     // raw ADC noise on the bus. Sent from the Mixer (MONITOR), each holds its
     // codec's ADC on its input while it is sent anywhere.
     input_monitor_start(mixerEngine, chIn);
+    fx_bus_init(mixerEngine, chIn, chUsb);
 
     /* The desk as it was left, over the defaults above: a board that never
      * saved one, or a blob that does not parse, keeps them. */
