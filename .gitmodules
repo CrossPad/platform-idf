@@ -49,3 +49,6 @@
 [submodule "components/crosspad-sdr"]
 	path = components/crosspad-sdr
 	url = https://github.com/CrossPad/crosspad-sdr.git
+[submodule "components/crosspad-fxpad"]
+	path = components/crosspad-fxpad
+	url = https://github.com/CrossPad/crosspad-fxpad.git
