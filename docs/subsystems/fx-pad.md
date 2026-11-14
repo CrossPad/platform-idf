@@ -45,8 +45,10 @@ USB (host) ─────┘           (sum)       (in place, every block)     
 
 ## The effects (`FxEngine.cpp`)
 
-Sixteen, in pad order (pad 1 bottom left), all running at once if asked, in
-the order they were started:
+Thirty-two in two banks of sixteen, a bank on the pads at a time (BANK on
+FX; the encoder on FX walks both), in pad order (pad 1 bottom left), all
+running at once if asked, in the order they were started. A pad held keeps
+its effect across a BANK until it is let go. Bank A:
 
 | | X | Y | release |
 |---|---|---|---|
@@ -65,7 +67,32 @@ the order they were started:
 | BITCRUSH | BITS | RATE | snap |
 | DRIVE | GAIN (0-36 dB) | TONE | snap |
 
-TIME and RATE are note values with SYNC (1/32 .. 1/2, the transport's tempo,
+Bank B cuts the sound up -- for building a track live out of what is
+playing. They read one shared **tape**, the last ~3 s of the input (2^17
+stereo frames, ~1 MB of PSRAM), which stops while an effect is looping out
+of it, so a repeat holds what was there at the press. All release SNAP.
+
+| | X | Y |
+|---|---|---|
+| STUTTER | SLICE (1/8 .. 1/64) | GATE |
+| BEAT RPT | LEN (1/16 .. 1 bar) | STEP (-2 .. +2 st a pass) |
+| GLITCH | SLICE | CHAOS |
+| SLICER | PATTERN (#1-8, sixteenths) | DEPTH |
+| REVERSE | LEN | TONE |
+| TAPE STOP | TIME | CURVE |
+| SPINBACK | TIME | BACK |
+| SCRATCH | POSITION | LEN |
+| GRAIN | SIZE (20-200 ms) | DENSITY |
+| PITCH | SHIFT (-12 .. +12 st) | FDBK |
+| AUTO FLT | RATE (a sweep every four) | RES |
+| PUMP | RATE | DEPTH |
+| LOFI | AGE | WOBBLE |
+| RING MOD | FREQ | SHAPE |
+| ECHO FRZ | LEN | FADE |
+| PAN CHOP | SLICE | WIDTH |
+
+SLICE and LEN are note values with SYNC, milliseconds without (125 .. 15 ms,
+60 ms .. 2.5 s). TIME and RATE are note values with SYNC (1/32 .. 1/2, the transport's tempo,
 TAP or a host's MIDI clock), milliseconds without. Delays, reverbs and freeze
 **add** their wet signal to the dry; filters, modulation, distortion, gate and
 roll **blend** it in place of the dry by WET. THRU off: the sources are heard
@@ -85,8 +112,13 @@ X/Y finite and bounded, tails end, THRU, two at once):
 - A tail ends after 0.4 s under -74 dBFS, or after 15 s whatever it is.
 - ROLL listens all the time (a 2 s ring), so its loop is what came before the
   press; the ring stops while it loops.
-- Memory: ~3 MB of PSRAM (three 2 s stereo delays, the roll ring, four small
-  reverbs), taken once when the processor is attached.
+- The reverbs run at half rate (a 2:1 decimation into power-of-two rings).
+- Memory: ~4 MB of PSRAM (three 2 s stereo delays, the roll ring, four small
+  reverbs, the tape), taken once when the processor is attached.
+
+Measured (`RT_PROF`, 1451 us block, radio off): idle 194 us average / 489
+worst; SHIMMER + HALL 528 / 1069; PITCH + GRAIN 518 / 959; GLITCH + SCRATCH
+279 / 767; LOFI + AUTO FLT 384 / 799.
 
 ## The app
 
@@ -95,11 +127,23 @@ X/Y finite and bounded, tails end, THRU, two at once):
   after a screen refresh. The screen and the pad LEDs follow from a 30 ms
   LVGL timer (`cp_fxpad_tick()`); one recursive mutex keeps the pads' task
   and LVGL off each other's state, briefly.
+- **The XY pad redraws only what moved**: edge ticks, the cursor, five trail
+  dots and three short labels, each set only when it changed (an LVGL style
+  set invalidates its whole object even when the value is the same). Whole-pad
+  crosshair lines and a trail polyline invalidated all of 312 x 120 a move --
+  four of the display's 30-row SPI bands -- at a 33 ms refresh. The app sets
+  the display refresh to 16 ms while it runs (`lv_display_get_refr_timer`)
+  and puts LVGL's back on destroy; a drag measured 2.2 ms a refresh, ~325 px
+  a flush (`LVGL_STATS`).
+- **USB REC** (ROUTE) switches USB to its audio profile (UAC2, class
+  compliant: a phone or a computer records the USB output) and turns that
+  output on; again, back to the data profile (CDC + MIDI). The profile
+  persists like every other switch of it.
 - Encoder: PAD → FX → EDIT → PAD on a click; FX picks an effect, EDIT a row,
   ROUTE a source's send. The power button's click is KILL.
 - Kept in NVS (`fxpad` namespace): the sends, the outputs, PRE/POST, THRU,
-  MONO, SYNC, each effect's release and curve.
+  MONO, SYNC, the bank, each effect's release and curve.
 - Soft keys: PAD -- HOLD, SYNC, WET (full wet instead of the pad's
-  pressure), TAP, KILL; FX -- LATCH, CLEAR, MAIN FW (back to the full
+  pressure), TAP, KILL; FX -- LATCH, BANK, CLEAR, MAIN FW (back to the full
   firmware in the other slot, `flowSwitchAndRestart()`); EDIT -- SWAP X/Y, LIN, EXP, SNAP,
-  TAIL; ROUTE -- THRU, PRE, POST, MONO, CLEAR.
+  TAIL; ROUTE -- THRU, PRE (off = post-fader), MONO, USB REC, CLEAR.
