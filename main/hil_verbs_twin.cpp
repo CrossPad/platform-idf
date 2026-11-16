@@ -207,34 +207,8 @@ static void twin_state_reply(void)
         char (&s_state)[470] = j->text;
         auto *running = crosspad_gui::AppOrchestrator::getInstance().getRunningApp();
         if (running && !running->isStarted()) running = nullptr;
-        /* The settings the screen is drawn from: launcher style, theme
-         * colour, the drawer, the status bar's perf column. */
-        auto *cfg = crosspad::CrosspadSettings::getInstance();
-        const int n = snprintf(s_state, sizeof s_state, "TWIN_STATE tick=%lu app=%s cfg=L%uT%uQ%uP%u ",
-                               (unsigned long)lv_tick_get(), running ? running->getName() : "-",
-                               cfg ? (unsigned)cfg->launcherStyle : 0u, cfg ? (unsigned)cfg->themeColorIndex : 0u,
-                               cfg && cfg->quickSettingsEnabled ? 1u : 0u, cfg ? (unsigned)cfg->perfStatsFlags : 0u);
-        const size_t m = n + twin_state::describe(s_state + n, sizeof s_state - n - 2, app_c,
-                             crosspad_gui::getOverlayParent(),
-                             indev_encoderTop ? lv_indev_get_group(indev_encoderTop) : nullptr);
-        /* What the status bar and the drawer show that no input decides:
-         * levels the drawer's sliders hold, and the board's telemetry. */
         const crosspad_gui::HeapStats h = crosspad_gui::getGuiPlatform().getHeapStats();
-        snprintf(s_state + m, sizeof s_state - m - 2,
-                 " lvl=V%uR%uB%u st=b%dc%ds%dh%du%da%dn%dw%dm%up%u",
-                 cfg ? (unsigned)cfg->masterFX.outVolumeCodec[0][0] : 0u, cfg ? (unsigned)cfg->RGBbrightness : 0u,
-                 cfg ? (unsigned)cfg->LCDbrightness : 0u, (int)status.batteryPct,
-                 status.stm32.chargingStatus ? 1 : 0, status.stm32.sdDetected ? 1 : 0,
-                 status.hostAlive(crosspad::getClock().getTimeUs()) ? 1 : 0, status.fwUpdateAvailable ? 1 : 0,
-                 status.bluetoothActive ? 1 : 0, status.bluetoothConnected ? 1 : 0, status.wifiConnected ? 1 : 0,
-                 h.sram_total ? (unsigned)((h.sram_total - h.sram_free) * 100 / h.sram_total) : 0u,
-                 h.psram_total ? (unsigned)((h.psram_total - h.psram_free) * 100 / h.psram_total) : 0u);
-        /* What apps read from the platform rather than from an input: the
-         * audio routing, whether the STM takes pad config, the host the hub
-         * reported, the song project open on the card (spaces as %20). */
-        auto &gp = crosspad_gui::getGuiPlatform();
-        crosspad_gui::AudioRouteState ar{};
-        const bool haveAr = gp.getAudioRoute(ar);
+        /* the song project open on the card, spaces as %20 */
         char song[40] = "-";
         if (auto *se = crosspad::getPlatformServices().songEngine) {
             std::lock_guard<std::recursive_mutex> g(se->songMutex());
@@ -246,20 +220,16 @@ static void twin_state_reply(void)
             }
             song[o ? o : 1] = 0;
         }
-        const size_t k = strlen(s_state);
-        snprintf(s_state + k, sizeof s_state - k - 2,
-                 " ar=%d,%u,%u,%u,%u,%u,%u,%u,%u sc=%d host=%u,%lu,%lu,%u,%u fwl=%s song=%s set=%08lx"
-                 " ble=%s,%s imu=%lu",
-                 haveAr ? 1 : 0, ar.captureCodec, ar.adcInput[0], ar.adcInput[1], ar.dacOutput[0], ar.dacOutput[1],
-                 ar.mute[0], ar.mute[1], ar.preset, gp.hasStmConfigWrite() ? 1 : 0,
-                 (unsigned)status.hostCpuPct, (unsigned long)status.hostRamUsedMb, (unsigned long)status.hostRamTotalMb,
-                 (unsigned)status.hostDawsInstalled, (unsigned)status.hostDawsRunning,
-                 status.fwLatest[0] ? status.fwLatest : "-", song,
-                 cfg ? (unsigned long)twin_state::settings_hash(*cfg) : 0ul,
-                 crosspad::EspBleMidi::isSupported() ? crosspad::getEspBleMidi().getStateName() : "-",
-                 crosspad::EspBleMidi::isSupported() && !crosspad::getEspBleMidi().getConnectedDevice().address.empty()
-                     ? crosspad::getEspBleMidi().getConnectedDevice().address.c_str() : "-",
-                 (unsigned long)imu_midi_sent());
+        const bool ble = crosspad::EspBleMidi::isSupported();
+        const std::string peer = ble ? crosspad::getEspBleMidi().getConnectedDevice().address : std::string();
+        const twin_state::LineSource src{
+            lv_tick_get(), running ? running->getName() : "-", app_c, crosspad_gui::getOverlayParent(),
+            indev_encoderTop ? lv_indev_get_group(indev_encoderTop) : nullptr,
+            h.sram_total ? (unsigned)((h.sram_total - h.sram_free) * 100 / h.sram_total) : 0u,
+            h.psram_total ? (unsigned)((h.psram_total - h.psram_free) * 100 / h.psram_total) : 0u,
+            song, ble ? crosspad::getEspBleMidi().getStateName() : "-", peer.empty() ? "-" : peer.c_str(),
+            (unsigned long)imu_midi_sent()};
+        twin_state::line(s_state, sizeof s_state - 2, src, status);
         /* A line that filled the buffer lost its tail fields (snprintf cut it): the
          * twin then compares less than it thinks. docs/subsystems/twin-protocol.md. */
         if (strlen(s_state) >= sizeof s_state - 3) ESP_LOGW(TAG, "TWIN_STATE cut at %u bytes: fields lost", (unsigned)strlen(s_state));
