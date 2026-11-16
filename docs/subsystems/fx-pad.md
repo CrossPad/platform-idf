@@ -62,15 +62,16 @@ its effect across a BANK until it is let go. Bank A:
 | LP / HP FILTER | CUTOFF (80 Hz-16 kHz) | RES | snap |
 | BAND SWEEP | FREQ | WIDTH | snap |
 | WAH | FREQ | RES | snap |
-| FLANGER | SPEED (Hz) | DEPTH | tail |
-| PHASER | SPEED (Hz) | FDBK | tail |
+| FLANGER | SPEED (Hz) | DEPTH | snap |
+| PHASER | SPEED (Hz) | FDBK | snap |
 | BITCRUSH | BITS | RATE | snap |
 | DRIVE | GAIN (0-36 dB) | TONE | snap |
 
 Bank B cuts the sound up -- for building a track live out of what is
 playing. They read one shared **tape**, the last ~3 s of the input (2^17
 stereo frames, ~1 MB of PSRAM), which stops while an effect is looping out
-of it, so a repeat holds what was there at the press. All release SNAP.
+of it, so a repeat holds what was there at the press. All release SNAP
+(ECHO FRZ can be set to TAIL).
 
 | | X | Y |
 |---|---|---|
@@ -145,8 +146,18 @@ worst; SHIMMER + HALL 528 / 1069; PITCH + GRAIN 518 / 959; GLITCH + SCRATCH
 - Encoder: PAD → FX → EDIT → PAD on a click; FX picks an effect, EDIT a row,
   ROUTE a source's send. The power button's click is KILL.
 - Kept in NVS (`fxpad` namespace): the sends, the outputs, PRE/POST, THRU,
-  MONO, SYNC, the bank, each effect's release and curve.
+  MONO, SYNC, the bank, each effect's release, curve and swapped axes.
 - Soft keys: PAD -- HOLD, SYNC, WET (full wet instead of the pad's
   pressure), TAP, KILL; FX -- LATCH, BANK, CLEAR, MAIN FW (back to the full
   firmware in the other slot, `flowSwitchAndRestart()`); EDIT -- SWAP X/Y, LIN, EXP, SNAP,
   TAIL; ROUTE -- THRU, PRE (off = post-fader), MONO, USB REC, CLEAR.
+- **SWAP X/Y moves the parameters, not their names**: the engine takes an
+  effect's two parameters in its own order (`FxEngine::setSlot`), and the
+  screen maps the finger to that order (`cp_fx_map()`, `FxDef.hpp`) -- a
+  swapped effect takes the finger's Y first. Each parameter keeps its range,
+  and the EXP curve stays on the effect's first parameter (a filter's CUTOFF)
+  whichever axis it is on.
+- **TAIL is there only for an effect that adds its wet signal to the dry**
+  (`FxEngine::ringsOut()`: the delays, the reverbs, FREEZE, ECHO FRZ). The
+  others are the signal itself and fade in ~30 ms whatever was asked, so on
+  them EDIT shows SNAP and the TAIL key is dim.
