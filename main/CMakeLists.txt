@@ -243,6 +243,9 @@ target_link_libraries(${COMPONENT_LIB} INTERFACE
     "-Wl,-u,__wrap_lv_malloc_core"
     "-Wl,-u,__wrap_lv_realloc_core"
     "-Wl,-u,__wrap_lv_free_core"
+    # The panel's "band done" wakes the flush wait (bsp crosspad_s3.c).
+    "-Wl,--wrap=lv_display_flush_ready"
+    "-Wl,-u,__wrap_lv_display_flush_ready"
     # The card's sector layer (sd_sector_io.cpp): PSRAM transfers bounced
     # sixteen sectors a command, single sectors cached (emptied on every card
     # init), every transaction counted for SD_TRACE.

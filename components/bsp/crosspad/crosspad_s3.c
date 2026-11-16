@@ -538,15 +538,34 @@ lv_display_t *bsp_display_start(void)
     return bsp_display_start_with_config(&cfg);
 }
 
+/* Given when the panel has taken a band (lv_display_flush_ready(), from the
+ * SPI's interrupt), taken by bsp_flush_wait(). */
+static SemaphoreHandle_t s_flush_done;
+
+/* main/CMakeLists.txt wraps lv_display_flush_ready() onto this. */
+void __real_lv_display_flush_ready(lv_display_t *d);
+void __wrap_lv_display_flush_ready(lv_display_t *d)
+{
+    __real_lv_display_flush_ready(d);
+    if (!s_flush_done) return;
+    if (xPortInIsrContext()) {
+        BaseType_t woken = pdFALSE;
+        xSemaphoreGiveFromISR(s_flush_done, &woken);
+        if (woken) portYIELD_FROM_ISR();
+    } else {
+        xSemaphoreGive(s_flush_done);
+    }
+}
+
 /* LVGL waits here for the panel's DMA to take a band. Without a callback it
  * spins on disp->flushing at its own priority (4, core 0) -- and a whole
  * screen is ~31 ms over the SPI, so nothing below it on core 0 ran meanwhile:
  * a screen redrawn every frame kept LVGL busy 100 % and held a CDC
- * verb for 1.4 s. Sleeping a tick at a time gives that time back, for ~0.5 ms
- * a wait on average. */
+ * verb for 1.4 s. It sleeps until the band is reported done; a tick at the
+ * most, so a report that is not wrapped onto the semaphore still ends it. */
 static void bsp_flush_wait(lv_display_t *d)
 {
-    while (d->flushing) vTaskDelay(1);
+    while (d->flushing) xSemaphoreTake(s_flush_done, 1);
 }
 
 lv_display_t *bsp_display_start_with_config(const bsp_display_cfg_t *cfg)
@@ -568,7 +587,8 @@ lv_display_t *bsp_display_start_with_config(const bsp_display_cfg_t *cfg)
         ESP_LOGE(TAG, "Display LCD init failed - running headless");
         return NULL;
     }
-    if (lvgl_port_lock(0)) {
+    s_flush_done = xSemaphoreCreateBinary();
+    if (s_flush_done && lvgl_port_lock(0)) {
         lv_display_set_flush_wait_cb(disp, bsp_flush_wait);
         lvgl_port_unlock();
     }
