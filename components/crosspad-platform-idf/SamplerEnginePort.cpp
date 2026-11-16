@@ -2113,6 +2113,13 @@ extern "C" void native_sampler_service_io(void)
     }
 }
 
+extern "C" bool native_sampler_io_idle(void)
+{
+    /* meter(), not anySounding(): a voice in its release is off its pad's
+     * count and still plays, and may still read the card. */
+    return s_node.engine.meter().active == 0 && s_node.engine.armedVoices() == 0 && !s_node.engine.previewBusy();
+}
+
 extern "C" bool native_sampler_level_take(float* left, float* right)
 {
     const float l = s_node.meter[0].exchange(0.0f, std::memory_order_relaxed);

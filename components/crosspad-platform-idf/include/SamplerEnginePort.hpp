@@ -223,6 +223,13 @@ void native_sampler_voice_meter(uint8_t *active, uint8_t *streaming, uint8_t *li
 void native_sampler_service_io(void);
 
 /**
+ * @brief True while a streaming pass would find nothing to do: no voice
+ *        playing or armed, no audition. The streaming task then passes
+ *        seldom; the first note plays from its resident head meanwhile.
+ */
+bool native_sampler_io_idle(void);
+
+/**
  * @brief Audition a WAV outside the kit (the file browser, SMPL_PREVIEW).
  *
  * @p fsPath is the filesystem path (kitFsPath()). One voice, its own ring of
