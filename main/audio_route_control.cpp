@@ -8,6 +8,7 @@
 #include "CrosspadPlatform.hpp"
 #include "IdfI2sInput.hpp"
 #include "hil_control.h"
+#include "hil_verbs.h"
 #include "crosspad/settings/CrosspadSettings.hpp"
 #include "crosspad/platform/PlatformServices.hpp"
 #include "crosspad/song/ISongEngine.hpp"
@@ -22,7 +23,6 @@
 #endif
 
 #include "esp_log.h"
-#include "tusb_cdc_acm.h"
 #include "freertos/FreeRTOS.h"
 
 #include <cstdio>
@@ -456,12 +456,6 @@ void audio_route_control_set_reply_sender(void (*fn)(const uint8_t *frame, size_
 }
 
 /* ── CDC text commands ─────────────────────────────────────────── */
-
-static void cdc_reply(const char *text)
-{
-    tinyusb_cdcacm_write_queue(TINYUSB_CDC_ACM_0, (const uint8_t *)text, strlen(text));
-    tinyusb_cdcacm_write_flush(TINYUSB_CDC_ACM_0, pdMS_TO_TICKS(50));
-}
 
 static int parse_adc_input_name(const char *s)
 {

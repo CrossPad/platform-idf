@@ -19,6 +19,9 @@ Every check and every fix in here exists because the trap is real:
     which fails every later audio test.
   * The kit scan after boot holds the kit vector, so KIT_LIST refuses for a
     while — that is not a hang.
+  * The DAC->ADC loop is recorded through a preamp whose gain sits in NVS; a
+    scenario that died before restoring it leaves every later loop recording
+    24 dB down, with the board reporting every note played.
 
 Usage:
   tools/bench.py check            what is wrong, and the command that fixes it
@@ -38,6 +41,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -69,7 +73,26 @@ ROUTE_HOME_ADC0 = 2
 SCENARIO_FLAGS = {
     "kit_churn": ["--load-timeout", "30"],
     "release_gate": ["--kit-churn-load-timeout", "30"],
+    # Recorded from the mixer's USB bus, not through the DAC->ADC loop: the
+    # loop is analog and carries whatever the bench's grounding adds, which
+    # the onset analysis then reads as missing hits.
+    "sampler_record": ["--preset", "sampler"],
+    "kit_swap_audio": ["--preset", "sampler"],
 }
+
+# The preamp the DAC->ADC loop is recorded through (INGAIN input 1, "IN2":
+# codec 1's line input) and the gain crosspad-hil's level floors assume. The
+# board keeps it in NVS, so a run that died before putting it back leaves
+# every later loop recording 24 dB down.
+LOOP_PREAMP_INPUT = 1
+LOOP_PREAMP_NAME = "IN2"
+LOOP_PREAMP_DB = 24
+
+
+def loop_preamp_db(text: str | None) -> int | None:
+    """The loop preamp's gain from an ``INGAIN`` reply; None when it says none."""
+    m = re.search(rf"\b{LOOP_PREAMP_NAME}=(-?\d+)", text or "")
+    return int(m.group(1)) if m else None
 
 # How long `test` lets a scenario run before it is killed and reported as a
 # setup problem: one hour by default, longer for the scenarios that carry their
@@ -451,6 +474,12 @@ def cmd_check(_args) -> int:
         "tools/bench.py ready   (a railing DAC->ADC route fails every audio test)")
     worst = worst if home else EXIT_BENCH
 
+    preamp = loop_preamp_db(cdc("INGAIN"))
+    if preamp is not None:
+        say(preamp == LOOP_PREAMP_DB, "loop preamp", f"{LOOP_PREAMP_NAME}={preamp} dB",
+            f"tools/bench.py ready   (loop recordings are judged at +{LOOP_PREAMP_DB} dB)")
+        worst = worst if preamp == LOOP_PREAMP_DB else EXIT_BENCH
+
     kit = cdc("KIT_STATUS", 8000) or ""
     loaded = "current=-1" not in kit
     say(loaded, "kit", kit.replace("KITSTATUS: ", "") or "no answer",
@@ -567,6 +596,11 @@ def ensure(verbose: bool = True, kit: bool = True) -> int:
         # Input before the source, the order audio_route_apply_preset uses.
         cdc("AUDIO_ADC 0 LINE2")
         cdc(f"AUDIO_MIC_SRC {ROUTE_HOME_MIC_SRC}")
+
+    preamp = loop_preamp_db(cdc("INGAIN"))
+    if preamp is not None and preamp != LOOP_PREAMP_DB:
+        note(f"loop preamp: {LOOP_PREAMP_NAME}={preamp} dB -> +{LOOP_PREAMP_DB} dB")
+        cdc(f"INGAIN {LOOP_PREAMP_INPUT} {LOOP_PREAMP_DB}")
 
     if not kit:
         return EXIT_OK

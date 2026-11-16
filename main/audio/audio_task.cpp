@@ -313,6 +313,9 @@ void AudioTask_RT(void *pvParameters)
     vTaskDelete(nullptr);
 }
 
+/// How often audio_bg passes while no voice sounds.
+static constexpr uint32_t kBgIdlePassMs = 8;
+
 void AudioTask_BG(void *pvParameters)
 {
     (void)pvParameters;
@@ -326,7 +329,14 @@ void AudioTask_BG(void *pvParameters)
     while (true) /* todo add shutdown mechanism */
     {
         AudioModule_BG_Process();
+#if CONFIG_CROSSPAD_SAMPLER_MARCEL
         vTaskDelay(1);
+#else
+        /* A pass a tick while anything sounds; with nothing to stream, one
+         * every kBgIdlePassMs -- far inside the resident head a first note
+         * plays from before its ring is asked for. */
+        vTaskDelay(native_sampler_io_idle() ? pdMS_TO_TICKS(kBgIdlePassMs) : 1);
+#endif
     }
 
     vTaskDelete(nullptr);
