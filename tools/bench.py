@@ -66,9 +66,13 @@ ROUTE_HOME_ADC0 = 2
 # Kit loads on a 1-bit SD card take much longer than the scenario default, and
 # a pitched kit carries a ~5.1 MB bank on top of that. The gate gets the same
 # figure for its kit_churn step, and sizes that step's watchdog from it.
+# kit_swap_audio records the mixer's USB bus: the scenario's own default is the
+# DAC->ADC loop on codec 1, which rails on a bench with a ground loop (every
+# hit "made no sound"). A --preset given on the command line still wins.
 SCENARIO_FLAGS = {
     "kit_churn": ["--load-timeout", "30"],
     "release_gate": ["--kit-churn-load-timeout", "30"],
+    "kit_swap_audio": ["--preset", "sampler"],
 }
 
 # How long `test` lets a scenario run before it is killed and reported as a
