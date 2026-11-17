@@ -26,6 +26,7 @@ Exit codes: 0 success, 1 the device refused or failed, 2 the bench is wrong
 """
 
 import argparse
+import contextlib
 import os
 import sys
 import time
@@ -34,7 +35,12 @@ import zlib
 import serial
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ota_flash import ensure_port, board_build_artifact  # noqa: E402  (VID:PID detect + MIDI mode switch)
+from ota_flash import ensure_port, board_build_artifact, hub_released  # noqa: E402  (VID:PID detect + MIDI mode switch)
+
+try:
+    from crosspad_hil.errors import HilError
+except ImportError:
+    HilError = ()   # no crosspad-hil, no hub to refuse us: catch nothing
 
 CHUNK_SIZE = 4096
 ACK_WINDOW = 2   # chunks in flight; see stream()
@@ -387,17 +393,26 @@ def main():
         # ota_flash.ensure_port exits 1 when it finds no board; here "no board"
         # is a bench problem, not a firmware one.
         return EXIT_BENCH
-    ser = open_port(port)
-    try:
-        return args.func(ser, args)
-    except DeviceError as e:
-        print(f"\nDevice error: {e}")
-        return EXIT_FAIL
-    except serial.SerialException as e:
-        print(f"\nSerial error: {e}")
-        return EXIT_BENCH
-    finally:
-        ser.close()
+    with contextlib.ExitStack() as hub:
+        # The crosspad-hil hub keeps the port open for 5 s after each verb it
+        # carries, so the open below fails or the hub's reader takes the first
+        # reply; its exclusive op closes the port until the session ends.
+        try:
+            hub.enter_context(hub_released("fs_transfer"))
+        except HilError as e:
+            print(f"Error: {e}")
+            return EXIT_BENCH
+        ser = open_port(port)
+        try:
+            return args.func(ser, args)
+        except DeviceError as e:
+            print(f"\nDevice error: {e}")
+            return EXIT_FAIL
+        except serial.SerialException as e:
+            print(f"\nSerial error: {e}")
+            return EXIT_BENCH
+        finally:
+            ser.close()
 
 
 if __name__ == '__main__':
