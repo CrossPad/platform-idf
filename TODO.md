@@ -78,8 +78,7 @@ znika stąd (historia jest w commitach).
       `usb_audio_port.h`, `UsbAudioPort.cpp` i `docs/subsystems/audio-routing.md`
       są nieaktualne (feedback liczy się z cykli CPU); kontrola końca
       `.flash.text` względem granicy strony PSRAM po buildzie (przekroczenie
-      jest ciche: +64 kB PSRAM); `uac_device_deinit()` najpierw odcina ścieżkę
-      ISR (`spk_task_handle = NULL` pod `s_mux` przed `vTaskDelete`).
+      jest ciche: +64 kB PSRAM).
 
 ## Wymaga rąk na ławce (nie zrobi tego żaden HIL)
 
