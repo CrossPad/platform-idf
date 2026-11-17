@@ -23,27 +23,9 @@ znika stąd (historia jest w commitach).
       Sprawdzić, czy granie na padach nie przełącza Advanced w samplerze i czy
       double tap trafia za każdym razem; zostaje też 6D przy obracaniu
       i podniesienie płytki z LIGHT. Dowód: `bench.py hil cdc IMU` + `ENC_GROUP`.
-- [ ] **IMU przestaje odpowiadać po kilku minutach pracy i nie wraca.** Gałąź
-      odzyskiwania w sterowniku działa (re-init przechodzi), ale odczyt danych
-      dalej pada — więc to stan samego układu albo konfiguracja gubiona przy
-      re-incie, nie zwykły konflikt na szynie. Następny krok: zrzucić
-      `WHO_AM_I`, `CTRL1_XL/CTRL2_G` i `STATUS_REG` w momencie porażki.
 - [ ] back_churn: Sampler `~130 B/visit` internal (16 uderzeń + back), równo
       co rundę; 1 uderzenie × 6 wizyt = 0 B. Następny trop: głos grający przy
       zamykaniu Samplera (FILE/lock w internal).
-- [ ] **Późny start 40–260 ms** raz na swap kitu: hit w pad będący właśnie
-      przebudowywany jest przytrzymany i odegrany po reloadzie (`late_hits`).
-      Okno = WipeOut + SetupSample (~96 KB tempowanego odczytu), na 4-bit SD
-      ~4× krótsze. Do decyzji: próg `kit_swap_audio --max-late-ms` per ławka
-      albo dalsze skracanie okna.
-- [ ] **„Późny start” hitu podczas ładowania kitu** — `platform_noteOn` →
-      `SampleStreamPlayer_NoteOn` z tasku UART/hil_pad czeka do 1,1 s na SD,
-      gdy loader zajmuje kartę; port powinien odłożyć hit zamiast blokować
-      (`main/gui/gui.cpp`, `sample_player_port.cpp`).
-- [ ] **`sdmmc_read_sectors: not enough mem` raz, w boocie po OTA**, gdy
-      ładował się kit: 512 B z `MALLOC_CAP_DMA` nie dostało bloku w tamtej
-      chwili (`int_min` 43 kB, więc nie brak internal ogółem). Obserwować po
-      każdym OTA (`smoke` po `flash` łapie to w `errors`).
 - [ ] **Klatki LVGL do 385 ms podczas grania w Samplerze** (`LVGL_STATS`
       `refr_max_us`, `CDC_STATS maxcmd=PAD_PRESS` = pętla prio 1 wywłaszczona
       przez render). Zmierzyć, co unieważnia ekran przy hicie.
@@ -74,12 +56,9 @@ znika stąd (historia jest w commitach).
       sesji z Samplerem/pitched spada do ~112 kB i nie wraca mimo
       `LoadMainScreen()` zrzucającego cache obrazów; free wraca normalnie.
       Zbadać arenę/alokator obrazów (`main/lvgl_mem_psram.c`, `engine_arena.cpp`).
-- [ ] Tor USB audio: opisy „FIFO count steruje hostem” w
-      `usb_audio_port.h`, `UsbAudioPort.cpp` i `docs/subsystems/audio-routing.md`
-      są nieaktualne (feedback liczy się z cykli CPU); kontrola końca
-      `.flash.text` względem granicy strony PSRAM po buildzie (przekroczenie
-      jest ciche: +64 kB PSRAM); `uac_device_deinit()` najpierw odcina ścieżkę
-      ISR (`spk_task_handle = NULL` pod `s_mux` przed `vTaskDelete`).
+- [ ] Tor USB audio: kontrola końca `.flash.text` względem granicy strony
+      PSRAM po buildzie (przekroczenie jest ciche: +64 kB PSRAM);
+      `uac_device_deinit()` najpierw odcina ścieżkę ISR (`spk_task_handle = NULL` pod `s_mux` przed `vTaskDelete`).
 
 ## Wymaga rąk na ławce (nie zrobi tego żaden HIL)
 
@@ -127,8 +106,7 @@ ekrany, wirtualizacja przy >150 kitów); cache indeksu kitów na SD.
 scenariusz `audio_fidelity` na kicie HIL TONE; `sampler_record --rates`
 tylko int; usunąć shimy `tools/hil_*.py`.
 
-**Framework / cleanup:** Sequencer `lv_Sequencer_destroy` zdublowane bloki;
-4 wzorce grupy enkodera → jeden portable.
+**Framework / cleanup:** 4 wzorce grupy enkodera → jeden portable.
 
 **CI / infra:** CI dla PC i testów core.
 
