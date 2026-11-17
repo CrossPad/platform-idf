@@ -78,7 +78,12 @@ znika stąd (historia jest w commitach).
       `usb_audio_port.h`, `UsbAudioPort.cpp` i `docs/subsystems/audio-routing.md`
       są nieaktualne (feedback liczy się z cykli CPU); kontrola końca
       `.flash.text` względem granicy strony PSRAM po buildzie (przekroczenie
-      jest ciche: +64 kB PSRAM).
+      jest ciche: +64 kB PSRAM); TinyUSB ma przestać dostarczać żądania
+      (disconnect albo uninstall) przed `uac_device_deinit()` w
+      `main/usb_config_manager.cpp`: callbacki z zadania TinyUSB
+      (`tud_audio_set_itf_cb`, `tud_audio_set_itf_close_EP_cb`, żądania
+      sterujące, `tud_audio_feedback_params_cb`) czytają `s_uac_device`
+      i uchwyty zadań bez `s_mux`.
 
 ## Wymaga rąk na ławce (nie zrobi tego żaden HIL)
 
