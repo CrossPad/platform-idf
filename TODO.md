@@ -23,9 +23,6 @@ znika stąd (historia jest w commitach).
       Sprawdzić, czy granie na padach nie przełącza Advanced w samplerze i czy
       double tap trafia za każdym razem; zostaje też 6D przy obracaniu
       i podniesienie płytki z LIGHT. Dowód: `bench.py hil cdc IMU` + `ENC_GROUP`.
-- [ ] back_churn: Sampler `~130 B/visit` internal (16 uderzeń + back), równo
-      co rundę; 1 uderzenie × 6 wizyt = 0 B. Następny trop: głos grający przy
-      zamykaniu Samplera (FILE/lock w internal).
 - [ ] **Klatki LVGL do 385 ms podczas grania w Samplerze** (`LVGL_STATS`
       `refr_max_us`, `CDC_STATS maxcmd=PAD_PRESS` = pętla prio 1 wywłaszczona
       przez render). Zmierzyć, co unieważnia ekran przy hicie.
