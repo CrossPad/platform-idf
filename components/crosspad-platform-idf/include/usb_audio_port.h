@@ -31,8 +31,8 @@ void usb_audio_port_set_engine_frames(uint32_t engine_frames);
 uint32_t audio_rt_block_frames(void);
 bool usb_audio_port_active(void);
 
-/** Host → board. Returns frames accepted; the rest stays in the USB FIFO so
- *  the feedback endpoint slows the host down instead of us dropping audio. */
+/** Host → board. Returns frames accepted; the rest is dropped and counted
+ *  (UAC_STATS refused=), so a caller passes no more than the space left. */
 size_t usb_audio_port_playback_write(const int16_t *stereo, size_t frames);
 size_t usb_audio_port_playback_space(void);
 size_t usb_audio_port_playback_capacity(void);
