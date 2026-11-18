@@ -248,7 +248,7 @@ crosspad-hil refuses a verb it does not know without `--expect`.
 | `WIFI_UP` / `WIFI_DOWN` | CDC only. Take / drop the host's one manual lease: `OK` / `ERR disabled` (`enableWiFi` off) / `ERR <fail>` when the lease is refused outright (`transfer_mode`, `no_task`). The gates run on the control task, so a start they refuse is `OK` here and `state=failed fail=no_mem` in `WIFI_STATUS` |
 | `NET_MODE [0\|1 [TAB=wifi\|store\|updates]]` | CDC only. No argument: `NET_MODE: active=<0\|1> tab=<name\|->`. `1` / `0`: `OK reboot=1` and the board restarts into / out of network mode (`OK unchanged` when already there; `ERR transfer_mode` from USB Transfer mode) |
 | `WIFI_SCAN` | one line: `WIFI_AP: count=<n> \| <rssi> <auth> <ssid> \| …`, strongest first, one row per SSID, hidden networks left out, at most 20 and at most 1 kB (SSID last, may hold spaces); `<auth>` is `open` `wep` `wpa` `wpa2` `wpa2e` `wpa3` `wpa2wpa3` `owe` `other`. `ERR <fail>` when the lease or the radio start is refused, `ERR timeout` when the control task did not answer within 15 s, `ERR scan` when the driver refused the scan or its records (neither touches `WIFI_STATUS fail=`: a link can be up while a scan fails), `ERR busy` while one runs. ~3 s: pass `--timeout 20000` |
-| `WIFI_PING` | `WIFI_PING: ok ms=<n> status=<http>` for 200 ≤ status < 500 (a 404 from crosspad.app still proves DNS + TLS) / `ERR status=<http>` / `ERR err=<esp_err name> tls=<mbedTLS code>` (`ESP_ERR_TIMEOUT` = link not up within 10 s, or a TLS step that ran out of time with no error recorded; `tls=-0x2700` style, `0x0000` when mbedTLS recorded none) / `ERR <fail>` / `ERR busy` |
+| `WIFI_PING` | `WIFI_PING: ok ms=<n> status=<http>` for 200 ≤ status < 500 (a 404 from crosspad.app still proves DNS + TLS) / `ERR status=<http>` / `ERR err=<esp_err name> tls=<mbedTLS code>` (`ESP_ERR_TIMEOUT` = a TLS step that ran out of time with no error recorded; `tls=-0x2700` style, `0x0000` when mbedTLS recorded none) / `ERR err=ESP_ERR_WIFI_NOT_CONNECT tls=0x0000 fail=<fail>` (link not up within 10 s, the server was never tried; `fail=none` while the connect sequence is still trying) / `ERR <fail>` / `ERR busy` |
 
 `WIFI_SCAN` and `WIFI_PING` answer from a task of their own, so the CDC drain
 loop never waits on them; the BLE companion and SysEx get `ERR use_cdc` for
@@ -416,6 +416,12 @@ Connect / Forget / Cancel). The page scrolls; the encoder follows the focus.
   (a lease + `wifi_ping()`, PSRAM stack) and Forget (`wifi_creds_forget()`,
   internal stack -- an NVS write). A result for a page already closed is
   dropped by generation.
+- **Test** names the side that failed: "Connection OK (<ms> ms)",
+  "crosspad.app answered <status>", "crosspad.app unreachable (<esp_err>)" only
+  when the link was up and DNS / TLS / the request failed, and "No connection:
+  <reason>" when the lease was refused or the board never joined a network
+  (`WIFI_PING_NO_LINK`): wrong password, network not found, no answer from the
+  network (also when the 10 s ran out with the sequence still trying).
 - **Find networks** opens a full-screen list on the top layer (SSID, dBm,
   auth; strongest first) with *Close*; touch, the encoder and a power click
   close it (the click closes the list, not the screen). A pick opens the
