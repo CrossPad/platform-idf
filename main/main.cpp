@@ -1027,6 +1027,21 @@ extern "C" void app_main(void)
     NvsSettingsStore::getInstance().init();
     fw_slots_init();
     settings->loadFrom(NvsSettingsStore::getInstance());
+#ifdef BSP_BOARD_CROSSPAD_S3
+    {
+        /* The core's rate list goes to 96 kHz, the board's I2S and USB audio to
+         * 48 kHz. A stored rate above that (an old Settings pick, an imported
+         * backup) is brought back here, before anything reads it: the clock,
+         * the mixer, every node and what Settings shows then agree. */
+        const uint32_t stored = settings->audioEngine.sampleRate;
+        const uint32_t rate = bsp_i2s_supported_sample_rate(stored);
+        if (rate != stored) {
+            ESP_LOGW(TAG, "engine rate %lu Hz unsupported on this board, using %lu",
+                     (unsigned long)stored, (unsigned long)rate);
+            settings->audioEngine.sampleRate = rate;
+        }
+    }
+#endif
     {
         /* After a Store update the other slot holds the image we came from. */
         FwSlotInfo slots[2];
