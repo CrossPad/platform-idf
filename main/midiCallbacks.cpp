@@ -618,6 +618,10 @@ void uartLoop(void *pvParameters)
         crosspad::getStm32MessageHandler().handleMessage(array, size);
     });
 
+    /* The MIDI library hands a callback the channel as 1..16; core's
+     * handle* calls and IMidiOutput take 0..15, so every lambda below passes
+     * ch - 1. Passing ch put a forwarded CC, pressure, bend or program one
+     * channel above the notes on the BLE peer (16 wrapped to 1). */
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     // Wire additional MIDI message types for STM32 interface
     auto ccHandler = [](midi::Channel ch, uint8_t ctrl, uint8_t val) {
@@ -630,7 +634,7 @@ void uartLoop(void *pvParameters)
                                                    crosspad::IPadLogicHandler::panFromWire(val));
             return;
         }
-        crosspad::getMidiInputHandler().handleSampleControlChange(ch, ctrl, val);
+        crosspad::getMidiInputHandler().handleSampleControlChange(static_cast<uint8_t>(ch - 1), ctrl, val);
     };
     auto stm32AtHandler = [](midi::Channel ch, uint8_t note, uint8_t pressure) {
         int off = crosspad::CrosspadSettings::getInstance()->stm.noteOffset;
@@ -639,13 +643,13 @@ void uartLoop(void *pvParameters)
             ++g_hil_stm_at_count;
             crosspad::getPadManager().notifyPadPressure(pad, pressure);
         }
-        crosspad::getMidiInputHandler().handleSampleAftertouch(ch, note, pressure);
+        crosspad::getMidiInputHandler().handleSampleAftertouch(static_cast<uint8_t>(ch - 1), note, pressure);
     };
     auto pbHandler = [](midi::Channel ch, int bend) {
-        crosspad::getMidiInputHandler().handleSamplePitchBend(ch, static_cast<int16_t>(bend));
+        crosspad::getMidiInputHandler().handleSamplePitchBend(static_cast<uint8_t>(ch - 1), static_cast<int16_t>(bend));
     };
     auto pcHandler = [](midi::Channel ch, uint8_t program) {
-        crosspad::getMidiInputHandler().handleSampleProgramChange(ch, program);
+        crosspad::getMidiInputHandler().handleSampleProgramChange(static_cast<uint8_t>(ch - 1), program);
     };
     STM32MIDI.setHandleControlChange(ccHandler);
     STM32MIDI.setHandleAfterTouchPoly(stm32AtHandler);
@@ -656,7 +660,7 @@ void uartLoop(void *pvParameters)
     auto usbCcHandler = [](midi::Channel ch, uint8_t ctrl, uint8_t val) {
         const uint8_t m[3] = {(uint8_t)(0xB0 | ((ch - 1) & 0x0F)), ctrl, val};
         twin_mirror_host(m, 3);
-        crosspad::getMidiInputHandler().handleSampleControlChange(ch, ctrl, val);
+        crosspad::getMidiInputHandler().handleSampleControlChange(static_cast<uint8_t>(ch - 1), ctrl, val);
     };
     auto usbAtHandler = [](midi::Channel ch, uint8_t note, uint8_t pressure) {
         const uint8_t m[3] = {(uint8_t)(0xA0 | ((ch - 1) & 0x0F)), note, pressure};
@@ -667,12 +671,12 @@ void uartLoop(void *pvParameters)
         const unsigned v = (unsigned)(bend + 8192);
         const uint8_t m[3] = {(uint8_t)(0xE0 | ((ch - 1) & 0x0F)), (uint8_t)(v & 0x7F), (uint8_t)((v >> 7) & 0x7F)};
         twin_mirror_host(m, 3);
-        crosspad::getMidiInputHandler().handleSamplePitchBend(ch, static_cast<int16_t>(bend));
+        crosspad::getMidiInputHandler().handleSamplePitchBend(static_cast<uint8_t>(ch - 1), static_cast<int16_t>(bend));
     };
     auto usbPcHandler = [](midi::Channel ch, uint8_t program) {
         const uint8_t m[2] = {(uint8_t)(0xC0 | ((ch - 1) & 0x0F)), program};
         twin_mirror_host(m, 2);
-        crosspad::getMidiInputHandler().handleSampleProgramChange(ch, program);
+        crosspad::getMidiInputHandler().handleSampleProgramChange(static_cast<uint8_t>(ch - 1), program);
     };
     USB_MIDI.setHandleControlChange(usbCcHandler);
     USB_MIDI.setHandleAfterTouchPoly(usbAtHandler);
