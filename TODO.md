@@ -100,8 +100,7 @@ z SIMD dla LVGL 9.3, mniej obiektów na wiersz, leniwe kciuki w oknie ±2
 ekrany, wirtualizacja przy >150 kitów); cache indeksu kitów na SD.
 
 **HIL:** `d2spikes`/`pitch_cmp` jako kernele `crosspad-hil analyze` +
-scenariusz `audio_fidelity` na kicie HIL TONE; `sampler_record --rates`
-tylko int; usunąć shimy `tools/hil_*.py`.
+scenariusz `audio_fidelity` na kicie HIL TONE; usunąć shimy `tools/hil_*.py`.
 
 **Framework / cleanup:** 4 wzorce grupy enkodera → jeden portable.
 
