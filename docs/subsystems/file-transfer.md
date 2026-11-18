@@ -16,7 +16,11 @@ no endpoints left for it, so both features ride the CDC control port
 Device side: `main/file_transfer.cpp` (+ `include/file_transfer.h`).
 Host side: `tools/fs_transfer.py` — same VID:PID auto-detect and MIDI
 mode-switch fallback as `ota_flash.py` (it imports them), exit 0/1/2 like
-`crosspad-hil`.
+`crosspad-hil`. Run by a python that has crosspad-hil (its venv; `bench.py
+flash` does), it also takes the MIDI hub's exclusive op for the whole session,
+as `ota_flash.py` does: the hub keeps the port open for 5 s after each verb it
+carries and would read the first reply itself. Another client's exclusive op
+is exit 2 (`PORT_BUSY`).
 
 ```bash
 python3 tools/fs_transfer.py assets                       # build_<rev>/assets.bin (idf.py board names <rev>)
