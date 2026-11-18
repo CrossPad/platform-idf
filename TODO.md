@@ -28,9 +28,6 @@ znika stąd (historia jest w commitach).
       dalej pada — więc to stan samego układu albo konfiguracja gubiona przy
       re-incie, nie zwykły konflikt na szynie. Następny krok: zrzucić
       `WHO_AM_I`, `CTRL1_XL/CTRL2_G` i `STATUS_REG` w momencie porażki.
-- [ ] back_churn: Sampler `~130 B/visit` internal (16 uderzeń + back), równo
-      co rundę; 1 uderzenie × 6 wizyt = 0 B. Następny trop: głos grający przy
-      zamykaniu Samplera (FILE/lock w internal).
 - [ ] **Późny start 40–260 ms** raz na swap kitu: hit w pad będący właśnie
       przebudowywany jest przytrzymany i odegrany po reloadzie (`late_hits`).
       Okno = WipeOut + SetupSample (~96 KB tempowanego odczytu), na 4-bit SD
