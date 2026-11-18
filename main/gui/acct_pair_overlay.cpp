@@ -14,8 +14,7 @@
 #include "crosspad-gui/widgets/gui_helpers.h"
 #include "crosspad/fw/FwAccount.hpp"
 #include "crosspad-gui/fw/fw_updates_view.h"
-
-extern lv_indev_t * indev_encoderTop;
+#include "app_globals.h"
 
 static constexpr uint32_t kRefreshMs = 250;
 static constexpr uint32_t kSecondsPerMinute = 60;

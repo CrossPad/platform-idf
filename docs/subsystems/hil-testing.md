@@ -184,9 +184,13 @@ Control lands on the CrossPad's own CDC (`0x303A`); the console comes off the
 STM32 bridge VCP (`0x0483:0x5740`), which survives ESP resets and USB mode
 switches. Anything long-running listens on the latter.
 
-`main/hil_control.cpp` implements the device side of the command set (`APP_*`,
-`KIT_*`, `PAD_*`, `ENC_*`, `LED_STATE`, `SMPL_*`) — that file is still where a
-new verb is added, and `crosspad_hil/verbs.py` is where the host learns to speak
+`main/hil_verbs_<domain>.cpp` implement the device side of the command set, one
+function per verb (`ui`, `twin`, `audio`, `kit`, `song`, `system`, `fw`,
+`midi`); `main/hil_control.cpp` holds the reply path and `k_verbs`, the table a
+line is offered to in order. The order is part of the protocol: verbs match by
+prefix (`MEM_BLOCKS` before `MEM`), so the first one that takes the line wins. A
+new verb is a function in its domain's file, a line in `main/hil_verbs.h` and
+an entry in `k_verbs`, and `crosspad_hil/verbs.py` is where the host learns to speak
 it. A verb the simulator's control port answers too reads its state through
 crosspad-core's `crosspad/control/` (KIT_STATUS/LIST/LOAD, LED_STATE, MIX_LVL,
 PITCHED_STATUS, WAVE_STATUS, AUDIO_LEVEL, PAD_*, APP_START): core gathers it
@@ -418,7 +422,7 @@ lost command is indistinguishable from a handler that ignored it.
 - **One read is not one command.** USB does not preserve the host's write
   boundaries; send faster than the prio-1 main loop drains `app_queue` and two
   commands arrive in one read. Every handler matches on a prefix, so
-  `cdc_dispatch_lines()` in `main/main.cpp` frames on newlines and carries a partial tail across
+  `cdc_dispatch_lines()` in `main/cdc_rx.cpp` frames on newlines and carries a partial tail across
   reads, dispatching each command separately. OTA is exempt: once `OTA_BEGIN`
   is accepted the stream is firmware bytes, where `0x0A` is data.
 - **An OTA over CDC can wait for a person.** Unless the Firmware app's
@@ -457,7 +461,7 @@ lost command is indistinguishable from a handler that ignored it.
   verb's own. 2026-10-13: `MIX_PRESET` (preset files + JSON) 3584 B,
   `FW_DOWNLOAD` (NVS) 3440, `WAVE_STATUS` 2960, a plain reply ~2.5 kB. Work
   deeper than that goes to a task of its own; `main/CMakeLists.txt` makes a
-  frame over 1280 B in `hil_control.cpp` a build error.
+  frame over 1280 B in `hil_control.cpp` or a `hil_verbs_*.cpp` a build error.
 - **A quiet console is not a hung board.** With the PerfMon heartbeat off, an
   idle firmware prints nothing for minutes; the
   stability soak therefore judges liveness by a `MEM` probe over CDC every

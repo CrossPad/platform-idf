@@ -283,6 +283,10 @@ void native_sampler_peak_take(int32_t *peak, uint32_t *rtMaxUs, uint32_t *underr
 /// meter of the kit track it plays). False while it holds no kit.
 bool native_sampler_level_take(float *left, float *right);
 
+/// RT, for an offline pass: the fewest frames any voice of the kit's engine
+/// has streamed ahead of where it plays.
+uint32_t native_sampler_stream_lead(void);
+
 #ifdef __cplusplus
 }
 

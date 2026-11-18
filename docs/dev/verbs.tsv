@@ -1,0 +1,204 @@
+order	function	file	match	literal	companion
+1	verb_pad_notes	hil_verbs_kit.cpp	prefix	PAD_NOTES	yes
+2	verb_usb_msc	hil_verbs_system.cpp	prefix	USB_MSC	no
+3	verb_net_mode	hil_verbs_system.cpp	prefix	NET_MODE	no
+4	verb_fw_list	hil_verbs_fw.cpp	prefix	FW_LIST	no
+5	verb_fw_slots	hil_verbs_fw.cpp	prefix	FW_SLOTS	no
+6	verb_fw_install	hil_verbs_fw.cpp	prefix	FW_INSTALL	no
+7	verb_fw_switch	hil_verbs_fw.cpp	prefix	FW_SWITCH	no
+8	verb_fw_confirm	hil_verbs_fw.cpp	prefix	FW_CONFIRM	no
+9	verb_fw_updater_verbs	hil_control.cpp	handler	fw_updater_handle()	no
+9.1	fw_updater_handle	fw_updater_verbs.cpp	word	FW_UPD_STATUS	yes
+9.2	fw_updater_handle	fw_updater_verbs.cpp	word	FW_CHECK	yes
+9.3	fw_updater_handle	fw_updater_verbs.cpp	word	FW_DOWNLOAD	no
+9.4	fw_updater_handle	fw_updater_verbs.cpp	word	FW_UPD_CFG	no
+9.5	fw_updater_handle	fw_updater_verbs.cpp	word	FW_CATALOG	yes
+9.6	fw_updater_handle	fw_updater_verbs.cpp	word	FW_UPD_URL	no
+9.7	fw_updater_handle	fw_updater_verbs.cpp	word	FW_UPD_CHANNEL	no
+10	verb_cp_account_verbs	hil_control.cpp	handler	cp_account_handle()	no
+10.1	cp_account_handle	cp_account_verbs.cpp	exact	ACCT_STATUS	yes
+10.2	cp_account_handle	cp_account_verbs.cpp	exact	ACCT_CODE	no
+10.3	cp_account_handle	cp_account_verbs.cpp	exact	ACCT_PAIR	no
+10.4	cp_account_handle	cp_account_verbs.cpp	exact	ACCT_PAIR_CANCEL	no
+10.5	cp_account_handle	cp_account_verbs.cpp	exact	ACCT_UNLINK	no
+11	verb_cp_remote_verbs	hil_control.cpp	handler	cp_remote_handle()	no
+12	verb_fw_ui_verbs	hil_control.cpp	handler	fw_ui_handle()	no
+13	verb_host_info_verbs	hil_control.cpp	handler	host_info_handle()	no
+14	verb_wifi_verbs_verbs	hil_control.cpp	handler	wifi_verbs_handle()	no
+14.1	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_STATUS	some
+14.2	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_ENABLE	some
+14.3	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_UP	some
+14.4	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_DOWN	some
+14.5	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_SET	some
+14.6	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_LIST	some
+14.7	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_FORGET_ALL	some
+14.8	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_FORGET	some
+14.9	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_SCAN	some
+14.10	wifi_verbs_handle	wifi_verbs.cpp	word	WIFI_PING	some
+15	verb_kit_convert_verbs_verbs	hil_control.cpp	handler	kit_convert_verbs_handle()	no
+15.1	kit_convert_verbs_handle	kit_convert_port.cpp	word	KIT_RATES	no
+15.2	kit_convert_verbs_handle	kit_convert_port.cpp	word	KIT_CONVERT_STATUS	no
+15.3	kit_convert_verbs_handle	kit_convert_port.cpp	word	KIT_CONVERT_STOP	no
+15.4	kit_convert_verbs_handle	kit_convert_port.cpp	word	KIT_CONVERT	no
+15.5	kit_convert_verbs_handle	kit_convert_port.cpp	word	KIT_KEEP_RATE	no
+15.6	kit_convert_verbs_handle	kit_convert_port.cpp	word	KIT_CONVERT_TIDY	no
+16	verb_sdr_verbs	hil_control.cpp	handler	sdr_verbs_handle()	no
+17	verb_tbar	hil_verbs_ui.cpp	exact	TBAR	no
+18	verb_ui_state	hil_verbs_ui.cpp	prefix	UI_STATE	yes
+19	verb_twin	hil_verbs_twin.cpp	prefix	TWIN 	yes
+20	verb_motion	hil_verbs_twin.cpp	prefix	MOTION 	yes
+21	verb_twin_2	hil_verbs_twin.cpp	prefix	TWIN_	no
+22	verb_twin_3	hil_verbs_twin.cpp	prefix	TWIN_	no
+23	verb_pwr_gesture	hil_verbs_ui.cpp	prefix	PWR_GESTURE 	no
+24	verb_tasks	hil_verbs_system.cpp	prefix	TASKS	yes
+25	verb_toast	hil_verbs_ui.cpp	prefix	TOAST 	no
+26	verb_screenshot	hil_verbs_ui.cpp	exact	SCREENSHOT	no
+27	verb_in_pair	hil_verbs_audio.cpp	prefix	IN_PAIR	no
+28	verb_codec_reg	hil_verbs_audio.cpp	prefix	CODEC_REG 	yes
+29	verb_ingain	hil_verbs_audio.cpp	prefix	INGAIN	no
+30	verb_mem_blocks	hil_verbs_system.cpp	prefix	MEM_BLOCKS	no
+31	verb_worker	hil_verbs_system.cpp	prefix	WORKER	no
+32	verb_ulp	hil_verbs_system.cpp	exact	ULP	no
+33	verb_reset_log	hil_verbs_system.cpp	prefix	RESET_LOG CLEAR	yes
+34	verb_imu_regw	hil_verbs_system.cpp	prefix	IMU_REGW 	no
+35	verb_imu_reg	hil_verbs_system.cpp	prefix	IMU_REG 	no
+36	verb_stm_regw	hil_verbs_system.cpp	prefix	STM_REGW 	no
+37	verb_stm_reg	hil_verbs_system.cpp	prefix	STM_REG 	no
+38	verb_reset_log_2	hil_verbs_system.cpp	prefix	RESET_LOG STM	yes
+39	verb_reset_log_3	hil_verbs_system.cpp	prefix	RESET_LOG	yes
+40	verb_coredump_info	hil_verbs_system.cpp	prefix	COREDUMP_INFO	yes
+41	verb_imu_midi	hil_verbs_system.cpp	prefix	IMU_MIDI SLOT 	no
+42	verb_imu_midi_2	hil_verbs_system.cpp	prefix	IMU_MIDI 	no
+43	verb_heap_trace	hil_verbs_system.cpp	prefix	HEAP_TRACE 	no
+44	verb_touch_trace	hil_verbs_ui.cpp	prefix	TOUCH_TRACE 	no
+45	verb_touch_drag	hil_verbs_ui.cpp	prefix	TOUCH_DRAG 	no
+46	verb_touch_tap	hil_verbs_ui.cpp	prefix	TOUCH_TAP 	no
+47	verb_topbar	hil_verbs_ui.cpp	exact	TOPBAR	no
+48	verb_ui_tree	hil_verbs_ui.cpp	exact	UI_TREE	no
+49	verb_uac_stats	hil_verbs_audio.cpp	exact	UAC_STATS	yes
+50	verb_usb_host	hil_verbs_audio.cpp	prefix	USB_HOST	yes
+51	verb_usb_enum	hil_verbs_audio.cpp	prefix	USB_ENUM	yes
+52	verb_uac_late	hil_verbs_audio.cpp	exact	UAC_LATE	yes
+53	verb_uac_pkt	hil_verbs_audio.cpp	exact	UAC_PKT	yes
+54	verb_uac_flow	hil_verbs_audio.cpp	prefix	UAC_FLOW	yes
+55	verb_clock_status	hil_verbs_song.cpp	prefix	CLOCK_STATUS	yes
+56	verb_imu_gesture	hil_verbs_system.cpp	prefix	IMU_GESTURE 	no
+57	verb_imu_ths	hil_verbs_system.cpp	prefix	IMU_THS 	no
+58	verb_imu	hil_verbs_system.cpp	prefix	IMU	no
+59	verb_settings_reset	hil_verbs_system.cpp	prefix	SETTINGS_RESET	no
+60	verb_reset_test	hil_verbs_system.cpp	prefix	RESET_TEST 	no
+61	verb_mem	hil_verbs_system.cpp	prefix	MEM	yes
+62	verb_lvgl_prof	hil_verbs_ui.cpp	prefix	LVGL_PROF	no
+63	verb_lvgl_inv	hil_verbs_ui.cpp	prefix	LVGL_INV	no
+64	verb_splash	hil_verbs_ui.cpp	exact	SPLASH	no
+65	verb_lvgl_stats	hil_verbs_ui.cpp	prefix	LVGL_STATS	yes
+66	verb_cdc_stats	hil_verbs_system.cpp	prefix	CDC_STATS	yes
+67	verb_ble_status	hil_verbs_midi.cpp	prefix	BLE_STATUS	no
+68	verb_ble_devices	hil_verbs_midi.cpp	prefix	BLE_DEVICES	no
+69	verb_ble_stop	hil_verbs_midi.cpp	prefix	BLE_STOP	no
+70	verb_daw_state	hil_verbs_midi.cpp	prefix	DAW_STATE	no
+71	verb_sysex_echo	hil_verbs_midi.cpp	prefix	SYSEX_ECHO	no
+72	verb_audio_rate	hil_verbs_audio.cpp	prefix	AUDIO_RATE	no
+73	verb_usb_guard	hil_verbs_system.cpp	prefix	USB_GUARD	yes
+74	verb_ota_prefs	hil_verbs_system.cpp	exact	OTA_PREFS	no
+75	verb_ble_enable	hil_verbs_midi.cpp	scan	BLE_ENABLE %d	no
+76	verb_ble_start	hil_verbs_midi.cpp	prefix	BLE_START	no
+77	verb_ble_scan	hil_verbs_midi.cpp	scan	BLE_SCAN %d	no
+78	verb_ble_scan_2	hil_verbs_midi.cpp	prefix	BLE_SCAN	no
+79	verb_ble_connect	hil_verbs_midi.cpp	prefix	BLE_CONNECT	no
+80	verb_ble_disconnect	hil_verbs_midi.cpp	prefix	BLE_DISCONNECT	no
+81	verb_ble_txoff	hil_verbs_midi.cpp	scan	BLE_TXOFF %d	no
+82	verb_ble_send	hil_verbs_midi.cpp	scan	BLE_SEND %d %d	no
+83	verb_app_list	hil_verbs_ui.cpp	prefix	APP_LIST	yes
+84	verb_app_versions	hil_verbs_system.cpp	prefix	APP_VERSIONS	yes
+85	verb_app_sha	hil_verbs_system.cpp	prefix	APP_SHA	yes
+86	verb_app_start	hil_verbs_ui.cpp	scan	APP_START %31s	yes
+87	verb_enc_focus	hil_verbs_ui.cpp	prefix	ENC_FOCUS	no
+88	verb_enc_group	hil_verbs_ui.cpp	prefix	ENC_GROUP	no
+89	verb_enc_raw	hil_verbs_ui.cpp	prefix	ENC_RAW	no
+90	verb_enc_state	hil_verbs_ui.cpp	prefix	ENC_STATE	no
+91	verb_led_state	hil_verbs_ui.cpp	prefix	LED_STATE	yes
+92	verb_pad_stats_reset	hil_verbs_kit.cpp	prefix	PAD_STATS_RESET	no
+93	verb_midi_trs	hil_verbs_midi.cpp	prefix	MIDI_TRS	no
+94	verb_midi_loop	hil_verbs_midi.cpp	prefix	MIDI_LOOP	no
+95	verb_stm_vpad	hil_verbs_kit.cpp	prefix	STM_VPAD	no
+96	verb_click	hil_verbs_song.cpp	prefix	CLICK	no
+97	verb_seq_dump	hil_verbs_song.cpp	prefix	SEQ_DUMP	no
+98	verb_seq	hil_verbs_song.cpp	prefix	SEQ	no
+99	verb_song	hil_verbs_song.cpp	prefix	SONG	no
+100	verb_asong_seq	hil_verbs_song.cpp	prefix	ASONG_SEQ	no
+101	verb_asong_trk	hil_verbs_song.cpp	exact	ASONG_TRK	no
+102	verb_asong_dbg	hil_verbs_song.cpp	exact	ASONG_DBG	no
+103	verb_asong	hil_verbs_song.cpp	prefix	ASONG	yes
+104	verb_outvol	hil_verbs_audio.cpp	prefix	OUTVOL	no
+105	verb_mix_eq	hil_verbs_audio.cpp	prefix	MIX_EQ	no
+106	verb_clip	hil_verbs_audio.cpp	prefix	CLIP	no
+107	verb_heap_check	hil_verbs_system.cpp	prefix	HEAP_CHECK	no
+108	verb_stool	hil_verbs_kit.cpp	prefix	STOOL	yes
+109	verb_audio_level	hil_verbs_audio.cpp	prefix	AUDIO_LEVEL	no
+110	verb_mix_lvl	hil_verbs_audio.cpp	prefix	MIX_LVL	yes
+111	verb_mix_preset	hil_verbs_audio.cpp	prefix	MIX_PRESET	no
+112	verb_input_mon	hil_verbs_audio.cpp	prefix	INPUT_MON 	no
+113	verb_mix_route	hil_verbs_audio.cpp	scan	MIX_ROUTE %d %d %d	no
+114	verb_mix_mute	hil_verbs_audio.cpp	scan	MIX_MUTE %d %d	no
+114.1	verb_mix_mute	hil_verbs_audio.cpp	scan	MIX_VOL %d %d	no
+114.2	verb_mix_mute	hil_verbs_audio.cpp	scan	MIX_OUT_MUTE %d %d	no
+114.3	verb_mix_mute	hil_verbs_audio.cpp	scan	MIX_OUT_VOL %d %d	no
+115	verb_pad_stats	hil_verbs_kit.cpp	prefix	PAD_STATS	yes
+116	verb_enc_rotate	hil_verbs_ui.cpp	scan	ENC_ROTATE %d	yes
+117	verb_enc_press	hil_verbs_ui.cpp	scan	ENC_PRESS %d	yes
+118	verb_enc_press_2	hil_verbs_ui.cpp	prefix	ENC_PRESS	yes
+119	verb_app_self_close	hil_verbs_ui.cpp	prefix	APP_SELF_CLOSE	no
+120	verb_app_destroy	hil_verbs_ui.cpp	prefix	APP_DESTROY	no
+121	verb_app_stop	hil_verbs_ui.cpp	prefix	APP_STOP	yes
+122	verb_pad_press	hil_verbs_kit.cpp	scan	PAD_PRESS %d %d	yes
+123	verb_pad_release	hil_verbs_kit.cpp	scan	PAD_RELEASE %d	yes
+124	verb_pad_pressure	hil_verbs_kit.cpp	scan	PAD_PRESSURE %d %d	no
+125	verb_pad_pan	hil_verbs_kit.cpp	scan	PAD_PAN %d %d	no
+126	verb_kit_list	hil_verbs_kit.cpp	prefix	KIT_LIST	no
+127	verb_kit_status	hil_verbs_kit.cpp	prefix	KIT_STATUS	yes
+128	verb_settings_export	hil_verbs_system.cpp	prefix	SETTINGS_EXPORT	no
+128.1	verb_settings_export	hil_verbs_system.cpp	prefix	SETTINGS_IMPORT	no
+129	verb_settings_status	hil_verbs_system.cpp	prefix	SETTINGS_STATUS	yes
+130	verb_kit_swap_log	hil_verbs_kit.cpp	prefix	KIT_SWAP_LOG	no
+131	verb_wave_status	hil_verbs_kit.cpp	prefix	WAVE_STATUS	no
+132	verb_smpl_pace	hil_verbs_kit.cpp	prefix	SMPL_PACE	no
+133	verb_smpl_stall	hil_verbs_kit.cpp	prefix	SMPL_STALL	no
+134	verb_smpl_last	hil_verbs_kit.cpp	prefix	SMPL_LAST	no
+135	verb_smpl_pool	hil_verbs_kit.cpp	prefix	SMPL_POOL	no
+136	verb_kit_load	hil_verbs_kit.cpp	scan	KIT_LOAD %d	yes
+137	verb_kit_delete	hil_verbs_kit.cpp	scan	KIT_DELETE %d %63[^\r\n]	no
+138	verb_pad_info	hil_verbs_kit.cpp	scan	PAD_INFO %d	no
+139	verb_pad_mix	hil_verbs_kit.cpp	prefix	PAD_MIX	no
+140	verb_kit_save_status	hil_verbs_kit.cpp	exact	KIT_SAVE_STATUS	no
+141	verb_kit_save	hil_verbs_kit.cpp	exact	KIT_SAVE	no
+142	verb_arena	hil_verbs_kit.cpp	prefix	ARENA	no
+143	verb_inst_load	hil_verbs_kit.cpp	prefix	INST_LOAD 	no
+144	verb_inst_release	hil_verbs_kit.cpp	prefix	INST_RELEASE	no
+145	verb_inst_status	hil_verbs_kit.cpp	prefix	INST_STATUS	no
+146	verb_pitched_status	hil_verbs_kit.cpp	prefix	PITCHED_STATUS	no
+147	verb_pitched_cap	hil_verbs_kit.cpp	scan	PITCHED_CAP %d	no
+148	verb_simd_mode	hil_verbs_audio.cpp	exact	SIMD_MODE	no
+149	verb_sd_bench_verb_verbs	hil_control.cpp	handler	sd_bench_verb()	no
+149.1	sd_bench_verb	sd_bench.cpp	prefix	SD_BENCH	no
+150	verb_sd_cache	hil_verbs_system.cpp	prefix	SD_CACHE	no
+151	verb_sd_trace	hil_verbs_system.cpp	exact	SD_TRACE	yes
+152	verb_sd_bounce	hil_verbs_system.cpp	prefix	SD_BOUNCE 	no
+153	verb_pitched_bench	hil_verbs_kit.cpp	prefix	PITCHED_BENCH	no
+154	verb_smpl_poly	hil_verbs_kit.cpp	scan	SMPL_POLY %d	yes
+155	verb_smpl_poly_2	hil_verbs_kit.cpp	prefix	SMPL_POLY	yes
+156	verb_audio_buf	hil_verbs_audio.cpp	prefix	AUDIO_BUF	yes
+157	verb_lat_trace	hil_verbs_audio.cpp	prefix	LAT_TRACE	no
+158	verb_rt_prof	hil_verbs_audio.cpp	prefix	RT_PROF	yes
+159	verb_smpl_peak	hil_verbs_kit.cpp	prefix	SMPL_PEAK	yes
+160	verb_smpl_pitch	hil_verbs_kit.cpp	scan	SMPL_PITCH %d %d	no
+161	verb_smpl_loops	hil_verbs_kit.cpp	exact	SMPL_LOOPS	no
+162	verb_smpl_engine	hil_verbs_kit.cpp	prefix	SMPL_ENGINE	yes
+163	verb_smpl_bkg	hil_verbs_kit.cpp	scan	SMPL_BKG %d	no
+164	verb_smpl_preview	hil_verbs_kit.cpp	prefix	SMPL_PREVIEW 	no
+165	verb_smpl_preview_stop	hil_verbs_kit.cpp	prefix	SMPL_PREVIEW_STOP	no
+166	verb_stm_fw_info	hil_verbs_system.cpp	prefix	STM_FW_INFO	yes
+167	verb_stm_fw_update	hil_verbs_system.cpp	prefix	STM_FW_UPDATE	no
+168	verb_stm_reset	hil_verbs_system.cpp	prefix	STM_RESET	no
+169	verb_stm_dfu	hil_verbs_system.cpp	prefix	STM_DFU	no
+170	verb_audio_tasks	hil_verbs_audio.cpp	scan	AUDIO_TASKS %d	no

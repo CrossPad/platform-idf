@@ -81,7 +81,7 @@ normally. A power-up keeps the backlight at 0 until the ESP sets a level, and
 the ESP keeps the pads black until the boot splash draws on them.
 
 **A charge-screen boot starts nothing else.** The ESP learns it at the wake
-gate (`PWR_STATE_CHARGE`, `charge_boot_active()` in `main.cpp`) and then skips
+gate (`PWR_STATE_CHARGE`, `charge_boot_active()` in `main/boot_power.cpp`) and then skips
 the launcher and the apps (the screen is black under the charge overlay before
 the panel lights), the sample engine and its start-up sound, the kit scan,
 the audio tasks and the switch to the USB audio profile, BLE, WiFi (remote

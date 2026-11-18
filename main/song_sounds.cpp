@@ -27,8 +27,7 @@
 
 #include <atomic>
 #include <cstring>
-
-extern std::atomic<bool> g_kit_scan_done;   // main.cpp: the kit list is read
+#include "app_globals.h"
 
 namespace {
 

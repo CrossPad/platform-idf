@@ -20,3 +20,9 @@
 /// SamplePlayback bridge; make the sampler the system instrument.
 /// Once, from the LVGL task, before the first app starts.
 void sampler_platform_port_init(const crosspad_sampler::KitSelectorAppCallbacks& kitSelector);
+
+/* What holding hits during a pad's reload cost since SMPLLAST last read: the
+ * latest hit's delay (ms), the hits a newer one on the same pad replaced, and
+ * the longest a pad was marked. */
+extern uint32_t g_late_max_ms, g_late_lost;
+extern uint32_t g_reload_win_max_us;

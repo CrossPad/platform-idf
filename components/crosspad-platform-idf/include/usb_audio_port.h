@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "audio_rt.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,8 +28,6 @@ void usb_audio_port_start(uint32_t sample_rate, uint32_t engine_frames);
 void usb_audio_port_stop(void);
 /* The render's block changed (Settings -> Audio -> Buffer). */
 void usb_audio_port_set_engine_frames(uint32_t engine_frames);
-/* The block the render makes now (IdfAudioModule.cpp); 0 before it started. */
-uint32_t audio_rt_block_frames(void);
 bool usb_audio_port_active(void);
 
 /** Host → board. Returns frames accepted; the rest is dropped and counted

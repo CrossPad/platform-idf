@@ -28,8 +28,7 @@
 #include "freertos/idf_additions.h"
 #include <cstdio>
 #include <cstring>
-
-extern lv_indev_t * indev_encoderTop;
+#include "app_globals.h"
 
 static const char * TAG = "fw_flow";
 

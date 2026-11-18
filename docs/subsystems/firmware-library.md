@@ -13,7 +13,7 @@ Design intent: `docs/design/2026-09-21-firmware-library-ab-switch-design.md`
 from that design). Code: `main/fw_image_desc.{h,c}`, `main/fw_library.{h,cpp}`,
 `main/fw_slots.{h,cpp}`, `main/fw_assets_sync.{h,cpp}`, `main/app/update/update_app.cpp`
 (the Firmware app's registration and Over USB block; the app itself is crosspad-gui's
-`src/fw/`), `main/gui/fw_flow_overlay.cpp` (the install and switch flows), `main/hil_control.cpp` (`FW_*` verbs), `main/collect_assets.cmake`
+`src/fw/`), `main/gui/fw_flow_overlay.cpp` (the install and switch flows), `main/hil_verbs_fw.cpp` (`FW_*` verbs), `main/collect_assets.cmake`
 (assets id), `tools/make_fw_package.py`, `tools/fw_image_desc.py`,
 `components/crosspad-core/include/crosspad/settings/SettingsScope.hpp` (shared
 settings), `components/stm32_hal/stm32_fw_update.c` (never-downgrade gate).
@@ -584,7 +584,7 @@ needs the user at the device or a trusted CDC host.
 
 - **Flash writes from a PSRAM-backed stack assert/coredump the moment the call
   frame reaches the write's critical section** (it disables the cache the
-  stack itself needs) — `fw_switch_cmd_task` (`main/hil_control.cpp`), the
+  stack itself needs) — `fw_switch_cmd_task` (`main/hil_verbs_fw.cpp`), the
   overlay's `switch_task` (`"fw_switch_gui"`, `main/gui/fw_flow_overlay.cpp`) and
   `fw_switch_finish_task` (`main/fw_slots.cpp`) all use
   `MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT`, never `MALLOC_CAP_SPIRAM`, for this
@@ -592,7 +592,7 @@ needs the user at the device or a trusted CDC host.
 - **`fw_library_find()` alone overflows the CDC drain loop's own stack** —
   `fill_package()`'s `esp_app_desc_t` (256 B) plus path buffers is enough;
   `FW_INSTALL`/`FW_SWITCH` never call into `fw_slots.cpp` directly from that
-  loop, always through a dedicated task (`main/hil_control.cpp`, the comment
+  loop, always through a dedicated task (`main/hil_verbs_fw.cpp`, the comment
   above `fw_install_cmd_task`).
 - **`std::ifstream` + `ArduinoJson` `JsonDocument` measured near 7 kB of
   stack** for even a small manifest — more than `fw_install_task()`'s whole

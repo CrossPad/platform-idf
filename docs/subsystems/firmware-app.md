@@ -312,15 +312,13 @@ from the build before it (launcher baseline then 490 352 B free):
 Stacks seen on the board: check job 4.3 kB free, download 2.8-2.9 kB, install 2.9 kB,
 `wifi_ctl` 2.2 kB.
 
-**Image size.** The v2 image's `.flash.text` sits just under a 64 kB page
-boundary (2 031 616 B). Core's Store cache filter is a constant JSON document
+**Image size.** The v2 image's `.flash.text` sits close to a 64 kB page
+boundary. Core's Store cache filter is a constant JSON document
 parsed by the `deserializeJson(const char*, size_t)` the catalog parser already
-links, not 17 proxy chains (986 B of text, enough to cost a page). As of
-2026-10-05 `.flash.text` is **2 030 904 B, 712 B under the boundary**:
-`ext_ram.dummy` v2 2 686 944 (41 pages), v1 2 621 408 (40 pages; text 1 933 644 B,
-~32 kB headroom). Check `xtensa-esp32s3-elf-size -A build_v2/CrossPad.elf | grep
--E 'flash.text|ext_ram.dummy'` after adding code to v2: the next 712 B cost the
-launcher 64 kB.
+links, not 17 proxy chains (986 B of text, enough to cost a page). Run
+`python3 tools/check_image_budget.py --rev v2` after adding code to v2:
+a page crossed costs the launcher 64 kB. The page count a build may reach is in
+`config/image_budget.json`.
 
 ## ui_tile_grid
 
@@ -422,24 +420,17 @@ release whose kit packages carry icons). Its teardown removes the test catalog's
   radio cycle the largest free block is ~225-229 kB and it answers `no memory`; it works
   reliably only on a fresh boot.
 
-## Known limitations
+## Limits
 
 - **32 packages.** The scan, the cleanup and the Library hold at most 32 package
   directories (`kFwGcMaxPackages`, 34 tiles with the two slot-only ones); `FW_LIST`
-  prints 16. The 33rd package is on the card but not listed: its card keeps offering
-  Download/Install although the catalog says `on_card`. Delete one package to see it.
-- **Touch swipes between tabs are disabled** in both hosts (a swipe would show a page
-  that is not built, or move to a page without moving the encoder there). The tab bar
-  and the encoder are the only ways.
-- **v2 is 712 B of text from its next 64 kB PSRAM page** (41 pages, see Threads and
-  memory): crossing it costs the launcher 64 kB.
-- **crosspad.app does not serve the catalog and kit routes yet** ([firmware-updates.md](firmware-updates.md), 2026-10-04: a
-  page answers 404), so against the default URL a check ends `err=catalog:http`; the
-  bench serves them with `crosspad_hil.fw_server`.
-- The *Update* rows hide while a slot holds a newer build of the kit; a rolled-back slot
-  holds it too.
-- With WiFi off and an update waiting, the Updates tab shows the installed-in-the-other-slot
-  state and *Run* without the WiFi reason; the row names the newest package on the card as
-  the old side.
-- The scenario's `--switch` step restarts the board: it must wait for the card's *Run* to
-  verify the image and reset (~0.6 s after the press) before reopening the link.
+  prints 16. A 33rd package stays on the card and is not listed.
+- **Tabs change by the tab bar and the encoder only.** Touch swipes between tabs
+  are off in both hosts: a swipe would show a page that is not built, or move to
+  a page without moving the encoder there.
+- The *Update* rows hide while a slot holds a newer build of the kit; a
+  rolled-back slot holds it too.
+- The scenario's `--switch` step restarts the board: it waits for the card's
+  *Run* to verify the image and reset (~0.6 s after the press) before reopening
+  the link.
+

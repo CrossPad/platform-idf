@@ -36,15 +36,8 @@
 #include <cstring>
 #include <string>
 #include <unistd.h>
-
-/* Defined in main (sample_player_port.cpp). Makes a bulk card reader or
- * writer give way to the streamer while pads are sounding. */
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
-/* The board's one 4 kB DMA-capable stage, a piece at a time (NULL: none);
- * urgent, the streamer steps aside while this waits. */
-extern uint8_t* sample_player_port_stage_take(bool urgent);
-extern void sample_player_port_stage_give(void);
-extern bool sample_player_port_direct_io(void);
+#include "sample_player_port.hpp"
+#include "audio_rt.h"
 
 /* crosspad-core's data/live12_set.xml.gz, embedded by CMakeLists.txt. */
 extern const uint8_t live12_set_gz_start[] asm("_binary_live12_set_xml_gz_start");
@@ -53,10 +46,6 @@ extern const uint8_t live12_set_gz_end[] asm("_binary_live12_set_xml_gz_end");
 /* The clock and the loop recorder, defined in CrosspadPlatform.cpp. */
 crosspad::MetronomeNode& getMetronome();
 crosspad::PatternSequencer& getSequencer();
-
-extern "C" bool audio_rt_offline(bool on, uint32_t timeout_ms);   // main/audio/audio_task.cpp
-extern "C" bool audio_rt_live_recently(void);                     // main/audio/audio_task.cpp
-extern "C" bool audio_rt_pressed_recently(void);                  // main/audio/audio_task.cpp
 
 namespace crosspad {
 namespace {

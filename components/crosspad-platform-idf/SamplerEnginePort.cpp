@@ -40,23 +40,16 @@
 #include <string>
 #include <cstdio>
 #include <cstring>
+#include "sample_player_port.hpp"
 
-/* main/sample_player_port.cpp. The accounting every diagnostic already reads
- * -- SMPL_LAST's last eight events and the pad-to-sound latency -- belongs to
+/* The accounting every diagnostic already reads (sample_player_port.hpp:
+ * SMPL_LAST's last eight events and the pad-to-sound latency) belongs to
  * whichever engine is playing, not to the prebuilt one. Without this the
  * native engine's note path is invisible to every verb on the board, and the
  * one claim this design rests on (a resident head makes note-on a pointer
- * assignment) cannot be checked at all. */
-struct EngineNoteEvent { uint8_t note; uint8_t wavIdx; uint32_t ms; };
-extern EngineNoteEvent g_engine_last[8];
-extern std::atomic<uint32_t> g_engine_last_count;
-/* 32-bit, all of them: on_voice_start() runs in the render, and a 64-bit
- * atomic is not lock-free on this core (libatomic takes a lock for it). The
- * request stamp is esp_timer's low 32 bits, 0 meaning none; differences of
- * them are right across the wrap. */
-extern std::atomic<uint32_t> g_note_req_us[128];
-extern std::atomic<uint32_t> g_note_lat_last_us, g_note_lat_max_us, g_note_lat_count;
-extern std::atomic<uint32_t> g_note_lat_sum_us;
+ * assignment) cannot be checked at all. The counters are 32-bit, all of
+ * them: on_voice_start() runs in the render, and a 64-bit atomic is not
+ * lock-free on this core (libatomic takes a lock for it). */
 
 extern "C" {
 /* main/sample_player_port.cpp -- the handle cache, the per-task file slots,
@@ -1214,14 +1207,9 @@ public:
 
 enum class TakeResult : uint8_t { Taken, Failed, Dropped };
 
-CP_COLD static TakeResult take_kit_now(const TakeSpec& spec)
+/* Whether a take that waited is still to be made. */
+CP_COLD static bool take_still_wanted(const TakeSpec& spec)
 {
-    /* The arena's owner for the whole take, before LoaderLock (the lock
-     * order, engine_arena.hpp). A pitched bank's handoff and build hold the
-     * same lock, so a take and a pitched load never interleave: whichever
-     * started first ends first, and the other then checks what is current. */
-    EngineArenaOwner owner;
-    LoaderLock lk;   /* the whole take, release and arena reset included */
     /* A copy that waited (behind a take, or for this lock) is only worth
      * taking if its kit is still the current one. If not, a newer load is
      * under way (its end asks again) or a pitched bank took over -- and taking
@@ -1232,7 +1220,7 @@ CP_COLD static TakeResult take_kit_now(const TakeSpec& spec)
     if (km && km->getCurrentKitId() != spec.kitId) {
         ESP_LOGW(TAG, "take of kit %d dropped: kit %d is current now", spec.kitId,
                  km->getCurrentKitId());
-        return TakeResult::Dropped;
+        return false;
     }
     /* A pitched bank installed under a sampler kit belongs to whoever put it
      * there and is still playing it -- an app holding the engine
@@ -1242,19 +1230,14 @@ CP_COLD static TakeResult take_kit_now(const TakeSpec& spec)
      * so this never drops a take that was meant to happen. */
     if (crosspad::pitchedBankInArena()) {
         ESP_LOGW(TAG, "take of kit %d dropped: a pitched bank holds the arena", spec.kitId);
-        return TakeResult::Dropped;
+        return false;
     }
-    ensure_reclaim_hook();
-    release_engine();
-    NotesClosedUntilReturn closed;
+    return true;
+}
 
-    /* Every take starts from the engine's defaults -- its half of two kits
-     * while a song holds a second: a SMPL_POLY raise is for the kit it was
-     * made on, and the pool below is sized from these. */
-    s_kitVoiceCap.store(spec.voiceCap, std::memory_order_release);
-    s_params = kit_params();
-    s_node.engine.setParams(s_params);
-
+/* Empties the arena for a take: its other users let go first. */
+CP_COLD static void clear_arena_for_take()
+{
     /* The arena is the prebuilt engine's until it is stopped, and the song
      * rings borrow its slack, so both are asked to let go before anything is
      * carved out of it. */
@@ -1268,41 +1251,32 @@ CP_COLD static TakeResult take_kit_now(const TakeSpec& spec)
      * still thinks it has pages hands out blocks that point into memory the
      * heap has re-registered. */
     s_pool.forgetPages();
+}
 
-    if (!ensure_pool()) {
-        ESP_LOGE(TAG, "pool refused");
-        why("pool_refused");
+/* A take that could not be made: logged, its reason kept for SMPL_ENGINE,
+ * and the prebuilt engine (where built) given the arena back. */
+CP_COLD static TakeResult take_failed(const char* log, const char* reason)
+{
+    ESP_LOGE(TAG, "%s", log);
+    why(reason);
 #if CONFIG_CROSSPAD_SAMPLER_MARCEL
-        marcel_engine_start();
+    marcel_engine_start();
 #endif
-        return TakeResult::Failed;
-    }
+    return TakeResult::Failed;
+}
 
+CP_COLD static void bind_engine()
+{
     s_store.bind(&s_source, &arena_alloc, &arena_free, nullptr);
     s_node.engine.bind(&s_pool, &s_store);
     s_node.engine.setNoteCallbacks(&on_voice_start, &on_voice_end, nullptr);
     s_node.engine.setBarClock(&bar_clock, nullptr);
     s_node.engine.setClock([]() -> uint32_t { return (uint32_t)esp_timer_get_time(); });
+}
 
-    const uint32_t headBytes = plan_heads(s_source, spec.kitPath, spec.pads, spec.layers, heads_budget());
-
-    s_kit = SamplerKit{};
-    uint16_t loaded = 0;
-    for (uint8_t p = 0; p < SamplerKit::kPads; ++p) {
-        loaded += build_pad(s_source, s_store, spec.kitPath, spec.pads[p], spec.layers, p, headBytes, s_kit.pad[p]);
-    }
-
-    if (loaded == 0) {
-        ESP_LOGE(TAG, "no sample of this kit could be read");
-        why("no_sample_readable");
-        s_store.unload();
-        s_pool.releaseAll();
-#if CONFIG_CROSSPAD_SAMPLER_MARCEL
-        marcel_engine_start();
-#endif
-        return TakeResult::Failed;
-    }
-
+/* The stream pool a freshly built kit starts with. */
+CP_COLD static void reserve_stream_pool()
+{
     /* Blocks for the voices, now that the store knows which samples actually
      * stream. A kit whose every sample fits in its head -- a kit of short
      * hits, which is most of a drum kit -- reserves nothing at all and never
@@ -1340,7 +1314,11 @@ CP_COLD static TakeResult take_kit_now(const TakeSpec& spec)
     } else {
         s_pool.reserve(kPreviewBlocks);
     }
+}
 
+/* Hands the built kit to the render and says what it took. */
+CP_COLD static void publish_take(const TakeSpec& spec, uint32_t headBytes)
+{
     s_headBytes = headBytes;
     s_takeFailed = -1;
     why(spec.layersDropped ? "layers_dropped" : "");
@@ -1357,6 +1335,53 @@ CP_COLD static TakeResult take_kit_now(const TakeSpec& spec)
              (unsigned)(ss.headBytes / 1024), (unsigned)(ps.bytesHeld / 1024),
              (unsigned)(engine_arena_used() / 1024), (unsigned)(engine_arena_capacity() / 1024),
              spec.layersDropped ? " (layers past the store's 64 left out)" : "");
+}
+
+CP_COLD static TakeResult take_kit_now(const TakeSpec& spec)
+{
+    /* The arena's owner for the whole take, before LoaderLock (the lock
+     * order, engine_arena.hpp). A pitched bank's handoff and build hold the
+     * same lock, so a take and a pitched load never interleave: whichever
+     * started first ends first, and the other then checks what is current. */
+    EngineArenaOwner owner;
+    LoaderLock lk;   /* the whole take, release and arena reset included */
+    if (!take_still_wanted(spec)) return TakeResult::Dropped;
+    ensure_reclaim_hook();
+    release_engine();
+    NotesClosedUntilReturn closed;
+
+    /* Every take starts from the engine's defaults -- its half of two kits
+     * while a song holds a second: a SMPL_POLY raise is for the kit it was
+     * made on, and the pool below is sized from these. */
+    s_kitVoiceCap.store(spec.voiceCap, std::memory_order_release);
+    s_params = kit_params();
+    s_node.engine.setParams(s_params);
+
+    clear_arena_for_take();
+
+    if (!ensure_pool()) {
+        return take_failed("pool refused", "pool_refused");
+    }
+
+    bind_engine();
+
+    const uint32_t headBytes = plan_heads(s_source, spec.kitPath, spec.pads, spec.layers, heads_budget());
+
+    s_kit = SamplerKit{};
+    uint16_t loaded = 0;
+    for (uint8_t p = 0; p < SamplerKit::kPads; ++p) {
+        loaded += build_pad(s_source, s_store, spec.kitPath, spec.pads[p], spec.layers, p, headBytes, s_kit.pad[p]);
+    }
+
+    if (loaded == 0) {
+        s_store.unload();
+        s_pool.releaseAll();
+        return take_failed("no sample of this kit could be read", "no_sample_readable");
+    }
+
+    reserve_stream_pool();
+
+    publish_take(spec, headBytes);
     return TakeResult::Taken;
 }
 

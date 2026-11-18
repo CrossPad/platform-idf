@@ -11,6 +11,7 @@
 #include "fw_http.h"
 #include "fw_image_desc.h"
 #include "psram_json_allocator.h"
+#include "sample_player_port.hpp"
 
 static const char* TAG = "fw_catalog";
 /* 16 kits x 8 versions is ~45 kB of JSON at most; real catalogs are a few kB. */
@@ -21,7 +22,6 @@ static constexpr int kStatusUnauthorized = 401;
 static constexpr int kCacheVersion = 1;
 /* The card is shared with the sample streamer: write in pieces and give way between them. */
 static constexpr size_t kCacheChunk = 4096;
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
 static constexpr char kCardDir[] = "/sdcard/crosspad";
 static constexpr char kCacheTmp[] = FW_CATALOG_CACHE ".tmp";
 

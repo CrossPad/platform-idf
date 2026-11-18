@@ -20,6 +20,7 @@
 #include "fw_download.h"
 #include "fw_gc.h"
 #include "fw_image_desc.h"
+#include "verb_args.h"
 
 /* The companion's reply mailbox is 481 bytes; the whole FWCAT line, header
  * and CRLF included, stays within this. */
@@ -64,16 +65,6 @@ static void reply_start(bool started, void (*reply)(const char*)) {
     }
     strlcat(s_line, kCrlf, sizeof s_line);
     reply(s_line);
-}
-
-/* The verb's arguments with leading spaces skipped, or nullptr when `cmd` is
- * not `verb` (FW_CHECKX is not FW_CHECK). */
-static const char* args_of(const char* cmd, const char* verb) {
-    const size_t n = strlen(verb);
-    if (strncmp(cmd, verb, n) != 0 || (cmd[n] != '\0' && cmd[n] != ' ')) return nullptr;
-    const char* a = cmd + n;
-    while (*a == ' ') ++a;
-    return a;
 }
 
 static const char* skip_spaces(const char* p) {
@@ -176,15 +167,15 @@ __attribute__((noinline)) static bool apply_cfg(const char* args) {
 
 bool fw_updater_handle(const char* cmd, void (*reply)(const char*)) {
     const char* a;
-    if ((a = args_of(cmd, "FW_UPD_STATUS"))) {
+    if ((a = args_of_trimmed(cmd, "FW_UPD_STATUS"))) {
         reply_status(reply);
         return true;
     }
-    if ((a = args_of(cmd, "FW_CHECK"))) {
+    if ((a = args_of_trimmed(cmd, "FW_CHECK"))) {
         reply_start(fw_updater_check_start(refusal_buf(), FWU_ERROR_LEN), reply);
         return true;
     }
-    if ((a = args_of(cmd, "FW_DOWNLOAD"))) {
+    if ((a = args_of_trimmed(cmd, "FW_DOWNLOAD"))) {
         /* Exactly "<kit> <version> [INSTALL]": a token that does not fit its buffer is
          * refused, never cut (a cut version is a different version). */
         char kit[FWU_KIT_LEN], version[kVersionWithPrefix], word[sizeof kInstallWord];
@@ -199,15 +190,15 @@ bool fw_updater_handle(const char* cmd, void (*reply)(const char*)) {
         }
         return true;
     }
-    if ((a = args_of(cmd, "FW_UPD_CFG"))) {
+    if ((a = args_of_trimmed(cmd, "FW_UPD_CFG"))) {
         reply(apply_cfg(a) ? "OK\r\n" : "ERR FW_UPD_CFG [boot=0|1] [gc_mb=<n>]\r\n");
         return true;
     }
-    if ((a = args_of(cmd, "FW_CATALOG"))) {
+    if ((a = args_of_trimmed(cmd, "FW_CATALOG"))) {
         reply_catalog(*a ? a : nullptr, reply);
         return true;
     }
-    if ((a = args_of(cmd, "FW_UPD_URL"))) {
+    if ((a = args_of_trimmed(cmd, "FW_UPD_URL"))) {
         if (!*a) {
             reply("ERR FW_UPD_URL <url>|DEFAULT\r\n");
             return true;
@@ -215,7 +206,7 @@ bool fw_updater_handle(const char* cmd, void (*reply)(const char*)) {
         reply(fw_updater_set_url(strcmp(a, "DEFAULT") == 0 ? nullptr : a) ? "OK\r\n" : "ERR bad_url\r\n");
         return true;
     }
-    if ((a = args_of(cmd, "FW_UPD_CHANNEL"))) {
+    if ((a = args_of_trimmed(cmd, "FW_UPD_CHANNEL"))) {
         /* Exactly "<kit> stable|beta": a token cut to fit a buffer is a different kit. */
         const char* space = strchr(a, ' ');
         const size_t kitLen = space ? static_cast<size_t>(space - a) : 0;

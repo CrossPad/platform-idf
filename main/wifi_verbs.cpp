@@ -14,18 +14,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/idf_additions.h"
+#include "verb_args.h"
 #include <atomic>
 #include <cstdio>
 #include <cstring>
 
 /* The host's own lease, so WIFI_UP/WIFI_DOWN pair up however often they are sent. */
 static bool s_benchLease;
-
-static const char* args_of(const char* cmd, const char* verb) {
-    size_t n = strlen(verb);
-    if (strncmp(cmd, verb, n) != 0 || (cmd[n] != '\0' && cmd[n] != ' ')) return nullptr;
-    return cmd + n;
-}
 
 /* Reply text that carries an SSID: an SSID may hold any byte, and the host
  * reads fields apart by `"` and ` | `, a line by CR/LF. So backslash, `"` and

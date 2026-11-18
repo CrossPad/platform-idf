@@ -16,7 +16,7 @@ and up/down cycles leak nothing. **With a Sampler kit loaded the start is
 refused by design** (`failed(no_mem)` at the first-lease gate, nothing built):
 the kit leaves ~71-76 kB of PSRAM on the integrated image (the launcher
 ~149 kB) against a 116736 B gate; that is the case the network-mode fallback
-exists for. See "Memory gates", "Memory" and "Known limitations". v1: not
+exists for. See "Memory gates", "Memory" and "Limits". v1: not
 measured; v1 builds.
 
 ## Lease model
@@ -737,34 +737,21 @@ end 0x421D70C0, `.ext_ram.dummy` 2621408.
 `CONFIG_MQTT_TRANSPORT_SSL` stays on: the secure WebSocket transport depends on
 it (without it esp-mqtt refuses `wss://` at runtime).
 
-## Known limitations
+## Limits
 
-- **Touch is not exercised by HIL**: there is no touch-injection verb. The
-  page, the keyboard and the fallback dialog were driven by encoder, power
-  click and verbs; touch is believed unchanged.
 - **Sampler with a kit loaded is refused by design**: it leaves ~71-76 kB of
-  PSRAM against a 116736 B gate, and the answer is network mode, not a bug.
+  PSRAM against a 116736 B gate, and the answer is network mode.
   The launcher has ~40 kB of PSRAM above the gate; a feature that takes that
   much in the launcher turns WiFi there into network mode too.
 - **GlobalSign Root CA expires 2028-01-28.** The certificate bundle
   (`main/certs/crosspad_roots.pem`) must be regenerated against the live
   chain before then (the file says how); the GTS and ISRG roots cover a chain
   sent without the cross-signature.
-- **Cold-start TLS stalls.** On one access point, a ping right after a cold radio
-  start occasionally stalls: the board's ACKs and its own segments leave 100-900
-  ms late (the server retransmits), the CPU idle and memory fine. About 2 TLS
-  timeouts in ~35 cold pings, the slow tail up to 12.5 s; on a warm link none in
-  26. Ruled out: BLE (stalls stayed with BLE disabled), WiFi modem sleep,
-  CPU load, memory, `ESP_WIFI_RX_IRAM_OPT` (+10.5 kB IRAM, no change). The 20 s
-  bound covers it. Root cause needs a second AP.
-- **No `WifiFail` value for a failed scan**: `ERR timeout` / `ERR scan`, with
-  `WIFI_STATUS fail=` untouched. `NotNetworkMode` exists and is never produced.
+- **A failed scan has no `WifiFail` value**: it answers `ERR timeout` /
+  `ERR scan`, with `WIFI_STATUS fail=` untouched.
 - **Arguments have no escapes**: an SSID or password with `"` cannot be set
   with `WIFI_SET` (a UI pick can).
-- **An open network was not exercised** on hardware.
-- v1 is built but not measured; the gates are v2 numbers.
-- Saved passwords are stored in clear, and typed ones linger in RAM buffers
-  (the prompt's textarea, the page's candidate) until overwritten.
+- The memory gates are v2 numbers.
 
 ## Traps found on hardware
 
@@ -803,8 +790,8 @@ it (without it esp-mqtt refuses `wss://` at runtime).
   dropped by the attempt fence (see "Scan").
 - **A TLS client is paid in PSRAM.** Linking `esp_http_client` with the full
   certificate bundle costs 192 kB and the board loses its kit list on every
-  boot (see "TLS"). Check `xtensa-esp32s3-elf-size -A build_v2/CrossPad.elf | grep
-  ext_ram.dummy` against 2949088 after touching the network code.
+  boot (see "TLS"). Run `python3 tools/check_image_budget.py --rev v2`
+  after touching the network code.
 
 ## HIL scenario `wifi`
 

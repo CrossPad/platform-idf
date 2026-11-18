@@ -21,6 +21,7 @@
 #endif
 #include "esp_timer.h"
 #include <atomic>
+#include "sample_player_port.hpp"
 
 std::atomic<uint32_t> g_bg_pass_max_us{0};   /* read-and-clear by the swap log */
 std::atomic<uint32_t> g_bg_pass_last_us{0};  /* the loader paces itself on it */
@@ -30,12 +31,6 @@ std::atomic<uint32_t> g_bg_pass_last_us{0};  /* the loader paces itself on it */
  * old is a refill stuck on the card; one reported long after the last pass
  * ended is a streamer that did not run. */
 std::atomic<uint32_t> g_bg_pass_mark_us{0};
-void sample_player_port_stream_let_go(void);   /* sample_player_port.cpp */
-#if CONFIG_CROSSPAD_SAMPLER_MARCEL
-void sample_player_port_pass_begin(void);
-void sample_player_port_pass_end(uint32_t passUs);
-#endif
-
 
 bool AudioModule_RT_Setup(void)
 {

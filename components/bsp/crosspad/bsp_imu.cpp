@@ -82,6 +82,9 @@ struct RegValue { uint8_t reg, val; };
 constexpr uint8_t kTapThsDefault = 0x02;    // 2 x FS/32 = 125 mg
 constexpr uint8_t kWakeThsAwake = 0x08;     // 8 x FS/64 = 250 mg
 constexpr uint8_t kWakeThsStill = 0x02;     // 2 x FS/64 = 62.5 mg
+/* The tap threshold counts FS/32 and the wake-up threshold FS/64. */
+static_assert(kWakeThsAwake > 2 * kTapThsDefault,
+              "the awake wake-up threshold must stay above the tap threshold, or no tap arrives");
 /* SINGLE_DOUBLE_TAP left clear on purpose: the part's own double-tap machine
  * answered a hand tapping this case unpredictably -- doubles arriving in pairs,
  * singles where a double was meant, whatever DUR and QUIET were set to. Every

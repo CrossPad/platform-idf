@@ -28,6 +28,7 @@
 #include "crosspad/status/CrosspadStatus.hpp"
 #include "esp_mac.h"
 #include <cstdio>
+#include "app_globals.h"
 
 // Submodule revisions injected by main/CMakeLists.txt (git short hashes).
 #ifndef CROSSPAD_CORE_REV
@@ -36,11 +37,6 @@
 #ifndef CROSSPAD_GUI_REV
 #define CROSSPAD_GUI_REV "unknown"
 #endif
-
-extern lv_group_t * encoderTop_group;
-extern lv_indev_t * indev_encoderTop;
-extern CrosspadSettings * settings;
-extern CrosspadStatus status;
 
 static lv_group_t * s_settings_group = NULL;
 

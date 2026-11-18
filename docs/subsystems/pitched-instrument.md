@@ -35,7 +35,7 @@ Design and the reasoning behind each choice:
 | Shared engine PSRAM arena (general PSRAM heap, every block on one list, 512 kB UI floor) | `components/crosspad-platform-idf/engine_arena.{hpp,cpp}` |
 | Arena handoff between the engines (`kit_engines_stop()`, `kit_engines_idle()`) | `main/include/engine_handoff.h`, `main/audio/engine_handoff.cpp` |
 | Engine dispatch (which engine a pad hit and a kit load go to) | `components/crosspad-platform-idf/SamplerPlatformPort.cpp` (`platform_reloadPad`, `platform_reloadPads`, `onSamplePlaybackEvent`) |
-| CDC verbs `PITCHED_STATUS`, `PITCHED_BENCH`, `ARENA` | `main/hil_control.cpp`; host `crosspad-hil` `knowledge/cdc.yaml`, `verbs.py`, `parsers.py` |
+| CDC verbs `PITCHED_STATUS`, `PITCHED_BENCH`, `ARENA` | `main/hil_verbs_kit.cpp`; host `crosspad-hil` `knowledge/cdc.yaml`, `verbs.py`, `parsers.py` |
 | Fixture kit | `tools/make_pitched_kit.py` |
 | HIL scenario | `crosspad-hil run pitched_kit` |
 

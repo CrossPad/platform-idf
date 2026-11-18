@@ -12,14 +12,12 @@
 
 #include "crosspad/platform/IClock.hpp"
 #include "crosspad/status/CrosspadStatus.hpp"
-
-extern crosspad::CrosspadStatus status;
+#include "include/app_globals.h"
+#include "include/twin_state.h"
 
 static const char *TAG = "twin_mirror";
 
 namespace {
-
-enum Kind : uint8_t { TOUCH = 0, ENCODER = 1, PAD = 2, POWER = 3, HOST = 4, CLOCK = 5, LOST = 6, STATUS = 8 };
 
 void put7(uint8_t *p, uint64_t v, int n) { for (int i = n - 1; i >= 0; --i) { p[i] = v & 0x7F; v >>= 7; } }
 
@@ -126,13 +124,13 @@ void read_cb(lv_indev_t *indev, lv_indev_data_t *data)
             int d = data->enc_diff;
             d = d < -63 ? -63 : (d > 63 ? 63 : d);
             if (touch_trace_text_entry_open()) push_hidden();
-            else push(ENCODER, data->state == LV_INDEV_STATE_PRESSED, (int16_t)(d + 64), 0);
+            else push(twin_state::F_ENC, data->state == LV_INDEV_STATE_PRESSED, (int16_t)(d + 64), 0);
         }
     } else {
         if (held && t->state != LV_INDEV_STATE_PRESSED) t->hidden = touch_trace_text_entry_open();
         if (data->state != t->state || held || lv_indev_get_scroll_obj(indev) != nullptr) {
             if (t->hidden) push_hidden();
-            else push(TOUCH, data->state == LV_INDEV_STATE_PRESSED, (int16_t)data->point.x, (int16_t)data->point.y);
+            else push(twin_state::F_TOUCH, data->state == LV_INDEV_STATE_PRESSED, (int16_t)data->point.x, (int16_t)data->point.y);
         }
     }
     t->state = data->state;
@@ -148,16 +146,16 @@ void put_tick(uint8_t *f, uint32_t t)
 void twin_mirror_attach(lv_indev_t *indev)
 {
     if (!indev || s_nTaps >= kMaxIndev) return;
-    s_taps[s_nTaps++] = Tap{indev, lv_indev_get_read_cb(indev), LV_INDEV_STATE_RELEASED};
+    s_taps[s_nTaps++] = Tap{indev, lv_indev_get_read_cb(indev), LV_INDEV_STATE_RELEASED, false};
     lv_indev_set_read_cb(indev, read_cb);
 }
 
-void twin_mirror_pad(uint8_t pad, uint8_t velocity) { push(PAD, pad, velocity, 0); }
-void twin_mirror_power(bool hold)                   { push(POWER, hold ? 1 : 0, 0, 0); }
+void twin_mirror_pad(uint8_t pad, uint8_t velocity) { push(twin_state::F_PAD, pad, velocity, 0); }
+void twin_mirror_power(bool hold)                   { push(twin_state::F_POWER, hold ? 1 : 0, 0, 0); }
 
 void twin_mirror_host(const uint8_t *msg, size_t len)
 {
-    if (msg && len && len <= 300) push(HOST, 0, (int16_t)len, 0, msg);
+    if (msg && len && len <= 300) push(twin_state::F_HOST, 0, (int16_t)len, 0, msg);
 }
 
 void twin_mirror_enable(bool on)
@@ -182,7 +180,7 @@ void twin_mirror_pump(void (*send)(const uint8_t *frame, size_t len))
         portENTER_CRITICAL(&s_lock);
         if (s_tail != s_head) {
             e = s_ring[s_tail]; s_tail = (s_tail + 1) % kCap; have = true;
-            if (e.kind == HOST)
+            if (e.kind == twin_state::F_HOST)
                 for (int i = 0; i < e.b; ++i) { host[i] = s_bytes[s_bTail]; s_bTail = (s_bTail + 1) % kBytesCap; }
         }
         else { lost = s_lost; s_lost = false; clock = lv_tick_get(); }
@@ -193,15 +191,15 @@ void twin_mirror_pump(void (*send)(const uint8_t *frame, size_t len))
             f[n++] = 0xF0; f[n++] = 0x7D; f[n++] = 0x1F; f[n++] = 0x09; f[n++] = e.kind;
             put_tick(f + n, e.tick); n += 4;
             switch (e.kind) {
-            case TOUCH: {
+            case twin_state::F_TOUCH: {
                 const unsigned x = e.b < 0 ? 0 : (unsigned)e.b, y = e.c < 0 ? 0 : (unsigned)e.c;
                 f[n++] = e.a; f[n++] = (x >> 7) & 0x7F; f[n++] = x & 0x7F; f[n++] = (y >> 7) & 0x7F; f[n++] = y & 0x7F;
                 break;
             }
-            case ENCODER: f[n++] = e.a; f[n++] = (uint8_t)e.b & 0x7F; break;
-            case PAD:     f[n++] = e.a & 0x7F; f[n++] = (uint8_t)e.b & 0x7F; break;
-            case POWER:   f[n++] = e.a; break;
-            case HOST:
+            case twin_state::F_ENC:   f[n++] = e.a; f[n++] = (uint8_t)e.b & 0x7F; break;
+            case twin_state::F_PAD:   f[n++] = e.a & 0x7F; f[n++] = (uint8_t)e.b & 0x7F; break;
+            case twin_state::F_POWER: f[n++] = e.a; break;
+            case twin_state::F_HOST:
                 for (int i = 0; i < e.b; i += 7) {
                     uint8_t hi = 0;
                     const int m = e.b - i < 7 ? e.b - i : 7;
@@ -217,7 +215,7 @@ void twin_mirror_pump(void (*send)(const uint8_t *frame, size_t len))
         }
         const int64_t now = esp_timer_get_time();
         if (lost) {
-            f[0] = 0xF0; f[1] = 0x7D; f[2] = 0x1F; f[3] = 0x09; f[4] = LOST; put_tick(f + 5, clock); f[9] = 0xF7;
+            f[0] = 0xF0; f[1] = 0x7D; f[2] = 0x1F; f[3] = 0x09; f[4] = twin_state::F_LOST; put_tick(f + 5, clock); f[9] = 0xF7;
             send(f, 10);
         }
         /* The status goes out when anything in it but the seconds moved (the
@@ -235,13 +233,13 @@ void twin_mirror_pump(void (*send)(const uint8_t *frame, size_t len))
             if (fresh || memcmp(p, s_sent, 11) != 0 || minute != s_sentMinute) {
                 s_sentMinute = minute;
                 memcpy(s_sent, p, sizeof s_sent);
-                f[0] = 0xF0; f[1] = 0x7D; f[2] = 0x1F; f[3] = 0x09; f[4] = STATUS; put_tick(f + 5, clock);
+                f[0] = 0xF0; f[1] = 0x7D; f[2] = 0x1F; f[3] = 0x09; f[4] = twin_state::F_STATUS; put_tick(f + 5, clock);
                 memcpy(f + 9, p, 16); f[25] = 0xF7;
                 send(f, 26);
             }
         }
         if (lost || now - s_clockAt >= kClockUs) {
-            f[0] = 0xF0; f[1] = 0x7D; f[2] = 0x1F; f[3] = 0x09; f[4] = CLOCK; put_tick(f + 5, clock); f[9] = 0xF7;
+            f[0] = 0xF0; f[1] = 0x7D; f[2] = 0x1F; f[3] = 0x09; f[4] = twin_state::F_CLOCK; put_tick(f + 5, clock); f[9] = 0xF7;
             send(f, 10);
             s_clockAt = now;
         }

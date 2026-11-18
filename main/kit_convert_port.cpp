@@ -25,13 +25,10 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include "sample_player_port.hpp"
+#include "verb_args.h"
 
 /* main/sample_player_port.cpp */
-extern uint8_t *sample_player_port_stage_take(bool urgent);
-extern bool sample_player_port_direct_io(void);
-extern void sample_player_port_stage_give(void);
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
-extern void sample_player_port_forget_file(const char *path);
 
 namespace {
 
@@ -248,12 +245,6 @@ void quoted(const char *in, char *out, size_t cap) {
     }
     out[n++] = '"';
     out[n] = '\0';
-}
-
-const char *args_of(const char *cmd, const char *verb) {
-    const size_t n = strlen(verb);
-    if (strncmp(cmd, verb, n) != 0 || (cmd[n] != '\0' && cmd[n] != ' ')) return nullptr;
-    return cmd + n;
 }
 
 } // namespace

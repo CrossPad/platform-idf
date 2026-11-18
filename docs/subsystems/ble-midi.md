@@ -46,11 +46,13 @@ The BT stack takes **~40 kB of internal RAM while running** plus ~36 kB of
 static DRAM, on a board that had ~76 kB free. Three things follow, and all three
 are load-bearing:
 
-- **BLE starts before the display, LVGL and audio** (`main.cpp`, right after
-  `midiCallbacks_init()`). The controller needs one large contiguous DRAM block;
-  started last it fails with `BLE_INIT: Malloc failed` and then asserts in
-  `emi.c` — a boot loop. Everything after it asks for small blocks, which fit
-  around it.
+- **BLE starts after the launcher has painted** (the main loop in `main.cpp`,
+  once `status.isGuiInitialised`; at once on a headless board; never in
+  transfer or network mode). The controller runs from flash
+  (`BT_CTRL_RUN_IN_FLASH_ONLY=y`), so `nimble_port_init()` no longer needs one
+  large contiguous DRAM block at boot, and a board with BLE off spends no
+  internal RAM or boot time on it. The Settings toggle and the boot path call
+  the same `bleMidi_start()`.
 - **USB-audio mode's two UAC tasks keep their stacks in PSRAM**
   (`components/usb_device_uac/usb_device_uac.c`). They are copy loops between
   TinyUSB FIFOs and the I2S bridge — nothing about them needs internal RAM, and

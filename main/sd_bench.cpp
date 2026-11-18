@@ -37,8 +37,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/task.h"
-
-extern void sample_player_port_flush_files(void);
+#include "sample_player_port.hpp"
 
 namespace {
 

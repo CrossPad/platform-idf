@@ -34,6 +34,7 @@
 #include "crosspad/song/SongSounds.hpp"
 #include "crosspad-gui/components/ui_modal.h"
 #include "lv_async_safe.h"
+#include "app_globals.h"
 
 using crosspad::AppRegistry;
 
@@ -42,16 +43,11 @@ extern void AppRegistry_InitAll();
 
 static const char * TAG = "GUI";
 
-extern CrosspadSettings * settings;
 volatile bool requestSendPowerOff = false;
 
-extern lv_indev_t * indev_encoderTop;
 lv_group_t * app_group = NULL;
 
 lv_obj_t * app_c = NULL;
-
-extern std::atomic<bool> g_kit_scan_done;   /* main.cpp */
-extern "C" void mixer_state_save_deferred(void);   /* CrosspadPlatform.cpp */
 
 // ── Kit selector gate (crosspad-sampler kit_gate) ───────────────────────────
 

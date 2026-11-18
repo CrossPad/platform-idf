@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "audio_rt.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,13 +37,6 @@ uint32_t audio_rt_busy_max(int reader, uint32_t *idle1Pct);
  *  as audio_rt_busy_max()); 0 with no pass since. One caller: the transport
  *  bar's CPU readout. */
 uint32_t audio_rt_busy_avg(void);
-
-/** Take the render off the outputs (true) -- a pass faded to silence, then
- *  passes of the clock and the pads tap only, as fast as the capture's writer
- *  and the streamer keep up (a freeze off the clock) -- or put it back
- *  (false): the clock on the DMA again, faded in. Waits up to @p timeout_ms
- *  for the render to have switched; false when it did not. */
-bool audio_rt_offline(bool on, uint32_t timeout_ms);
 
 /** One render block in µs (frames over the rate), what a pass has to fit in;
  *  0 until the RT task runs. */

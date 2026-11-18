@@ -789,7 +789,7 @@ void EspBleMidi::end()
     g.txRun.store(false);
     if (g.txTask) {
         if (g.txQueue) {
-            TxMsg wake{0, 0, 0, 2};      // unblocks the task so it can retire
+            TxMsg wake{0, 0, 0, 2, 0};   // unblocks the task so it can retire
             xQueueSend(g.txQueue, &wake, 0);
         }
         for (int i = 0; i < 30 && !g.txParked.load(); ++i) vTaskDelay(pdMS_TO_TICKS(10));

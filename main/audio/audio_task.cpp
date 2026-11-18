@@ -24,16 +24,7 @@
 #include "freertos/idf_additions.h"
 #include "esp_log.h"
 #include <atomic>
-
-/* components/crosspad-platform-idf/IdfAudioModule.cpp. Whether the pass that
- * just ran handed its block to an output that will make the next one wait. */
-extern "C" bool audio_rt_pass_paced(void);
-extern "C" uint32_t native_sampler_stream_lead(void);
-extern "C" void audio_rt_last_write(uint32_t* write_done_us, uint32_t* dac_us);
-extern "C" uint32_t audio_rt_pacer_wait_us(void);
-extern "C" uint32_t audio_rt_block_frames(void);
-extern "C" void audio_rt_fade_next(int dir);
-extern "C" void audio_rt_pacer_restart(void);
+#include "audio_rt.h"
 
 
 namespace

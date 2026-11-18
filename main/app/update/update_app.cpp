@@ -23,8 +23,7 @@
 
 #include <cstring>
 #include <cstdio>
-
-extern lv_group_t * encoderTop_group;
+#include "app_globals.h"
 
 static const char * TAG = "update_app";
 

@@ -15,6 +15,7 @@
 #include "crosspad/fw/FwDownloader.hpp"
 #include "crosspad/fw/FwManifest.hpp"
 #include "psram_json_allocator.h"
+#include "sample_player_port.hpp"
 
 static const char* TAG = "fw_library";
 
@@ -30,11 +31,6 @@ static const char* TAG = "fw_library";
 /* "<FW_PKG_ROOT>/<readdir() entry>" — dirent::d_name is declared char[256]
  * (NAME_MAX + 1), so this join has to fit that, not just FW_PKG_NAME_LEN. */
 #define FW_PKG_ENTRY_MAX (sizeof(FW_PKG_ROOT) + 1 + 256)
-
-/* Not declared in a header (sample_player_port.cpp and SamplerPlatformPort.cpp both forward-
- * declare it locally); every bulk reader of the card yields to the streamer
- * between pieces of work. */
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
 
 static FwPkgVerdict judge(const char* imagePath, const esp_app_desc_t& app, bool isImage,
                           bool hasDesc, const fw_image_desc_t& desc, uint32_t size, uint32_t slotSize) {

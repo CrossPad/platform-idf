@@ -15,8 +15,7 @@
 #include "crosspad/fw/FwLibraryGc.hpp"
 #include "fw_image_desc.h"
 #include "fw_library.h"
-
-extern void sample_player_port_yield_to_streamer(uint32_t weight);
+#include "sample_player_port.hpp"
 
 static const char* TAG = "fw_gc";
 static constexpr const char* kCardRoot = "/sdcard";

@@ -25,4 +25,9 @@ bool fw_verify_manifest(const uint8_t* manifest, size_t manifestLen, const uint8
     return false;
 }
 
+/* One key in use and one being rotated in: tools/fw_sign.py generates no more. */
+static constexpr int kFwSignKeysMax = 2;
+static_assert(FW_SIGN_KEY_COUNT >= 1 && FW_SIGN_KEY_COUNT <= kFwSignKeysMax,
+              "main/fw_sign_pubkey.h carries one or two public keys");
+
 int fw_verify_key_count(void) { return FW_SIGN_KEY_COUNT; }
