@@ -120,6 +120,23 @@ void input_pairs_init()
     getPlatformServices().inputPairs = &s_pairs;
 }
 
+bool input_pairs_cover(bool mic, bool line12, bool line34)
+{
+    if (!BSP_HAS_SHARED_LINE_IN) return !line34;
+    const bool want[kInputSources] = {mic, line12, line34};
+    auto covers = [&](int i) {
+        for (int s = 0; s < kInputSources; ++s) {
+            if (want[s] && kPairs[i].codecOf[s] < 0) return false;
+        }
+        return true;
+    };
+    if (covers(s_pairs.pair())) return true;
+    for (int i = 0; i < kPairCount; ++i) {
+        if (covers(i)) return s_pairs.setPair(i);
+    }
+    return false;
+}
+
 int input_pairs_codec_of(int src)
 {
     return src >= 0 && src < kInputSources ? s_codecOf[src].load(std::memory_order_relaxed) : -1;

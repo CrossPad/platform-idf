@@ -42,6 +42,7 @@ std::atomic<bool> s_wants[2] = {};
 bool sent_anywhere(uint8_t ch)
 {
     if (ch == kMixerInvalidChannelId || !s_mixer->isChannelActive(ch)) return false;
+    if (s_mixer->getFxSend(ch) > 0.0f) return true;     // into the FX bus (FxBusPort.cpp)
     for (uint8_t o = 0; o < s_mixer->numOutputs(); ++o) {
         if (s_mixer->isRouteEnabled(ch, o)) return true;
     }
