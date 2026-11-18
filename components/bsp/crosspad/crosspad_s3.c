@@ -665,6 +665,13 @@ esp_err_t bsp_stm32_init(void)
     return ret;
 }
 
+void bsp_stm32_reset(void)
+{
+    gpio_set_level((gpio_num_t)BSP_STM_RST_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    gpio_set_level((gpio_num_t)BSP_STM_RST_PIN, 0);
+}
+
 esp_err_t bsp_stm32_deinit(void)
 {
     ESP_LOGI(TAG, "Deinitializing STM32 communication subsystem via HAL");
