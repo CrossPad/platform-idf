@@ -28,7 +28,7 @@ typedef struct {
     bool skip_tinyusb_init;                      /*!< if true, the Tinyusb and usb phy will not be initialized */
     uac_output_cb_t output_cb;                   /*!< callback function for UAC data output, if NULL, output will be disabled */
     uac_input_cb_t input_cb;                     /*!< callback function for UAC data input, if NULL, input will be disabled */
-    uac_output_space_cb_t output_space_cb;       /*!< bytes the output consumer can take right now; if NULL, the whole FIFO is read (the feedback endpoint then sees an empty FIFO and cannot throttle the host) */
+    uac_output_space_cb_t output_space_cb;       /*!< bytes the output consumer can take right now; the rest waits in TinyUSB's FIFO; if NULL, the whole FIFO is read */
     uac_set_mute_cb_t set_mute_cb;               /*!< callback function for set mute, if NULL, the set mute request will be ignored */
     uac_set_volume_cb_t set_volume_cb;           /*!< callback function for set volume, if NULL, the set volume request will be ignored */
     uac_input_open_cb_t input_open_cb;           /*!< the host opened (alt != 0) or closed (alt 0) the mic stream; TinyUSB task; may be NULL */

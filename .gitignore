@@ -52,3 +52,6 @@ docs/research/*
 /bin/
 /.venv/
 main/app/app_registry_init.cpp
+
+# crosspad-hil scenario and capture logs (written into the directory it runs from)
+hil_logs/

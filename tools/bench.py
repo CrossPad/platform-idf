@@ -709,9 +709,10 @@ def cmd_flash(args) -> int:
         print(f"no CrossPad.bin in {image_dir}" if trial else "nothing built — " + build_hint(d))
         return EXIT_BENCH
     print(f"\nflashing {os.path.relpath(fw, REPO)}")
-    # crosspad-hil's own python, when there is one: ota_flash.py then takes the
-    # hub's exclusive op, and the hub -- which held the port for 5 s after the
-    # checks above and read OTA_READY itself -- lets go of it first.
+    # crosspad-hil's own python, when there is one: ota_flash.py and
+    # fs_transfer.py then take the hub's exclusive op, and the hub -- which
+    # holds the port for 5 s after each verb above and would read OTA_READY or
+    # ASSETS_READY itself -- lets go of it first.
     hil_exe = hil_path()
     hil_py = os.path.join(os.path.dirname(hil_exe), "python") if hil_exe else ""
     py = hil_py if os.path.exists(hil_py) else sys.executable
@@ -762,8 +763,8 @@ def cmd_flash(args) -> int:
         image = os.path.join(image_dir, "assets.bin")
         print(f"\nflashing assets from {os.path.relpath(image, REPO)}"
               " (OTA does not touch this partition)")
-        p = subprocess.run([sys.executable, os.path.join(REPO, "tools", "fs_transfer.py"),
-                            "assets", image], cwd=REPO)
+        p = subprocess.run([py, os.path.join(REPO, "tools", "fs_transfer.py"), "assets", image],
+                           cwd=REPO)
         if p.returncode != 0:
             return EXIT_BENCH
         time.sleep(12)
