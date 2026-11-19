@@ -1,4 +1,6 @@
 import sys
+
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -53,3 +55,38 @@ def test_expired_or_other_revision_artifacts_are_skipped():
 
 def test_run_without_listing_is_skipped():
     assert bench.pick_trial_run([{"databaseId": 1, "artifacts": None}], "build-v2-full") == (None, None)
+
+
+def test_image_arg_takes_the_dir_or_the_file_in_it(tmp_path, monkeypatch):
+    (tmp_path / "CrossPad.bin").write_bytes(b"x")
+    assert bench.trial_image_dir(str(tmp_path)) == str(tmp_path)
+    assert bench.trial_image_dir(str(tmp_path / "CrossPad.bin")) == str(tmp_path)
+    # A bare file name in the cwd: the cwd, never an empty (falsy) dir.
+    monkeypatch.chdir(tmp_path)
+    assert bench.trial_image_dir("CrossPad.bin") == str(tmp_path)
+
+
+def test_cut_short_download_leaves_no_cached_image(tmp_path, monkeypatch):
+    import subprocess
+    monkeypatch.setattr(bench, "REPO", str(tmp_path))
+    monkeypatch.setattr(bench.shutil, "which", lambda _: "gh")
+    replies = {
+        ("pr", "view"): '{"headRefOid": "abcdef0123456789", "title": "t"}',
+        ("run", "list"): '[{"databaseId": 7, "status": "completed", "conclusion": "success"}]',
+        ("api",): '{"artifacts": [{"name": "build-v2-full", "expired": false}]}',
+    }
+
+    def fake_run(cmd, **kw):
+        a = cmd[1:]
+        if a[:2] == ["run", "download"]:
+            dest = a[a.index("-D") + 1]
+            (Path(dest) / "CrossPad.bin").write_bytes(b"half")
+            raise KeyboardInterrupt                                # Ctrl-C mid-download
+        out = replies.get(tuple(a[:2])) or replies.get(tuple(a[:1]))
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+
+    monkeypatch.setattr(bench.subprocess, "run", fake_run)
+    with pytest.raises(KeyboardInterrupt):
+        bench.fetch_pr_build(5, "v2")
+    # The half file is not where the next call looks for a finished download.
+    assert not (tmp_path / ".crosspad" / "trial" / "pr5-abcdef012" / "CrossPad.bin").exists()

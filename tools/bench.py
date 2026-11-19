@@ -281,6 +281,13 @@ def image_elf_sha256(path: str) -> str | None:
 TRIAL_KIT = "full"
 
 
+def trial_image_dir(image: str) -> str:
+    """--image takes the dir or the CrossPad.bin in it; always an absolute dir,
+    so a bare file name in the cwd never falls back to the local build."""
+    path = os.path.abspath(image)
+    return path if os.path.isdir(path) else os.path.dirname(path)
+
+
 def pick_trial_run(runs: list[dict], artifact: str) -> tuple[dict | None, dict | None]:
     """The newest run that still holds `artifact`, and that artifact.
 
@@ -334,12 +341,18 @@ def fetch_pr_build(pr: int, rev: str) -> str | None:
             print(f"PR #{pr}: no CI run built {sha[:9]}")
         return None
     print(f"PR #{pr} ({head['title']}) at {sha[:9]}: {artifact} from run {run['databaseId']}")
-    os.makedirs(dest, exist_ok=True)
-    p = subprocess.run([gh, "run", "download", str(run["databaseId"]), "-n", artifact, "-D", dest],
+    # Into a side dir first: a download cut short must not leave a CrossPad.bin
+    # the next call would take as complete.
+    part = dest + ".part"
+    shutil.rmtree(part, ignore_errors=True)
+    os.makedirs(part)
+    p = subprocess.run([gh, "run", "download", str(run["databaseId"]), "-n", artifact, "-D", part],
                        cwd=REPO)
     if p.returncode != 0:
-        shutil.rmtree(dest, ignore_errors=True)
+        shutil.rmtree(part, ignore_errors=True)
         return None
+    shutil.rmtree(dest, ignore_errors=True)
+    os.replace(part, dest)
     return dest
 
 
@@ -689,8 +702,8 @@ def cmd_flash(args) -> int:
         if trial is None:
             return EXIT_BENCH
     elif args.image:
-        trial = args.image if os.path.isdir(args.image) else os.path.dirname(args.image)
-    image_dir = os.path.abspath(trial) if trial else os.path.join(REPO, d.build_dir)
+        trial = trial_image_dir(args.image)
+    image_dir = trial or os.path.join(REPO, d.build_dir)
     fw = os.path.join(image_dir, "CrossPad.bin")
     if not os.path.exists(fw):
         print(f"no CrossPad.bin in {image_dir}" if trial else "nothing built — " + build_hint(d))
