@@ -21,6 +21,8 @@
 #include "include/fw_library.h"
 #include "include/fw_slots.h"
 #include "include/kit_convert_port.h"
+#include "include/midi_kit_pc.h"
+#include "include/host_midi.h"
 #include "include/ota_cdc.h"
 #include "fw_flow_overlay.h"
 #include "usb_config_manager.h"
@@ -46,6 +48,7 @@ crosspad::PatternSequencer& getSequencer();
 #include <algorithm>
 #include <atomic>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -4702,6 +4705,258 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         s_pending_kit = a;
         cdc_reply("OK\r\n");   /* reply first: the post wakes LVGL work that preempts this task */
         lv_async_call_locked(async_kit_load, nullptr);
+        return true;
+    }
+    /* KIT_PC [ON|OFF|MODE off|flat|group|CH 0..16|MAP [first] [count]|ECHO on|off]:
+     * what a
+     * host's Program Change does to the kit, and the map a host can read off its
+     * own listing (main/midi_kit_pc.cpp). Bare KIT_PC answers the state and the
+     * counters -- without them "I sent a program change and nothing happened"
+     * has no answer. MAP answers a window, because 121 kits do not fit one
+     * reply: the CDC FIFO is 256 bytes and cdc_reply chunks at 128. */
+    if (strncmp(cmd, "KIT_PC", 6) == 0 && (cmd[6] == 0 || cmd[6] == ' ')) {
+        const char *arg = cmd + 6;
+        while (*arg == ' ') ++arg;
+        char line[456];
+        if (!*arg) {
+            kit_change_status_line(line, sizeof(line) - 3);
+            strcat(line, "\r\n");
+            cdc_reply(line);
+            return true;
+        }
+        /* One word at a time, case-insensitively: the usage line writes these
+         * lower case (`MODE off|flat|group`) and a person copying it, or a host
+         * script with its own habit, should not be answered with an error for
+         * the difference. sscanf takes the word and nothing but the word, so a
+         * stray space at the end of the line cannot turn FLAT into an error. */
+        char word[8];
+        if (sscanf(arg, "%7s", word) == 1 && strcasecmp(word, "ON") == 0) {
+            kit_change_set_mode(KIT_PC_FLAT);
+            cdc_reply("OK\r\n");
+            return true;
+        }
+        if (sscanf(arg, "%7s", word) == 1 && strcasecmp(word, "OFF") == 0) {
+            kit_change_set_mode(KIT_PC_OFF);
+            cdc_reply("OK\r\n");
+            return true;
+        }
+        if (strncmp(arg, "MODE", 4) == 0) {
+            const char *m = arg + 4;
+            while (*m == ' ') ++m;
+            if (!*m) kit_change_set_mode(KIT_PC_FLAT);
+            else if (sscanf(m, "%7s", word) != 1) {
+                cdc_reply("ERR KIT_PC MODE off|flat|group\r\n");
+                return true;
+            } else if (strcasecmp(word, "OFF") == 0) kit_change_set_mode(KIT_PC_OFF);
+            else if (strcasecmp(word, "FLAT") == 0) kit_change_set_mode(KIT_PC_FLAT);
+            else if (strcasecmp(word, "GROUP") == 0) kit_change_set_mode(KIT_PC_GROUP);
+            else { cdc_reply("ERR KIT_PC MODE off|flat|group\r\n"); return true; }
+            cdc_reply("OK\r\n");
+            return true;
+        }
+        {
+            int ch = -1;
+            if (sscanf(arg, "CH %d", &ch) == 1 && ch >= 0 && ch <= 16) {
+                kit_change_set_channel(ch);
+                cdc_reply("OK\r\n");
+                return true;
+            }
+        }
+        if (strncasecmp(arg, "ECHO", 4) == 0 && (arg[4] == 0 || arg[4] == ' ')) {
+            /* On by default, not persisted: the same shape as the Control Change
+             * map, a property of the session a host is in rather than something a
+             * board remembers across a reboot. Turning it back on starts from where
+             * the board is now, so the switch itself is not an announcement. */
+            const char *onoff = arg + 4;
+            while (*onoff == ' ') ++onoff;
+            if (strcasecmp(onoff, "ON") == 0) kit_pc_set_echo(1);
+            else if (strcasecmp(onoff, "OFF") == 0) kit_pc_set_echo(0);
+            else { cdc_reply("ERR KIT_PC ECHO on|off\r\n"); return true; }
+            cdc_reply("OK\r\n");
+            return true;
+        }
+        if (strncmp(arg, "MAP", 3) == 0) {
+            if (!g_kit_scan_done.load()) {
+                /* Same refusal as KIT_LIST: the scan is growing the vector this
+                 * would walk. */
+                cdc_reply("ERR scanning\r\n");
+                return true;
+            }
+            const char *a = arg + 3;
+            while (*a == ' ') ++a;
+            int first = 0, count = 12;
+            if (*a) {
+                if (sscanf(a, "%d %d", &first, &count) < 1) {
+                    cdc_reply("ERR KIT_PC MAP [first] [count]\r\n");
+                    return true;
+                }
+            }
+            if (first < 0) first = 0;
+            if (count < 1) count = 1;
+            if (count > 40) count = 40;    /* one line the host can read whole */
+            /* One line per entry, as KIT_LIST answers: a reply the FIFO splits
+             * must not lose the middle of a row, and the end line says what is
+             * left to ask for. */
+            const int total = kit_change_map_total();
+            int shown = 0;
+            for (int p = first; p < first + count && p < total; ++p) {
+                char row[124];
+                if (!kit_change_map_row(p, row, sizeof(row) - 3)) break;
+                strcat(row, "\r\n");
+                cdc_reply(row);
+                ++shown;
+            }
+            snprintf(line, sizeof(line) - 3, "KITPCMAP: end first=%d total=%d shown=%d",
+                     first, total, shown);
+            strcat(line, "\r\n");
+            cdc_reply(line);
+            return true;
+        }
+        cdc_reply("ERR KIT_PC [ON|OFF|MODE off|flat|group|CH 0..16|MAP [first] [count]|ECHO on|off]\r\n");
+        return true;
+    }
+    /* SURFACE [STATUS | PAD <0..15> | LVL <out|hw|chv|pan|padmix> <addr> | CLR]:
+     * the SysEx control surface's own record.
+     * `writes`/`values` say what landed, `restores`/`skipped` say what was handed back
+     * and what was refused because the board had moved the value in the meantime --
+     * the distinction a host cannot make from the outside, and the reason this verb
+     * exists next to the counters a SysEx reply carries. `PAD n` prints one pad's whole
+     * story: the colour on it now, the colour the surface left, the colour the board
+     * stood at before, and whether the surface may still take it back. The frames
+     * themselves are described in docs/subsystems/surface-sysex.md and decoded in
+     * main/include/surface_map.h. */
+    if (strncmp(cmd, "SURFACE", 7) == 0 && (cmd[7] == 0 || cmd[7] == ' ')) {
+        const char *arg = cmd + 7;
+        while (*arg == ' ') ++arg;
+        char line[224];
+        if (!*arg || strcasecmp(arg, "STATUS") == 0) {
+            host_midi_surface_status_line(line, sizeof(line) - 3);
+            strcat(line, "\r\n");
+            cdc_reply(line);
+            return true;
+        }
+        if (strncasecmp(arg, "PAD", 3) == 0) {
+            int pad = -1;
+            if (sscanf(arg + 3, "%d", &pad) != 1 || pad < 0 || pad > 15) {
+                cdc_reply("ERR SURFACE PAD <0..15>\r\n");
+                return true;
+            }
+            host_midi_surface_pad_line(line, sizeof(line) - 3, pad);
+            strcat(line, "\r\n");
+            cdc_reply(line);
+            return true;
+        }
+        if (strncasecmp(arg, "LVL", 3) == 0) {
+            const char *p = arg + 3;
+            while (*p == ' ') ++p;
+            char secbuf[16] = {0};
+            int addr = -1;
+            if (sscanf(p, "%15s %d", secbuf, &addr) != 2 || addr < 0) {
+                cdc_reply("ERR SURFACE LVL [out|hw|chv|pan|padmix] <addr>\r\n");
+                return true;
+            }
+            char line[224];
+            if (!host_midi_surface_level_line(line, sizeof(line) - 3, secbuf, addr)) {
+                cdc_reply("ERR SURFACE LVL [out|hw|chv|pan|padmix] <addr>\r\n");
+                return true;
+            }
+            strcat(line, "\r\n");
+            cdc_reply(line);
+            return true;
+        }
+        if (strcasecmp(arg, "CLR") == 0) {
+            host_midi_surface_clear();
+            cdc_reply("OK\r\n");
+            return true;
+        }
+        cdc_reply("ERR SURFACE [STATUS | PAD <0..15> | LVL <out|hw|chv|pan|padmix> <addr> | CLR]\r\n");
+        return true;
+    }
+
+    /* MIDI_CC [STATUS | MAP [first] [count] | SET <ch 1..16> <cc> <target> |
+     * NONE | CLEAR | RESET | GIVE | ECHO on|off]: what a host's Control Changes
+     * ride on this board, where a person can point them, and which way the board
+     * answers (main/host_midi.cpp).
+     * `SET 3 7 channel "Sampler"` / `SET 1 7 output 0` / `SET 1 7 hardware 0` /
+     * `SET 1 7 pad 5`, and `PAN` after the target for a balance instead of a
+     * level. The map lives in RAM on purpose: which mixer channels exist
+     * depends on the kit and the song running now
+     * (docs/subsystems/sampler-engine.md), so a saved index would point at
+     * nothing after a reboot with something else loaded. */
+    if (strncmp(cmd, "MIDI_CC", 7) == 0 && (cmd[7] == 0 || cmd[7] == ' ')) {
+        const char *arg = cmd[7] ? cmd + 8 : nullptr;
+        while (arg && *arg == ' ') ++arg;
+        if (!arg || !*arg || strncmp(arg, "STATUS", 6) == 0) {
+            char line[192];
+            host_midi_cc_status_line(line, sizeof(line));
+            strcat(line, "\r\n");
+            cdc_reply(line);
+            return true;
+        }
+        if (strncmp(arg, "MAP", 3) == 0) {
+            int first = 0, count = 24;
+            const char *a = arg + 3;
+            if (*a && sscanf(a, "%d %d", &first, &count) < 1) {
+                cdc_reply("ERR MIDI_CC MAP [first] [count]\r\n");
+                return true;
+            }
+            if (first < 0) first = 0;
+            if (count < 1) count = 1;
+            if (count > 40) count = 40;
+            const int total = host_midi_cc_total();
+            int shown = 0;
+            for (int p = first; p < first + count && p < total; ++p) {
+                char row[192];
+                if (!host_midi_cc_row(p, row, sizeof(row) - 3)) break;
+                strcat(row, "\r\n");
+                cdc_reply(row);
+                ++shown;
+            }
+            char line[96];
+            snprintf(line, sizeof(line) - 3, "MIDICC: end first=%d total=%d shown=%d", first, total,
+                     shown);
+            strcat(line, "\r\n");
+            cdc_reply(line);
+            return true;
+        }
+        const char *why = host_midi_cc_set(arg);
+        if (why) {
+            char err[192];
+            snprintf(err, sizeof(err) - 3, "ERR MIDI_CC %.100s (%.24s)", arg, why);
+            strcat(err, "\r\n");
+            cdc_reply(err);
+        } else {
+            cdc_reply("OK\r\n");
+        }
+        return true;
+    }
+    /* LED_HOST [STATUS | SET <pad> <r> <g> <b> | ALL <r> <g> <b> |
+     * GRID <96 hex> | ANIM chase|ring|off [ms] | LEASE <ms> | OFF]: a host
+     * taking the pad colours over, with the board able to give them back.
+     * Over SysEx the same three things are 0x1D subs 0x0D/0x0E/0x0F
+     * (main/audio_route_control.cpp), which is how they arrive in the USB
+     * profiles that have no CDC. Colours here are 0..255; a SysEx frame carries
+     * them 7-bit and the board doubles them, the way DAW Control does
+     * (crosspad-dawcontrol src/DawProtocol.cpp:89-91). */
+    if (strncmp(cmd, "LED_HOST", 8) == 0 && (cmd[8] == 0 || cmd[8] == ' ')) {
+        const char *arg = cmd[8] ? cmd + 9 : nullptr;
+        while (arg && *arg == ' ') ++arg;
+        if (!arg || !*arg || strncmp(arg, "STATUS", 6) == 0) {
+            char line[160];
+            host_midi_led_status_line(line, sizeof(line));
+            strcat(line, "\r\n");
+            cdc_reply(line);
+            return true;
+        }
+        const char *why = host_midi_led_cmd(arg);
+        if (why) {
+            char err[192];
+            snprintf(err, sizeof(err) - 3, "ERR LED_HOST %.100s (%.24s)", arg, why);
+            strcat(err, "\r\n");
+            cdc_reply(err);
+        } else {
+            cdc_reply("OK\r\n");
+        }
         return true;
     }
     /* KIT_DELETE id name -- a kit of the user's own (USER: the Slicer's)
