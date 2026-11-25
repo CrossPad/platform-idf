@@ -10,9 +10,6 @@
   "sample_engine": false,
   "radio": false,
   "apps": {
-    "fxpad": {
-      "track": "pinned",
-      "commit": "b253357d2190a4f8bead17529f27e48f13119f9a"
-    }
+    "fxpad": { "track": "pinned", "commit": "6f216f9cf80ce284a994a57f6c63510e30eb2619" }
   }
 }
