@@ -19,6 +19,7 @@ FetchContent_MakeAvailable(Catch2)
 
 set(MAIN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set(CORE_DIR ${MAIN_DIR}/../components/crosspad-core)
+set(PLATFORM_DIR ${MAIN_DIR}/../components/crosspad-platform-idf)
 
 add_executable(hil_text_tests
     test_hil_text.cpp
@@ -89,6 +90,20 @@ if(NOT MSVC)
     target_link_options(surface_map_tests PRIVATE -fsanitize=address,undefined)
 endif()
 
+# The settings write queue (crosspad-platform-idf/NvsWriteQueue.cpp): the part
+# of the store's deferral that is pure policy, so the cooldown, the read-back,
+# the erase and the retry rules are pinned without a board and without NVS.
+add_executable(nvs_write_queue_tests
+    test_nvs_write_queue.cpp
+    ${PLATFORM_DIR}/NvsWriteQueue.cpp
+)
+target_include_directories(nvs_write_queue_tests PRIVATE ${PLATFORM_DIR}/include)
+target_link_libraries(nvs_write_queue_tests PRIVATE Catch2::Catch2WithMain)
+if(NOT MSVC)
+    target_compile_options(nvs_write_queue_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(nvs_write_queue_tests PRIVATE -fsanitize=address,undefined)
+endif()
+
 include(CTest)
 include(Catch)
 catch_discover_tests(hil_text_tests)
@@ -97,3 +112,4 @@ catch_discover_tests(cdc_line_tests)
 catch_discover_tests(kit_pc_tests)
 catch_discover_tests(host_midi_tests)
 catch_discover_tests(surface_map_tests)
+catch_discover_tests(nvs_write_queue_tests)

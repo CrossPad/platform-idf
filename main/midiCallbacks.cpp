@@ -162,7 +162,6 @@ static UsbMidiOutput s_usbOutput;
  * stm32NoteToPad() is the single source of truth: it honours the live
  * noteOffset, unlike getPadForMidiNote(), which a sampler kit redefines. */
 
-#include <atomic>
 /* Physical presses, counted separately from CDC-injected ones (PAD_STATS). */
 std::atomic<uint32_t> g_hil_stm_press_count{0};
 std::atomic<uint32_t> g_hil_stm_at_count{0};      /* poly aftertouch samples decoded from the STM */

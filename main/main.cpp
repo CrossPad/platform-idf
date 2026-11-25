@@ -252,6 +252,12 @@ static void __attribute__((noinline)) softoff_gate_write()
 void app_arm_softoff_boot_gate()
 {
     if (s_softoff_nv_armed.exchange(true)) return;
+    /* A power-off is where the settings write queue has to have finished: a
+     * slider moved a second ago lives in RAM until its cooldown comes round.
+     * Ask for it here, before the gate, on the queue's own internal-stack task
+     * -- the STM cuts the rail a few hundred ms after it asks, and the gate
+     * write below is the one that must not be cut short. */
+    NvsSettingsStore::queueFlushWait("soft-off", 400);
     if (esp_ptr_internal(pxTaskGetStackStart(nullptr))) {
         softoff_gate_write();
         return;
