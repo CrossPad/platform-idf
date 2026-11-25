@@ -14,6 +14,16 @@ enum InputSource : uint8_t { kInputMic = 0, kInputLine12, kInputLine34, kInputSo
 /// pair saved in NVS. Before input_gain_init(), whose gains follow the pair.
 void input_pairs_init();
 
+/// The pair that hears every input asked for, the current one when it
+/// already does; not saved (input_pairs_restore() puts the saved one back).
+/// False when no pair holds them all (three asked for) or the board has no
+/// pairs: then nothing moves.
+bool input_pairs_cover(bool mic, bool line12, bool line34);
+
+/// The pair saved in NVS again, after input_pairs_cover() moved it for a
+/// while (the FX bus's detach). No-op where the board has no pairs.
+void input_pairs_restore();
+
 /// RT: the codec input @p src is on now, or -1 while the pair leaves it out.
 int input_pairs_codec_of(int src);
 

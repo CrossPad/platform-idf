@@ -607,6 +607,26 @@ MCLK and LRCK then drift against each other (a 200 Hz timing smear, THD+N
 Measure with `tools/make_tone_kit.py` + `crosspad-hil run sampler_record`;
 judge offline. Details and numbers: [docs/subsystems/audio-engine-rate.md](docs/subsystems/audio-engine-rate.md).
 
+## FX Pad (the fxpad kit: a performance multi-effect)
+
+`config/profiles/fxpad.json`: one app, FX Pad (`components/crosspad-fxpad`),
+no sampler started. Line 1/2, line 3/4, the mics and USB go through 32
+effects in two banks (B cuts the last seconds of the input up: stutter, beat
+repeat, glitch, tape stop, scratch …; one shared 1 MB tape ring) the pads hold (`FxEngine.cpp`, portable, host tests in the app's
+`tests/`) to Out 1/2, Out 3/4 and USB. **The mixer has one FX insert bus**
+(crosspad-mixer 0.22 `setFxProcessor/Send/Return`): sent, processed and
+returned in the same render pass, before the outputs' volume and limiter;
+the app sees it as core 2.48's **`IFxBus`** (`FxBusPort.cpp`), which takes the
+sources off their own routes while attached and picks the input pair from the
+sends. The pads start an effect from their own task straight into the
+engine's atomics; the screen follows from a timer. No buffer is cleared on the
+render thread (a delay line reads past what it has written as silence). USB
+REC switches USB to its audio profile so a phone records the FX. The XY pad
+redraws only the cursor's small objects at a 16 ms refresh -- a style set
+invalidates its whole object, so nothing is restyled unless it changed.
+`idf.py -B build_v2 -DSDKCONFIG=sdkconfig.v2 -DCROSSPAD_FW_KIT=fxpad build`.
+Details: [docs/subsystems/fx-pad.md](docs/subsystems/fx-pad.md).
+
 ## BLE MIDI
 
 Browser companion control shares NimBLE: custom GATT service `7e400001-b5a3-f393-e0a9-e50e24dcca9e`, bounded request/reply mailbox, main-task HIL dispatch. The same verb set rides USB MIDI SysEx `0x1F` (`main/companion_sysex.cpp`, `crosspad-hil companion "<VERB>"`) — that is the control plane of the MIDI+UAC2 profile, which has no CDC. A host's request for the CDC profile (SysEx `0x1B 01`) is confirmed **on the device** unless `USB_GUARD 0` (persisted; a development board sets it once). Protocol and limits: `docs/subsystems/ble-midi.md`. No files or OTA over BLE or SysEx.
