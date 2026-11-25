@@ -342,16 +342,9 @@ bool write_level_of(const Rule &r, float value)
  * ride records what to hand back later, and the ones after it must not move that
  * value. Counted here and at the give, so `MIDICC:` can show how many levels the
  * host currently holds without walking the table from another task. */
-/* A target's value in the 7-bit form the host uses: a level through the inverse of
- * the squaring curve (hardware levels are 0..100, mixer levels are 0..1), a balance
- * through the inverse of the pan curve. Same arithmetic `MIDI_CC MAP` already
- * prints as `cur=`, which is the point: what the board announces is what its own
- * read-out says, so host and read-out cannot disagree. */
 int seven_of(const Rule &r, float value)
 {
-    if (r.isPan) return crosspad::hostmidi::sevenFromPan(value);
-    if (r.target == Target::Hardware) return crosspad::hostmidi::sevenFromLevel(value / 100.0f);
-    return crosspad::hostmidi::sevenFromLevel(value);
+    return crosspad::hostmidi::sevenOf(r.target, r.isPan, value);
 }
 
 /* Every slot "not read yet": used at init and whenever the map changes, so mapping
@@ -406,7 +399,8 @@ void apply_cc(uint32_t word)
          * just asked for it. A write that then fails leaves the baseline a step
          * ahead of reality, which the next pass corrects by announcing what the desk
          * really is at - the honest direction for the mistake to go in. */
-        s_echo_prev[idx] = static_cast<int16_t>(val);
+        s_echo_prev[idx] = static_cast<int16_t>(
+            crosspad::hostmidi::echoBaseline(rule->target, rule->isPan, val));
         if (rule->isPan) mx.setChannelPan(static_cast<uint8_t>(c),
                                           crosspad::hostmidi::panFrom7(val));
         else mx.setChannelVolume(static_cast<uint8_t>(c),
@@ -425,7 +419,8 @@ void apply_cc(uint32_t word)
         float was = 0.0f;
         if (current_level_of(*rule, &was))
             take_control(idx, *rule, was);
-        s_echo_prev[idx] = static_cast<int16_t>(val);   // baseline before the write
+        s_echo_prev[idx] = static_cast<int16_t>(   // baseline before the write
+            crosspad::hostmidi::echoBaseline(rule->target, rule->isPan, val));
         mx.setOutputVolume(static_cast<uint8_t>(rule->index),
                            crosspad::hostmidi::levelFrom7(val));
         s_cc_applied.fetch_add(1);
@@ -441,7 +436,8 @@ void apply_cc(uint32_t word)
         float was = 0.0f;
         if (current_level_of(*rule, &was))
             take_control(idx, *rule, was);
-        s_echo_prev[idx] = static_cast<int16_t>(val);   // baseline before the write
+        s_echo_prev[idx] = static_cast<int16_t>(   // baseline before the write
+            crosspad::hostmidi::echoBaseline(rule->target, rule->isPan, val));
         lv->setLevel(rule->index, crosspad::hostmidi::percentFrom7(val));
         s_cc_applied.fetch_add(1);
         break;

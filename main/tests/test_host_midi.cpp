@@ -274,3 +274,26 @@ TEST_CASE("the board speaks up when a value moves, not when a rule appears")
     CHECK(echoNeeded(90, 127));            // the board (or a handover) moved it
     CHECK(echoNeeded(90, 0));              // down to silence is still news
 }
+
+TEST_CASE("a host's own Control Change never comes back as an echo")
+{
+    /* apply_cc() stores the value as the target keeps it (a whole percent for a
+     * hardware level, a float for the mixer) and host_echo reads it back through
+     * sevenOf(). The slot's baseline is echoBaseline(); for every wire value and
+     * every target the echo reads, the two must agree or the host gets its own
+     * fader back a step off -- 47 came back as 48 on a v2 board. */
+    for (int v = 0; v <= 127; ++v) {
+        const uint8_t w = static_cast<uint8_t>(v);
+        const float hw = static_cast<float>(percentFrom7(w));
+        CHECK_FALSE(echoNeeded(echoBaseline(Target::Hardware, false, w),
+                               sevenOf(Target::Hardware, false, hw)));
+        CHECK_FALSE(echoNeeded(echoBaseline(Target::Channel, false, w),
+                               sevenOf(Target::Channel, false, levelFrom7(w))));
+        CHECK_FALSE(echoNeeded(echoBaseline(Target::Output, false, w),
+                               sevenOf(Target::Output, false, levelFrom7(w))));
+        CHECK_FALSE(echoNeeded(echoBaseline(Target::Channel, true, w),
+                               sevenOf(Target::Channel, true, panFrom7(w))));
+    }
+    // The raw wire value is not what comes back: the reason the baseline is not `v`.
+    CHECK(sevenOf(Target::Hardware, false, static_cast<float>(percentFrom7(47))) == 48);
+}

@@ -229,6 +229,31 @@ inline bool echoNeeded(int prev, int now)
     return prev >= 0 && prev != now;
 }
 
+/// A target's value in the 7-bit form the host uses: a level through the inverse of
+/// the squaring curve (hardware levels are 0..100, mixer levels are 0..1), a balance
+/// through the inverse of the pan curve. Same arithmetic `MIDI_CC MAP` prints as
+/// `cur=`, so what the board announces is what its own read-out says.
+inline int sevenOf(Target target, bool isPan, float value)
+{
+    if (isPan) return sevenFromPan(value);
+    if (target == Target::Hardware) return sevenFromLevel(value / 100.0f);
+    return sevenFromLevel(value);
+}
+
+/// The echo baseline for a wire value the board has just applied: what `sevenOf`
+/// will read back once the target holds it, not `v` itself. A hardware level is
+/// kept as a whole percent, so for 40 of the 128 values the way back lands off `v`
+/// (up to 8 steps near the bottom); with `v` as the baseline the next echo pass
+/// took that for a move on the board and sent the host its own fader back. Mixer
+/// levels and balances keep a float and come back exact.
+inline int echoBaseline(Target target, bool isPan, uint8_t v)
+{
+    if (isPan) return sevenOf(target, true, panFrom7(v));
+    if (target == Target::Hardware)
+        return sevenOf(target, false, static_cast<float>(percentFrom7(v)));
+    return sevenOf(target, false, levelFrom7(v));
+}
+
 /* ── Pad LED frames ────────────────────────────────────────────────────── */
 
 /// One pad of a frame. 8 bits per component, the way a Launchpad-style host
