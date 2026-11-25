@@ -821,6 +821,12 @@ static void handle_settings_reset(void)
 {
     unsigned erased = 0, missing = 0, failed = 0;
     for (const char *ns : kSettingsNamespaces) {
+        /* Forget it in the write queue first: an entry there claims the value is
+         * on flash, so a save of the same value after this erase would be
+         * skipped and the board would answer the old setting from its own
+         * queue. Erasing under it is what NvsSettingsStore::eraseNamespace()
+         * does for the store's own factory reset. */
+        NvsSettingsStore::queueForget(ns);
         nvs_handle_t h;
         esp_err_t err = nvs_open(ns, NVS_READWRITE, &h);
         if (err == ESP_ERR_NVS_NOT_FOUND) { ++missing; continue; }

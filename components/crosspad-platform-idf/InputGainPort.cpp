@@ -12,6 +12,7 @@
 
 #include "InputGainPort.hpp"
 #include "InputPairPort.hpp"
+#include "NvsSettingsStore.hpp"   // the gain keys go through its write queue
 
 #include "crosspad/audio/IInputGain.hpp"
 #include "crosspad/platform/PlatformServices.hpp"
@@ -19,7 +20,6 @@
 #include "bsp_es8388.h"
 #include "crosspad_s3.h"
 #include "esp_log.h"
-#include "nvs.h"
 
 #include <atomic>
 #include <cmath>
@@ -55,28 +55,22 @@ public:
     bool setGainDb(int i, float db) override {
         if (i < 0 || i >= inputs()) return false;
         apply(i, db);
-        nvs_handle_t h;
-        if (nvs_open(kNvsNs, NVS_READWRITE, &h) == ESP_OK) {
-            char key[8] = {'g', (char)('0' + i), 0};
-            nvs_set_i16(h, key, (int16_t)lroundf(db_[i].load() * 10.0f));
-            nvs_commit(h);
-            nvs_close(h);
-        }
+        // Through the store, not an NVS handle of our own: a gain slider is a
+        // drag like any other, and the queue in front of NVS is what keeps the
+        // steps of one gesture from becoming a flash write each.
+        char key[8] = {'g', (char)('0' + i), 0};
+        NvsSettingsStore::getInstance().saveI16(kNvsNs, key,
+                                                (int16_t)lroundf(db_[i].load() * 10.0f));
         return true;
     }
 
     void load() {
-        nvs_handle_t h;
-        const bool open = nvs_open(kNvsNs, NVS_READONLY, &h) == ESP_OK;
         for (int i = 0; i < inputs(); ++i) {
-            int16_t v = (int16_t)lroundf(kDefaultDb[i] * 10.0f);
-            if (open) {
-                char key[8] = {'g', (char)('0' + i), 0};
-                nvs_get_i16(h, key, &v);
-            }
+            char key[8] = {'g', (char)('0' + i), 0};
+            const int16_t v = NvsSettingsStore::getInstance().readI16(
+                kNvsNs, key, (int16_t)lroundf(kDefaultDb[i] * 10.0f));
             apply(i, (float)v / 10.0f);
         }
-        if (open) nvs_close(h);
     }
 
     float factor(int i) const { return i >= 0 && i < kInputs ? factor_[i].load(std::memory_order_relaxed) : 1.0f; }
