@@ -45,6 +45,8 @@
 #include "companion_sysex.h"
 #include "host_info.h"
 #include "usb_host_profile.h"
+#include "midi_kit_pc.h"
+#include "host_midi.h"
 #include "include/fw_updater.h"
 #include "include/cp_account.h"
 #include "include/cp_remote.h"
@@ -1083,6 +1085,8 @@ extern "C" void app_main(void)
     wifi_creds_init();
     instrument_host_init();                  // an app may borrow the pitched engine
 
+    kit_change_init();                       // the saved Program Change policy, before MIDI can answer
+    host_midi_init();                        // the Control Change map and the pad-LED lease, same reason
     midiCallbacks_init();
     crosspad::getPadManager().begin();
     hil_pad_inject_init();

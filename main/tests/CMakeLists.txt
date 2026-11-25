@@ -60,6 +60,36 @@ if(NOT MSVC)
     target_link_options(cdc_line_tests PRIVATE -fsanitize=address,undefined)
 endif()
 
+# What a host's Program Change + Bank Select names (main/include/kit_pc.h),
+# header-only and free of ESP and LVGL includes for exactly this test.
+add_executable(kit_pc_tests test_kit_pc.cpp)
+target_include_directories(kit_pc_tests PRIVATE ${MAIN_DIR}/include)
+target_link_libraries(kit_pc_tests PRIVATE Catch2::Catch2WithMain)
+if(NOT MSVC)
+    target_compile_options(kit_pc_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(kit_pc_tests PRIVATE -fsanitize=address,undefined)
+endif()
+
+# What a host's Control Change is worth and what one frame of pad colours is
+# (main/include/host_midi_map.h), header-only for exactly this test.
+add_executable(host_midi_tests test_host_midi.cpp)
+target_include_directories(host_midi_tests PRIVATE ${MAIN_DIR}/include)
+target_link_libraries(host_midi_tests PRIVATE Catch2::Catch2WithMain)
+if(NOT MSVC)
+    target_compile_options(host_midi_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(host_midi_tests PRIVATE -fsanitize=address,undefined)
+endif()
+
+# The SysEx control surface's address space, frame grammar and give-back rule
+# (main/include/surface_map.h), header-only for exactly this test.
+add_executable(surface_map_tests test_surface_map.cpp)
+target_include_directories(surface_map_tests PRIVATE ${MAIN_DIR}/include)
+target_link_libraries(surface_map_tests PRIVATE Catch2::Catch2WithMain)
+if(NOT MSVC)
+    target_compile_options(surface_map_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(surface_map_tests PRIVATE -fsanitize=address,undefined)
+endif()
+
 # The settings write queue (crosspad-platform-idf/NvsWriteQueue.cpp): the part
 # of the store's deferral that is pure policy, so the cooldown, the read-back,
 # the erase and the retry rules are pinned without a board and without NVS.
@@ -79,4 +109,7 @@ include(Catch)
 catch_discover_tests(hil_text_tests)
 catch_discover_tests(lv_async_safe_tests)
 catch_discover_tests(cdc_line_tests)
+catch_discover_tests(kit_pc_tests)
+catch_discover_tests(host_midi_tests)
+catch_discover_tests(surface_map_tests)
 catch_discover_tests(nvs_write_queue_tests)

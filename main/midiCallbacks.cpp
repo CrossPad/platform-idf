@@ -15,6 +15,8 @@
 #include "stm32_uart.h"
 #include "midi_loop_test.h"
 #include "lat_trace.h"
+#include "midi_kit_pc.h"
+#include "host_midi.h"   /* a host's Bank Select + Program Change can pick the kit */
 #include "SamplerEnginePort.hpp"
 #include "driver/gpio.h"
 #include "crosspad/stm32/Stm32NoteMap.hpp"
@@ -629,6 +631,8 @@ void uartLoop(void *pvParameters)
                                                    crosspad::IPadLogicHandler::panFromWire(val));
             return;
         }
+        kit_change_control_change(ch, ctrl, val);   /* CC 0 / CC 32: bank for the next PC */
+        host_midi_control_change(ch, ctrl, val);    /* a mapped CC also rides a level here */
         crosspad::getMidiInputHandler().handleSampleControlChange(ch, ctrl, val);
     };
     auto stm32AtHandler = [](midi::Channel ch, uint8_t note, uint8_t pressure) {
@@ -644,6 +648,7 @@ void uartLoop(void *pvParameters)
         crosspad::getMidiInputHandler().handleSamplePitchBend(ch, static_cast<int16_t>(bend));
     };
     auto pcHandler = [](midi::Channel ch, uint8_t program) {
+        kit_change_program(ch, program);   /* local meaning first: kit select */
         crosspad::getMidiInputHandler().handleSampleProgramChange(ch, program);
     };
     STM32MIDI.setHandleControlChange(ccHandler);
@@ -655,6 +660,8 @@ void uartLoop(void *pvParameters)
     auto usbCcHandler = [](midi::Channel ch, uint8_t ctrl, uint8_t val) {
         const uint8_t m[3] = {(uint8_t)(0xB0 | ((ch - 1) & 0x0F)), ctrl, val};
         twin_mirror_host(m, 3);
+        kit_change_control_change(ch, ctrl, val);   /* CC 0 / CC 32: bank for the next PC */
+        host_midi_control_change(ch, ctrl, val);    /* a mapped CC also rides a level here */
         crosspad::getMidiInputHandler().handleSampleControlChange(ch, ctrl, val);
     };
     auto usbAtHandler = [](midi::Channel ch, uint8_t note, uint8_t pressure) {
@@ -671,6 +678,7 @@ void uartLoop(void *pvParameters)
     auto usbPcHandler = [](midi::Channel ch, uint8_t program) {
         const uint8_t m[2] = {(uint8_t)(0xC0 | ((ch - 1) & 0x0F)), program};
         twin_mirror_host(m, 2);
+        kit_change_program(ch, program);   /* local meaning first: kit select */
         crosspad::getMidiInputHandler().handleSampleProgramChange(ch, program);
     };
     USB_MIDI.setHandleControlChange(usbCcHandler);
