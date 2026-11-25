@@ -616,7 +616,7 @@ repeat, glitch, tape stop, scratch …; one shared 1 MB tape ring) the pads hold
 `tests/`) to Out 1/2, Out 3/4 and USB. **The mixer has one FX insert bus**
 (crosspad-mixer 0.22 `setFxProcessor/Send/Return`): sent, processed and
 returned in the same render pass, before the outputs' volume and limiter;
-the app sees it as core 2.47's **`IFxBus`** (`FxBusPort.cpp`), which takes the
+the app sees it as core 2.48's **`IFxBus`** (`FxBusPort.cpp`), which takes the
 sources off their own routes while attached and picks the input pair from the
 sends. The pads start an effect from their own task straight into the
 engine's atomics; the screen follows from a timer. No buffer is cleared on the

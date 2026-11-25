@@ -30,15 +30,21 @@ USB (host) ─────┘           (sum)       (in place, every block)     
   it returns to before their volume and limiter -- no block of latency. The
   processor runs every block once set, sound or not, so tails ring out. A
   muted channel sends nothing; nothing of the bus is saved with the desk.
-- **`IFxBus`** (core 2.47, `PlatformServices::fxBus`): the app's view,
+- **`IFxBus`** (core 2.48, `PlatformServices::fxBus`): the app's view,
   sources (`FxSource`) and outputs (`FxOutput`) by name, not by mixer
   channel. `FxBusPort.cpp` implements it: Line 1/2 = IN2, Line 3/4 = IN3, the
   mics = IN1, USB = the host's playback channel; Out 1/2, Out 3/4 and the USB
   rec bus. **Attached, every source is taken off its own routes** (saved, put
   back on `detach()`), so the processor is the whole path and carries the dry
-  signal too -- a parallel dry would comb against a delayed copy.
+  signal too -- a parallel dry would comb against a delayed copy. The
+  processor and its sends go in before the routes come out (and the routes
+  back before it goes), so opening or closing the app leaves no gap while
+  the processor's buffers are prepared.
 - **Two ADCs, three analog inputs**: the sends pick the input pair
-  (`input_pairs_cover()`), and the input monitor counts an FX send as a send,
+  (`input_pairs_cover()`, for as long as the bus is attached: the pair is not
+  saved, and `detach()` puts back the one the player saved -- the full
+  firmware in the other slot shares that NVS key), and the input monitor
+  counts an FX send as a send,
   so the codec's ADC is held on the input (`InputMonitorPort.cpp`). Sending
   all three leaves one unheard; ROUTE shows it "off" (`sourceAvailable()`).
   USB is available only in the USB audio profile.

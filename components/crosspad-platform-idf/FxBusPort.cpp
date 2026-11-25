@@ -77,10 +77,19 @@ public:
 
     bool returnOn(FxOutput o) const override { return (int)o < kOutputs && ret_[(int)o]; }
 
+    /* The processor and its sends go in before the sources' own routes come
+     * out, and the routes come back before the processor goes: setFxProcessor()
+     * prepares the processor first (~100 ms for FX Pad's buffers), and with
+     * the routes already off that was a gap in the sound. In between, a block
+     * at most hears both. */
     void attach(IAudioNode* processor) override
     {
         if (!s_mixer || !processor) return;
-        if (!attached_) {
+        s_mixer->setFxProcessor(processor);
+        const bool first = !attached_;
+        attached_ = true;
+        apply();
+        if (first) {
             /* The sources' own way out, put aside: the processor carries them. */
             for (int i = 0; i < kSources; ++i) {
                 if (s_ch[i] == kMixerInvalidChannelId) continue;
@@ -89,24 +98,24 @@ public:
                     s_mixer->setRouteEnabled(s_ch[i], o, false);
                 }
             }
-            attached_ = true;
         }
-        s_mixer->setFxProcessor(processor);
-        apply();
         ESP_LOGI(TAG, "processor %s attached", processor->name());
     }
 
     void detach() override
     {
         if (!s_mixer || !attached_) return;
-        s_mixer->setFxProcessor(nullptr);
         for (int i = 0; i < kSources; ++i) {
             if (s_ch[i] == kMixerInvalidChannelId) continue;
-            s_mixer->setFxSend(s_ch[i], 0.0f);
             for (uint8_t o = 0; o < kMixerMaxOutputs; ++o) s_mixer->setRouteEnabled(s_ch[i], o, saved_[i][o]);
+        }
+        s_mixer->setFxProcessor(nullptr);
+        for (int i = 0; i < kSources; ++i) {
+            if (s_ch[i] != kMixerInvalidChannelId) s_mixer->setFxSend(s_ch[i], 0.0f);
         }
         for (int o = 0; o < kOutputs; ++o) s_mixer->setFxReturn(kOut[o], 0.0f);
         attached_ = false;
+        input_pairs_restore();   /* the sends' pair was for the FX only, never saved */
         ESP_LOGI(TAG, "processor detached, routes back");
     }
 

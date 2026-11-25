@@ -77,6 +77,10 @@ public:
         return s >= 0 && s < kInputSources ? kName[s] : nullptr;
     }
 
+    /* A pair for now, not saved: what the player picked in the Mixer or
+     * Settings stays the one the next boot and input_pairs_restore() take. */
+    bool connectFor(int i) { return i >= 0 && i < kPairCount && connect(i); }
+
     void load() {
         uint8_t v = 0;
         nvs_handle_t h;
@@ -132,9 +136,14 @@ bool input_pairs_cover(bool mic, bool line12, bool line34)
     };
     if (covers(s_pairs.pair())) return true;
     for (int i = 0; i < kPairCount; ++i) {
-        if (covers(i)) return s_pairs.setPair(i);
+        if (covers(i)) return s_pairs.connectFor(i);
     }
     return false;
+}
+
+void input_pairs_restore()
+{
+    if (BSP_HAS_SHARED_LINE_IN) s_pairs.load();
 }
 
 int input_pairs_codec_of(int src)
