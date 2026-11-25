@@ -8,6 +8,8 @@
 #include "CrosspadPlatform.hpp"
 #include "IdfI2sInput.hpp"
 #include "hil_control.h"
+#include "include/host_midi.h"
+#include "include/surface_map.h"
 #include "crosspad/settings/CrosspadSettings.hpp"
 #include "crosspad/platform/PlatformServices.hpp"
 #include "crosspad/song/ISongEngine.hpp"
@@ -29,6 +31,8 @@
 #include <cstring>
 #include <cmath>
 #include <mutex>
+
+#include "host_midi.h"
 
 static const char *TAG = "audio_route";
 
@@ -53,7 +57,26 @@ static const char *TAG = "audio_route";
 #define AUDIO_ROUTE_SUB_KIT_LOAD    0x0B   /* kit id: what CDC KIT_LOAD does, for the profile without CDC */
 #define AUDIO_ROUTE_SUB_BOUNCE      0x0C   /* scene, track: CDC ASONG BOUNCE, so a bounce can run beside the
                                             * phone's stream; ASONG (back in CDC) reads how it went */
+/* Host-driven pad colours, outside any app: the same 7-bit r g b the DAW
+ * protocol uses (crosspad-dawcontrol DawProtocol.cpp:89-91), and the reason
+ * they live under 0x1D rather than 0x1E is that 0x1E's frames only reach the
+ * DAW Control app. Here the board takes them whatever is running, and gives
+ * them back -- see main/host_midi.cpp and docs/subsystems/midi-input.md. */
+#define AUDIO_ROUTE_SUB_LED_PAD     0x0D   /* pad, r, g, b (7-bit) */
+#define AUDIO_ROUTE_SUB_LED_GRID    0x0E   /* 16 x (r, g, b), pad 0..15 in order */
+#define AUDIO_ROUTE_SUB_LED_GIVE    0x0F   /* no args: the board's own colours come back */
 #define AUDIO_ROUTE_SUB_QUERY       0x10
+/* The SysEx control surface: a host addresses a parameter directly and writes blocks of
+ * them, which is what makes a pad panel or an animation cheap on the wire (main/
+ * include/surface_map.h for the address space and its byte counts,
+ * docs/subsystems/surface-sysex.md for why this shape and not NRPN). They live here
+ * rather than under 0x1E (DAW Control) for the same reason as the pad-LED frames above:
+ * 0x1E's frames only reach the DAW Control app, while these belong to the board. */
+#define AUDIO_ROUTE_SUB_SEC_WRITE   0x11   /* section, start, count, values... */
+#define AUDIO_ROUTE_SUB_SEC_RGB     0x12   /* start, count, (r,g,b) x count -- pads */
+#define AUDIO_ROUTE_SUB_PAL_LOAD    0x13   /* index, count, (r,g,b) x count */
+#define AUDIO_ROUTE_SUB_SEC_RESTORE 0x14   /* section, start, count: hand it back if it is still ours */
+#define AUDIO_ROUTE_SUB_SURF_STATUS 0x15   /* no args: the counters, as a SysEx reply */
 
 static void (*s_reply_sender)(const uint8_t *frame, size_t len) = nullptr;
 
@@ -419,6 +442,115 @@ static void handle_sysex(const uint8_t *args, unsigned len)
             ESP_LOGI(TAG, "BOUNCE %u %u %s", args[1], args[2], ok ? "started" : "refused");
         }
         break;
+    case AUDIO_ROUTE_SUB_LED_PAD:
+        if (len >= 5 && args[1] < 16) {
+            host_midi_led_pad(args[1], (uint8_t)((args[2] & 0x7F) << 1),
+                              (uint8_t)((args[3] & 0x7F) << 1), (uint8_t)((args[4] & 0x7F) << 1));
+        }
+        break;
+    case AUDIO_ROUTE_SUB_LED_GRID:
+        if (len >= 1u + 3u * 16u) {
+            /* One frame for the whole grid: what an animation host wants, since
+             * a pad at a time costs sixteen frames. */
+            uint8_t rgb[3 * 16];
+            for (unsigned i = 0; i < 3u * 16u; ++i) rgb[i] = (uint8_t)((args[1 + i] & 0x7F) << 1);
+            host_midi_led_bytes(rgb);
+        }
+        break;
+    case AUDIO_ROUTE_SUB_LED_GIVE:
+        host_midi_led_reset();
+        break;
+    case AUDIO_ROUTE_SUB_SEC_WRITE:
+    case AUDIO_ROUTE_SUB_SEC_RESTORE:
+    case AUDIO_ROUTE_SUB_SEC_RGB:
+    case AUDIO_ROUTE_SUB_PAL_LOAD: {
+        /* Decode first, park second: the reason a frame was refused is what the host
+         * can act on and what the counters can show, and a decoder three calls deep
+         * could not say which frame it did not like. Nothing here touches the LED
+         * model, the mixer or the card -- the worker applies (main/host_midi.cpp). */
+        using namespace crosspad::surface;
+        Action act{};
+        const uint8_t sub = args[0];
+        Bad why = Bad::Ok;
+        if (sub == AUDIO_ROUTE_SUB_SEC_WRITE) {
+            Write w{};
+            why = decodeWrite(args, len, &w);
+            if (why == Bad::Ok) {
+                act.kind = Kind::Write;
+                act.sec = w.sec;
+                act.start = static_cast<uint8_t>(w.start);
+                act.n = static_cast<uint8_t>(w.n);
+                for (int i = 0; i < w.n; ++i) act.v[i] = w.v[i];
+            }
+        } else if (sub == AUDIO_ROUTE_SUB_SEC_RESTORE) {
+            Range r{};
+            why = decodeRestore(args, len, &r);
+            if (why == Bad::Ok) {
+                act.kind = Kind::Restore;
+                act.sec = r.sec;
+                act.start = static_cast<uint8_t>(r.start);
+                act.n = static_cast<uint8_t>(r.n);
+            }
+        } else if (sub == AUDIO_ROUTE_SUB_SEC_RGB) {
+            int start = 0, n = 0;
+            uint8_t rgb[3 * kMaxBlock];
+            why = decodeRgb(args, len, &start, &n, rgb);
+            if (why == Bad::Ok) {
+                act.kind = Kind::Rgb;
+                act.sec = Sec::PadColour;      // colour of pads, addressed directly
+                act.start = static_cast<uint8_t>(start);
+                act.n = static_cast<uint8_t>(n);
+                for (int i = 0; i < 3 * n; ++i) act.v[i] = rgb[i];
+            }
+        } else {
+            int index = 0, n = 0;
+            uint8_t rgb[3 * kMaxBlock];
+            why = decodePalette(args, len, &index, &n, rgb);
+            if (why == Bad::Ok) host_midi_park_palette(static_cast<uint8_t>(index),
+                                                       static_cast<uint8_t>(n), rgb);
+        }
+        if (why != Bad::Ok) {
+            host_midi_surface_refused();
+            /* A refusal the host can see: the same reason word the counters and the
+             * docs use, so "my SysEx did nothing" has an answer on the wire as well as
+             * in a log. Rate-limited by the counter, not by a flag: the log line is a
+             * couple of milliseconds of UART and this is the MIDI task. */
+            ESP_LOGW(TAG, "surface frame refused (%s): sub 0x%02X len %u", badName(why), sub, len);
+            break;
+        }
+        if (sub != AUDIO_ROUTE_SUB_PAL_LOAD) host_midi_park(reinterpret_cast<const uint8_t *>(&act));
+        break;
+    }
+    case AUDIO_ROUTE_SUB_SURF_STATUS: {
+        if (!s_reply_sender) break;
+        /* Small and fixed: what a host with no CDC needs is whether its writes landed
+         * and whether any restore was skipped, not the whole table -- that read-out is
+         * the `SURFACE` verb. Counters come from the same accessors the verb line is
+         * built from, so the two cannot disagree about what a number means. */
+        unsigned c[8] = {0};
+        host_midi_surface_counters(c);
+        /* Fifteen bytes, ending at the terminator: an array one byte longer would be
+         * sent whole, and a host would read the trailing 0x00 after F7 as the start of
+         * something new. */
+        uint8_t frame[15];
+        frame[0] = CROSSPAD_SYSEX_START;
+        frame[1] = CROSSPAD_SYSEX_MANUFACTURER;
+        frame[2] = CROSSPAD_CMD_AUDIO_ROUTE;
+        frame[3] = AUDIO_ROUTE_SUB_SURF_STATUS;
+        frame[4] = static_cast<uint8_t>(c[0] & 0x7F);            // blocks applied
+        frame[5] = static_cast<uint8_t>((c[0] >> 7) & 0x7F);
+        frame[6] = static_cast<uint8_t>(c[1] & 0x7F);            // values applied
+        frame[7] = static_cast<uint8_t>((c[1] >> 7) & 0x7F);
+        frame[8] = static_cast<uint8_t>(c[2] & 0x7F);            // addresses handed back
+        frame[9] = static_cast<uint8_t>(c[3] & 0x7F);            // restores skipped (taken over)
+        frame[10] = static_cast<uint8_t>(c[4] & 0x7F);           // frames refused
+        frame[11] = static_cast<uint8_t>(c[5] & 0x7F);           // parked frames dropped
+        frame[12] = static_cast<uint8_t>(c[6] & 0x7F);           // pad claims
+        frame[13] = static_cast<uint8_t>((c[6] >> 7) & 0x7F);
+        frame[14] = CROSSPAD_SYSEX_END;
+        s_reply_sender(frame, sizeof(frame));
+        break;
+    }
     case AUDIO_ROUTE_SUB_ECHO:
         if (len >= 5 && s_reply_sender) {
             uint8_t frame[9];

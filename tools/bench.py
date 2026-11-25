@@ -24,6 +24,7 @@ Usage:
   tools/bench.py check            what is wrong, and the command that fixes it
   tools/bench.py ready            put the bench into a known-good state
   tools/bench.py flash [--assets] flash the build for the connected board and prove it landed
+                [--pr N | --image DIR]  ... or a trial build: a PR's CI image, or a dir
   tools/bench.py test SCENARIO..  run scenarios with the flags each one needs
                                   (the main one: test beat [--depth quick|medium|full])
   tools/bench.py hil ARGS...      raw crosspad-hil, venv resolved for you
@@ -260,6 +261,99 @@ def app_sha_line(text: str | None) -> str | None:
         if line.startswith("APPSHA:"):
             return line.split(maxsplit=1)[1].strip() if len(line.split()) > 1 else None
     return None
+
+
+APP_DESC_ELF_SHA_OFFSET = 176  # image header 24 + segment header 8 + esp_app_desc_t.app_elf_sha256 at 144
+
+
+def image_elf_sha256(path: str) -> str | None:
+    """The ELF digest an app image's descriptor carries -- what APP_SHA answers."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(APP_DESC_ELF_SHA_OFFSET + 32)
+    except OSError:
+        return None
+    if len(head) < APP_DESC_ELF_SHA_OFFSET + 32 or head[32:36] != b"\x32\x54\xcd\xab":
+        return None
+    return head[APP_DESC_ELF_SHA_OFFSET:].hex()
+
+
+TRIAL_KIT = "full"
+
+
+def trial_image_dir(image: str) -> str:
+    """--image takes the dir or the CrossPad.bin in it; always an absolute dir,
+    so a bare file name in the cwd never falls back to the local build."""
+    path = os.path.abspath(image)
+    return path if os.path.isdir(path) else os.path.dirname(path)
+
+
+def pick_trial_run(runs: list[dict], artifact: str) -> tuple[dict | None, dict | None]:
+    """The newest run that still holds `artifact`, and that artifact.
+
+    `runs` are newest first, each with its `artifacts` listing. A run whose
+    other jobs failed (bump-gate, a docs check) still built the image, so the
+    run's conclusion does not matter -- the artifact's presence does."""
+    for run in runs:
+        for a in run.get("artifacts") or []:
+            if a.get("name") == artifact and not a.get("expired"):
+                return run, a
+    return None, None
+
+
+def fetch_pr_build(pr: int, rev: str) -> str | None:
+    """Download the image CI built for a pull request's head; returns its dir."""
+    gh = shutil.which("gh")
+    if not gh:
+        print("gh is not installed — a PR's build comes from its CI run")
+        return None
+
+    def gh_json(*a):
+        p = subprocess.run([gh, *a], cwd=REPO, capture_output=True, text=True)
+        if p.returncode != 0:
+            print(f"gh {' '.join(a[:2])}: {p.stderr.strip() or p.stdout.strip()}")
+            return None
+        return json.loads(p.stdout or "null")
+
+    head = gh_json("pr", "view", str(pr), "--json", "headRefOid,title")
+    if not head:
+        return None
+    sha = head["headRefOid"]
+    artifact = f"build-{rev}-{TRIAL_KIT}"
+    dest = os.path.join(REPO, ".crosspad", "trial", f"pr{pr}-{sha[:9]}")
+    if os.path.exists(os.path.join(dest, "CrossPad.bin")):
+        print(f"PR #{pr} ({head['title']}) at {sha[:9]}: already downloaded")
+        return dest
+    runs = gh_json("run", "list", "--workflow", "main.yml", "--commit", sha,
+                   "--json", "databaseId,status,conclusion", "-L", "10") or []
+    for run in runs:
+        listing = gh_json("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run['databaseId']}/artifacts")
+        run["artifacts"] = (listing or {}).get("artifacts")
+    run, _ = pick_trial_run(runs, artifact)
+    if run is None:
+        busy = [r for r in runs if r.get("status") != "completed"]
+        if busy:
+            print(f"PR #{pr}: CI is still building {sha[:9]} — try again when run {busy[0]['databaseId']} ends")
+        elif runs:
+            print(f"PR #{pr}: no {artifact} left for {sha[:9]} (kept 3 days) —"
+                  f" gh run rerun {runs[0]['databaseId']}, then flash again")
+        else:
+            print(f"PR #{pr}: no CI run built {sha[:9]}")
+        return None
+    print(f"PR #{pr} ({head['title']}) at {sha[:9]}: {artifact} from run {run['databaseId']}")
+    # Into a side dir first: a download cut short must not leave a CrossPad.bin
+    # the next call would take as complete.
+    part = dest + ".part"
+    shutil.rmtree(part, ignore_errors=True)
+    os.makedirs(part)
+    p = subprocess.run([gh, "run", "download", str(run["databaseId"]), "-n", artifact, "-D", part],
+                       cwd=REPO)
+    if p.returncode != 0:
+        shutil.rmtree(part, ignore_errors=True)
+        return None
+    shutil.rmtree(dest, ignore_errors=True)
+    os.replace(part, dest)
+    return dest
 
 
 def rollback_advisory(rb: bool | None) -> tuple[bool | None, str]:
@@ -602,14 +696,23 @@ def cmd_flash(args) -> int:
     if d.rev is None:
         print(cb.describe(d))
         return EXIT_BENCH
-    fw = os.path.join(REPO, d.build_dir, "CrossPad.bin")
+    trial = None
+    if args.pr:
+        trial = fetch_pr_build(args.pr, d.rev)
+        if trial is None:
+            return EXIT_BENCH
+    elif args.image:
+        trial = trial_image_dir(args.image)
+    image_dir = trial or os.path.join(REPO, d.build_dir)
+    fw = os.path.join(image_dir, "CrossPad.bin")
     if not os.path.exists(fw):
-        print("nothing built — " + build_hint(d))
+        print(f"no CrossPad.bin in {image_dir}" if trial else "nothing built — " + build_hint(d))
         return EXIT_BENCH
     print(f"\nflashing {os.path.relpath(fw, REPO)}")
-    # crosspad-hil's own python, when there is one: ota_flash.py then takes the
-    # hub's exclusive op, and the hub -- which held the port for 5 s after the
-    # checks above and read OTA_READY itself -- lets go of it first.
+    # crosspad-hil's own python, when there is one: ota_flash.py and
+    # fs_transfer.py then take the hub's exclusive op, and the hub -- which
+    # holds the port for 5 s after each verb above and would read OTA_READY or
+    # ASSETS_READY itself -- lets go of it first.
     hil_exe = hil_path()
     hil_py = os.path.join(os.path.dirname(hil_exe), "python") if hil_exe else ""
     py = hil_py if os.path.exists(hil_py) else sys.executable
@@ -644,22 +747,24 @@ def cmd_flash(args) -> int:
     # "Flashed, nothing changed" detected rather than inferred: LIBVER and the
     # app descriptor's compile time both read identical across two builds of
     # one commit, the ELF digest does not.
-    want = elf_sha256(os.path.join(REPO, d.build_dir, "CrossPad.elf"))
+    # A trial build comes without its ELF; its image carries the same digest.
+    elf = os.path.join(image_dir, "CrossPad.elf")
+    want = elf_sha256(elf) if os.path.exists(elf) else image_elf_sha256(fw)
     got = app_sha_line(cdc("APP_SHA", 8000))
     if want and got:
         print(f"image: {'matches' if got == want else 'MISMATCH — the board is running another build'}"
-              f" {os.path.join(d.build_dir, 'CrossPad.elf')} ({got[:9]}…)")
+              f" {os.path.relpath(elf if os.path.exists(elf) else fw, REPO)} ({got[:9]}…)")
         if got != want:
             return EXIT_BENCH
     elif want and got is None:
         print("image: no APP_SHA reply — cannot prove which build is running (older firmware)")
 
     if args.assets:
-        image = os.path.join(REPO, d.build_dir, "assets.bin")
-        print(f"\nflashing assets from {os.path.relpath(image, REPO) if image else '?'}"
+        image = os.path.join(image_dir, "assets.bin")
+        print(f"\nflashing assets from {os.path.relpath(image, REPO)}"
               " (OTA does not touch this partition)")
-        p = subprocess.run([sys.executable, os.path.join(REPO, "tools", "fs_transfer.py"),
-                            "assets"], cwd=REPO)
+        p = subprocess.run([py, os.path.join(REPO, "tools", "fs_transfer.py"), "assets", image],
+                           cwd=REPO)
         if p.returncode != 0:
             return EXIT_BENCH
         time.sleep(12)
@@ -668,6 +773,10 @@ def cmd_flash(args) -> int:
 
     rc, out, _ = hil("run", "smoke", timeout=300)
     print(out.strip().splitlines()[-1] if out.strip() else "smoke produced no output")
+    if trial:
+        # The OTA wrote the slot that was not running; what ran before is still
+        # in the other one.
+        print("back to the firmware that ran before: tools/bench.py hil cdc FW_SWITCH")
     return EXIT_OK if rc == 0 else EXIT_FAIL
 
 
@@ -807,6 +916,11 @@ def main() -> int:
 
     f = sub.add_parser("flash", help="flash the build for the connected board, prove it landed")
     f.add_argument("--assets", action="store_true", help="also reflash the assets partition")
+    trial = f.add_mutually_exclusive_group()
+    trial.add_argument("--pr", type=int, default=None,
+                       help="a trial build: the image CI built for this pull request")
+    trial.add_argument("--image", default=None,
+                       help="a trial build: a dir holding CrossPad.bin (and assets.bin)")
     f.set_defaults(fn=cmd_flash)
 
     t = sub.add_parser("test", help="run scenarios with the flags each one needs")

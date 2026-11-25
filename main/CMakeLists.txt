@@ -133,6 +133,8 @@ idf_component_register(
         "imu_midi.cpp"
         "instrument_host.cpp"
         "kit_convert_port.cpp"
+        "midi_kit_pc.cpp"
+    "host_midi.cpp"
         "song_sounds.cpp"
         "touch_trace.cpp"
         "twin_mirror.cpp"

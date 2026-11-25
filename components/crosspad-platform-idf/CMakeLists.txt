@@ -44,6 +44,7 @@ idf_component_register(
         "LatTrace.cpp"
         "CrosspadPlatform.cpp"
         "NvsSettingsStore.cpp"
+        "NvsWriteQueue.cpp"    # the settings write queue: policy only, no ESP, host-tested
         "SamplePlayerAccess.cpp"
         "SequenceStorePort.cpp"
         "EspBleMidi.cpp"

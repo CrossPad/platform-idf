@@ -29,15 +29,13 @@ static const char* TAG = "AudioControl";
 bool AudioControl_Setup(void)
 {
     // The sample engine plays files 1:1, so the I2S clock has to run at the
-    // rate the content is in (kits ship at 44.1 kHz). 96 kHz is in the settings
-    // list but the UAC endpoints are sized for 48 kHz at most.
+    // rate the content is in (kits ship at 44.1 kHz). app_main() already
+    // brought a stored rate the board cannot run back to one it can; the same
+    // mapping here keeps the clock and the mixer (CrosspadPlatform_Init) on
+    // one rate whatever is in the settings.
     auto* cfg = crosspad::CrosspadSettings::getInstance();
-    uint32_t rate = cfg ? cfg->audioEngine.sampleRate : BSP_I2S_DEFAULT_SAMPLE_RATE;
-    if (rate != 44100 && rate != 48000) {
-        ESP_LOGW(TAG, "engine rate %lu Hz unsupported on this board, using %u",
-                 (unsigned long)rate, BSP_I2S_DEFAULT_SAMPLE_RATE);
-        rate = BSP_I2S_DEFAULT_SAMPLE_RATE;
-    }
+    const uint32_t rate = bsp_i2s_supported_sample_rate(
+        cfg ? cfg->audioEngine.sampleRate : BSP_I2S_DEFAULT_SAMPLE_RATE);
     bsp_i2s_set_sample_rate(rate);
     ESP_LOGI(TAG, "audio engine rate %lu Hz", (unsigned long)rate);
     esp_err_t ret = bsp_i2s_es8388_init(i2c_handle, NULL, true);

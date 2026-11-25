@@ -332,7 +332,7 @@ CP_COLD void CrosspadPlatform_Init(CrosspadSettings* settings, CrosspadStatus* s
     IAudioNode* samplerNode = native_sampler_node();
 #endif
     AudioModuleConfig audioCfg;
-    audioCfg.sampleRate   = settings ? settings->audioEngine.sampleRate : 44100;
+    audioCfg.sampleRate   = bsp_i2s_supported_sample_rate(settings ? settings->audioEngine.sampleRate : 44100);
     audioCfg.frameCount   = settings ? settings->audioEngine.frameCount : 64;
     audioCfg.channelCount = 2;
     audioCfg.streamCount  = 2;

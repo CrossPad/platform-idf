@@ -1075,13 +1075,18 @@ connected over USB, so the traps below are handled for you.
 python3 tools/bench.py check              # what is wrong + the command that fixes it
 python3 tools/bench.py ready              # CDC profile, MICS route, a kit loaded
 python3 tools/bench.py flash [--assets]   # flash the NEWEST build, prove it landed
+python3 tools/bench.py flash --pr 28      # a trial build: the image CI built for PR #28
 python3 tools/bench.py test smoke ...     # scenarios, with the flags each one needs
 python3 tools/bench.py recover            # UART-reflash via the STM bridge (no CDC left)
 python3 tools/bench.py hil <args>         # raw crosspad-hil, venv resolved for you
 ```
 
 Exit codes match crosspad-hil: **0** fine, **1** the firmware is at fault, **2**
-the test setup is. `test` re-prepares the board before *each* scenario, because a
+the test setup is. A trial build (`--pr N`, or `--image DIR` for a dir holding
+`CrossPad.bin`) is a pull request's `build-<rev>-full` artifact, kept 3 days
+(`gh run rerun` brings it back), downloaded to `.crosspad/trial/`; the OTA writes
+the slot that was not running, so `bench.py hil cdc FW_SWITCH` goes back to what
+ran before. `test` re-prepares the board before *each* scenario, because a
 scenario that resets the board (smoke does) leaves it with no kit loaded and the
 next one then fails as a setup problem instead of telling you anything.
 

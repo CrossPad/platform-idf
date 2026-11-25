@@ -225,6 +225,7 @@ public:
     }
 
     bool usbAudioSupported() override { return true; }
+    uint32_t maxAudioSampleRate() override { return BSP_I2S_MAX_SAMPLE_RATE; }
 
     void setUsbAudioEnabled(bool enabled) override {
         // Re-enumerates the USB device; the persisted preference is re-applied at
