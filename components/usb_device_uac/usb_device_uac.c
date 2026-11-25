@@ -278,7 +278,9 @@ TU_ATTR_FAST_FUNC void tud_audio_feedback_interval_isr(uint8_t func_id, uint32_t
         n_frames = 1UL << interval_shift;
     }
 
+    UAC_ENTER_CRITICAL_ISR();
     const uint32_t fs = s_uac_device ? s_uac_device->current_sample_rate : DEFAULT_SAMPLE_RATE;
+    UAC_EXIT_CRITICAL_ISR();
     const uint32_t fcpu = (uint32_t)CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ * 1000000UL;
 
     uint64_t fb = (((uint64_t)fs * cycles) << 16) / ((uint64_t)fcpu * n_frames);
@@ -528,12 +530,17 @@ bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t fu
     (void)ep_out;
     (void)cur_alt_setting;
 
-    /* The device is read once, before the FIFO count: s_uac_device is not
-     * volatile, so after that call the compiler would load it and the task
-     * handle again, unchecked -- and uac_device_deinit() may run on the
-     * other core meanwhile. */
+    /* uac_device_deinit() may run on the other core: the device and the task
+     * handle are read, and the task woken, inside s_mux, which deinit takes to
+     * remove the handle before it deletes the task and to clear s_uac_device
+     * before it frees it. */
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    UAC_ENTER_CRITICAL_ISR();
     uac_device_t *const dev = s_uac_device;
-    if (!dev) return false;
+    if (!dev) {
+        UAC_EXIT_CRITICAL_ISR();
+        return false;
+    }
     TaskHandle_t const task = dev->spk_task_handle;
     const size_t chunk = dev->spk_bytes_per_ms * SPK_TASK_READ_MS;
     s_spk_packets++;
@@ -560,10 +567,10 @@ bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t fu
      * measured in CPU cycles (tud_audio_feedback_interval_isr), not from
      * this FIFO's level. tud_audio_available() is a lock-free FIFO count. */
     if (n_bytes_received > 0 && task && tud_audio_available() >= chunk) {
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         vTaskNotifyGiveFromISR(task, &xHigherPriorityTaskWoken);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
+    UAC_EXIT_CRITICAL_ISR();
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     return true;
 }
 
@@ -582,25 +589,24 @@ void uac_device_mic_flow(uint32_t *sent_frames, uint32_t *lost)
 
 bool tud_audio_tx_done_isr(uint8_t rhport, uint16_t n_bytes_sent, uint8_t func_id, uint8_t ep_in, uint8_t cur_alt_setting)
 {
-    UAC_CHECK_INIT();
     (void)rhport;
     (void)n_bytes_sent;
     (void)func_id;
     (void)ep_in;
     (void)cur_alt_setting;
-    size_t bytes_require = s_uac_device->mic_bytes_per_interval;
 
-    tu_fifo_t *sw_in_fifo = tud_audio_get_ep_in_ff();
-    uint16_t fifo_remained = tu_fifo_remaining(sw_in_fifo);
-    if (fifo_remained < bytes_require) {
-        return true;
-    }
-
+    /* The device is used inside s_mux only: uac_device_deinit() clears
+     * s_uac_device under it before freeing the device. */
     UAC_ENTER_CRITICAL_ISR();
-    if (s_uac_device->mic_data_size > 0) {
-        tud_audio_write((void *)s_uac_device->mic_buf_read, s_uac_device->mic_data_size);
-        s_mic_sent_frames += s_uac_device->mic_data_size / (MIC_CHANNEL_NUM * s_uac_device->mic_resolution / 8);
-        s_uac_device->mic_data_size = 0;
+    uac_device_t *const dev = s_uac_device;
+    if (!dev) {
+        UAC_EXIT_CRITICAL_ISR();
+        return false;
+    }
+    if (dev->mic_data_size > 0 && tu_fifo_remaining(tud_audio_get_ep_in_ff()) >= dev->mic_bytes_per_interval) {
+        tud_audio_write((void *)dev->mic_buf_read, dev->mic_data_size);
+        s_mic_sent_frames += dev->mic_data_size / (MIC_CHANNEL_NUM * dev->mic_resolution / 8);
+        dev->mic_data_size = 0;
     }
     UAC_EXIT_CRITICAL_ISR();
 
@@ -794,25 +800,32 @@ esp_err_t uac_device_init(uac_device_config_t *config)
 
 void uac_device_deinit(void)
 {
-    if (s_uac_device == NULL) {
+    uac_device_t *const dev = s_uac_device;
+    if (dev == NULL) {
         return;
     }
 
-#if CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX
-    if (s_uac_device->mic_task_handle) {
-        vTaskDeleteWithCaps(s_uac_device->mic_task_handle);
-        s_uac_device->mic_task_handle = NULL;
-    }
-#endif
+    /* TinyUSB is still installed and its interrupt may be on the other core.
+     * The handles leave the device first, so nothing wakes a task that is
+     * about to be deleted; the device stays in place until both tasks are
+     * gone, because their loops read it. */
+    UAC_ENTER_CRITICAL();
+    TaskHandle_t const mic_task = dev->mic_task_handle;
+    TaskHandle_t const spk_task = dev->spk_task_handle;
+    dev->mic_task_handle = NULL;
+    dev->spk_task_handle = NULL;
+    UAC_EXIT_CRITICAL();
 
-#if CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_TX
-    if (s_uac_device->spk_task_handle) {
-        vTaskDeleteWithCaps(s_uac_device->spk_task_handle);
-        s_uac_device->spk_task_handle = NULL;
+    if (mic_task) {
+        vTaskDeleteWithCaps(mic_task);
     }
-#endif
+    if (spk_task) {
+        vTaskDeleteWithCaps(spk_task);
+    }
 
-    free(s_uac_device);
+    UAC_ENTER_CRITICAL();
     s_uac_device = NULL;
+    UAC_EXIT_CRITICAL();
+    free(dev);
     ESP_LOGI(TAG, "UAC Device deinitialized");
 }
