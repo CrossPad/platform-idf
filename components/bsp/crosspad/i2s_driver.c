@@ -135,6 +135,11 @@ uint32_t bsp_i2s_get_sample_rate(void)
     return s_sample_rate;
 }
 
+uint32_t bsp_i2s_supported_sample_rate(uint32_t hz)
+{
+    return (hz == 44100 || hz == 48000) ? hz : BSP_I2S_DEFAULT_SAMPLE_RATE;
+}
+
 /* Default I2S configuration: Stereo, 16-bit, s_sample_rate */
 #define BSP_I2S_DUAL_MIC_CFG(_sample_rate)                                                           \
     {                                                                                                \

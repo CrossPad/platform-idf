@@ -120,10 +120,17 @@ G0 empty check), or the boot gesture — has no marker, so the leave is a jump
 into the app with the ROM's clock tree and USB state, and the app can end in
 STOP1 with debug off (no VCP, no SWD). The way out is a reset:
 a power cycle, or `STM_RESET` over CDC, which pulses the ESP's reset line
-(GPIO46, the pulse `CrosspadPlatform` gives `Stm32Manager`'s reset callback),
-or NRST from an ST-LINK that has that wire. The proper fix belongs in the STM firmware:
+(GPIO46, `bsp_stm32_reset()`), or NRST from an ST-LINK that has that wire. The proper fix belongs in the STM firmware:
 detect a start from the ROM without a reset (e.g. `SYSCFG` memory remap still
 on system memory) and self-reset the way the return marker path does. Note
 also that the ESP probes the STM link once at boot: an ESP booted while the
 STM sleeps reports `running=0.0 (down)` until the ESP itself is reset.
 
+**Settings → Programming → DFU Mode** sends the same request as `STM_DFU` and
+covers the screen with the DFU panel (crosspad-gui `lv_CreateDfuScreen`). In
+the ROM the STM reads neither the encoder nor the power button, so the panel's
+way out is touch, which the ESP owns: a tap asks "Leave DFU mode?" (a tap in
+the middle of a USB update would cut it off) and Leave calls
+`ISettingsUI::leaveStm32Dfu()`, which is `bsp_stm32_reset()`; the return
+marker boots the app. After a DfuSe leave from the host the STM is already
+back, and the panel stays until it is tapped.

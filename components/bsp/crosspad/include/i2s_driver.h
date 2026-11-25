@@ -47,8 +47,15 @@ esp_err_t bsp_i2s_init_dual(const i2s_std_config_t *i2s_config);
  * i2s_std_config_t is passed. Set it before the first init; the codecs and
  * the USB audio bridge read it back through the getter. */
 #define BSP_I2S_DEFAULT_SAMPLE_RATE 48000
+#define BSP_I2S_MAX_SAMPLE_RATE 48000
 void bsp_i2s_set_sample_rate(uint32_t hz);
 uint32_t bsp_i2s_get_sample_rate(void);
+/* The rate the board runs for a requested one: 44100 and 48000 as they are,
+ * anything else BSP_I2S_DEFAULT_SAMPLE_RATE (the USB audio endpoints are sized
+ * for 48 kHz at most). Everything that takes the engine rate from settings
+ * goes through this, so the mixer and the nodes are prepared for the rate the
+ * I2S clock runs at. */
+uint32_t bsp_i2s_supported_sample_rate(uint32_t hz);
 
 /**
  * @brief Deinitialize all I2S interfaces

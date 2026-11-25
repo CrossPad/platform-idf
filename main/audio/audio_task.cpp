@@ -255,7 +255,7 @@ void AudioTask_RT(void *pvParameters)
         const uint32_t frames = audio_rt_block_frames();
         if (frames != blockFrames) {
             blockFrames = frames;
-            blockUs = (uint32_t)((uint64_t)(frames ? frames : engine.frameCount) * 1000000u / engine.sampleRate);
+            blockUs = (uint32_t)((uint64_t)(frames ? frames : engine.frameCount) * 1000000u / bsp_i2s_get_sample_rate());
             shedOnUs = blockUs * kShedOnPct / 100;
             shedOffUs = blockUs * kShedOffPct / 100;
             s_blockUs.store(blockUs, std::memory_order_relaxed);
