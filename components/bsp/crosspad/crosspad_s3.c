@@ -245,7 +245,11 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
     esp_err_t ret = ESP_OK;
     assert(config != NULL && config->max_transfer_sz > 0);
 
-    ESP_RETURN_ON_ERROR(bsp_display_brightness_init(), TAG, "Brightness init failed");
+    /* The backlight is the STM's, the panel is ours over SPI: a missed
+     * backlight write must not cost the panel (see bsp_display_start_with_config). */
+    if (bsp_display_brightness_init() != ESP_OK) {
+        ESP_LOGW(TAG, "Backlight not set - initialising the panel anyway");
+    }
 
     /* Initilize I2C */
     BSP_ERROR_CHECK_RETURN_ERR(bsp_i2c_init());
@@ -558,9 +562,13 @@ lv_display_t *bsp_display_start_with_config(const bsp_display_cfg_t *cfg)
         return NULL;
     }
 
+    /* One I2C write to the STM that went unanswered used to make the whole
+     * display "unavailable": the board then booted headless -- no LVGL, so
+     * nothing ever set a backlight level (STM 1.16+ keeps it at 0 until the
+     * ESP does) and the pads came up in the controller's default green. The
+     * splash and every later level go to the STM again on their own. */
     if (bsp_display_brightness_init() != ESP_OK) {
-        ESP_LOGE(TAG, "Display brightness init failed - display unavailable");
-        return NULL;
+        ESP_LOGW(TAG, "Display brightness init failed - continuing, the splash sets it again");
     }
 
     disp = bsp_display_lcd_init(cfg);
