@@ -11,6 +11,6 @@
     "FEAT_PERF_STATS": false
   },
   "apps": {
-    "sampler": { "track": "pinned", "commit": "1db09554d8c015bcd8bb14d5b1e8a2b0fc4f7207" }
+    "sampler": { "track": "pinned", "commit": "852d709b4a51a4ed153ed66abfe9ebdd31af59da" }
   }
 }
