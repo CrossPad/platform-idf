@@ -55,6 +55,15 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HIL_CANDIDATES = (
     os.path.join(REPO, ".venv", "bin", "crosspad-hil"),
     os.path.join(REPO, ".venv", "Scripts", "crosspad-hil.exe"),
+    # A crosspad-hil checkout beside this repo -- the workspace layout the docs
+    # describe for development, and the one this Windows bench actually has
+    # (Scripts/, not bin/). Without it `bench.py check` says "not found" on a
+    # machine where crosspad-hil is installed and working, and everything that
+    # touches the board then refuses to run -- ota_flash.py included, because it
+    # reaches the device list through crosspad_board.list_devices(), which calls
+    # the same hil() helper, and reports "crosspad-hil lists no board".
+    os.path.join(os.path.dirname(REPO), "crosspad-hil", ".venv", "bin", "crosspad-hil"),
+    os.path.join(os.path.dirname(REPO), "crosspad-hil", ".venv", "Scripts", "crosspad-hil.exe"),
     os.path.expanduser("~/GIT/crosspad-hil/.venv/bin/crosspad-hil"),
     os.path.expanduser("~/.venvs/crosspad-hil/bin/crosspad-hil"),
 )
@@ -145,12 +154,23 @@ def reexec_under_bench_python() -> None:
 
 # ── plumbing ────────────────────────────────────────────────────────────────
 
-def hil_path() -> str | None:
-    found = shutil.which("crosspad-hil")
+def hil_path(environ=None, exists=os.path.exists, which=shutil.which) -> str | None:
+    """The crosspad-hil entry point, or None.
+
+    Order: $CROSSPAD_HIL when it names something that exists (a broken override
+    falls through to the search rather than breaking every command), then PATH,
+    then the layouts in HIL_CANDIDATES. The override and the injectable lookups
+    exist so tools/tests/test_bench_hil_path.py can pin the order -- the order is
+    what has bitten benches, not the search itself.
+    """
+    env = (os.environ if environ is None else environ).get("CROSSPAD_HIL")
+    if env and exists(env):
+        return env
+    found = which("crosspad-hil")
     if found:
         return found
     for path in HIL_CANDIDATES:
-        if os.path.exists(path):
+        if exists(path):
             return path
     return None
 
@@ -427,7 +447,10 @@ def cmd_check(_args) -> int:
 
     exe = hil_path()
     say(exe is not None, "crosspad-hil", exe or "not found",
-        "pip install -e ~/GIT/crosspad-hil, or adjust HIL_CANDIDATES in this file")
+        "install it, or point CROSSPAD_HIL at its entry point; this file also looks "
+        "on PATH, in the repository .venv (bin/ and Scripts/), in a crosspad-hil "
+        "checkout beside this repository, and under ~/GIT and ~/.venvs -- "
+        "HIL_CANDIDATES below is that list")
     if exe is None:
         return EXIT_BENCH
     if shutil.which("crosspad-hil") is None:
