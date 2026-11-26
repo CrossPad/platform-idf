@@ -80,6 +80,64 @@ defaults is a cell connected afresh (or a board with no battery). Both start
 normally. A power-up keeps the backlight at 0 until the ESP sets a level, and
 the ESP keeps the pads black until the boot splash draws on them.
 
+## Dim, sleep, soft-off: what a host can and cannot do
+
+Measured on a v2 board on 2026-11-26, so these are the board's numbers and not
+the ones the headers imply. The STM dims the screen at `REG_CTL_DIM_TO_S`
+(**600 s** by default) and takes the whole board into soft-off at
+`REG_CTL_SLEEP_TO_S` (**1800 s**); both come from the ESP's
+`Stm32Settings::dimTimeoutS` / `sleepTimeoutS` on every settings push, with
+`REG_CTL_AUTO_SLEEP` on by default, and Settings → Power edits them.
+
+| the STM calls it | what is alive | what a host can do |
+|---|---|---|
+| `PWR_STATE_AWAKE` (0x00) | everything | anything |
+| `PWR_STATE_LIGHT` (0x04) — the dim stage | the ESP is up: the console answers, the screen is at `min(8, LCDbrightness)` and the pads at a fifth of their level | **write `REG_CMD_USER_ACTIVITY` and it is back**: the STM leaves LIGHT, the ESP's `app_pwr_state_cb` restores the backlight and the pad brightness on the `PWR_STATE_AWAKE` case that follows. Observed 0x03/0x04 → 0x00 within two seconds |
+| `PWR_STATE_SLEEP_PENDING` (0x01) → soft-off | the ESP restarts into its gate (`enter_esp_softoff()`, `main.cpp`) and deep-sleeps behind a persistent NVS marker; the STM goes into STOP1 | **nothing.** The STM wakes on its own power button (BTN1 on its ADC ladder) or on a charger event; no register asks it to. `REG_CMD_USER_ACTIVITY` only resets the idle timer, and it only reaches the STM while the ESP is running |
+| `PWR_STATE_SHIP_PENDING` (0x02) → ship mode | the BATFET is cut; on a battery everything is dark and draws essentially nothing | a button press (the BQ's QON, ~1 s) or a charger on the ESP port |
+
+So an automated run fails silently in the middle, and the failure has two
+shapes. In LIGHT the console keeps answering — a scenario reads replies and
+concludes the device is live while its screen is dark and `UI_STATE` shows what
+a dim board shows. Past the sleep timeout the console is gone altogether, and
+only a hand at the button recovers it. `PWR`, `PWR WAKE` and
+`PWR KEEPAWAKE <sec>` over CDC (and the companion verbs, which is how a phone
+page steers a board in the audio profile) are the answer to both: they are the
+same `REG_CMD_USER_ACTIVITY` byte the touch callback and the IMU already write,
+kept honest about the bus, and the lease is what carries a run through a silent
+gap — a build, a flash, a long analysis. The rule, its periods and the reason
+its quiet window is minutes rather than hours are in
+`main/include/host_keepawake.hpp`; `main/tests/test_host_keepawake.cpp` pins
+them (8 cases / 40 assertions). `tools/keepawake.py` is the host end: it reads
+`PWR`, asks for a wake or a lease, and says out loud when the board is already
+past reach.
+
+Two traps worth knowing before anyone reaches for this from a script:
+
+- **`STM_REGW` writes the STM's copy and saves nothing.** A settings push (an STM
+  restart, or the Settings page) puts the stored value back, and `PWR` prints
+  both columns because they disagree after an experiment: a board poked to
+  `dim=5 sleep=10` dims and soft-offs every few seconds while Settings says 600
+  and 1800, which reads as a firmware fault and is a stale register.
+- **Opening the STM bridge VCP resets the ESP.** The bridge wires DTR/RTS to EN
+  and GPIO0 (`bench.py recover`'s docstring), so a plain `pyserial` open — which
+  asserts both — lands the ESP in its ROM download mode with no CDC afterwards.
+  Talk to the board through the hub (`crosspad-hil cdc …`) or set DTR/RTS false
+  at the port level before anything else if a raw console is unavoidable.
+  A related one: an ESP restarted in the middle of an I2C transaction with the
+  STM can lose the *shared bus* for the rest of the session — `STM_REG`,
+  `IMU_REG` and the charger registers all answer `ERR i2c` while the ESP itself
+  runs fine — and the ESP only probes the STM link once at boot, so it keeps
+  reporting `STM_FW running=0.0(down)`. `STM_RESET` over CDC pulses the ESP's
+  reset line (GPIO46, `bsp_stm32_reset()`) and is the only reset a host can
+  reach; if the bus stays down after that, the board needs a power cycle.
+
+**What the STM still owes this** (no ESP-side fix exists): a register that
+asks it to wake the ESP — a host-side equivalent of BTN1 — so a soft-off board
+is not a brick until someone touches it; and keeping its I2C slave answerable
+while it is in STOP1, or publishing the reason it slept in a way a host can
+read afterwards. The counterpart list is `components/stm32_hal/TODO.md`.
+
 **A charge-screen boot starts nothing else.** The ESP learns it at the wake
 gate (`PWR_STATE_CHARGE`, `charge_boot_active()` in `main.cpp`) and then skips
 the launcher and the apps (the screen is black under the charge overlay before
