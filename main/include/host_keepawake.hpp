@@ -39,7 +39,12 @@
  * DAW playing the board, or a clock that never stops, would then keep the
  * screen bright forever, and a performer who stops to look at the paper would
  * find the board awake. The pads and the encoder are scanned by the STM itself,
- * so playing the board already resets its timer. Control traffic — a console
+ * so in principle a performance resets its own timer
+ * UNVERIFIED from this side -- it is a reading of the register map, not
+ * something the ESP side can observe. Twelve minutes of hitting pads while
+ * reading REG_IN_PWR_STATE settles it, and it matters: if the reading is wrong,
+ * a performer loses their screen ten minutes into a set and nothing here is the
+ * obvious cause. Control traffic — a console
  * verb, a companion request — is a person steering, and that is what counts.
  *
  * Not done here either: changing the STM's own timeouts. `STM_REGW` over the

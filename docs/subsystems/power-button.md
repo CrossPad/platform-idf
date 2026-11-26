@@ -160,7 +160,16 @@ is not a brick until someone touches it; and keeping its I2C slave answerable
 while it is in STOP1, or publishing the reason it slept in a way a host can
 read afterwards. The counterpart list is `components/stm32_hal/TODO.md`.
 
-**Three questions the sleep path still owes, and the cheap way to answer each:**
+**Four questions the sleep path still owes, and the cheap way to answer each:**
+
+- **Does the STM's idle timer get reset by pad and encoder activity at all?** The
+  rule above counts control traffic as activity and deliberately ignores a host's
+  notes, on the reading that the STM scans the pads itself, so a performance resets
+  its own timer. That is a reading of the register map, not something the ESP side
+  can observe: twelve minutes of hitting pads while reading REG_IN_PWR_STATE settles
+  it, and it matters more than anything else on this list. If the reading is wrong,
+  a performer loses their screen ten minutes into a set and nothing in this
+  subsystem is the obvious cause.
 
 - **Does the ESP come back on its own, and into what?** The gate re-checks the STM
   every `STM_GATE_RECHECK_US` (60 s) and leaves after `STM_GATE_MAX_UNREADABLE`
