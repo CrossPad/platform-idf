@@ -120,6 +120,7 @@ crosspad::PatternSequencer& getSequencer();
 #include "crosspad/kit/IKitManager.hpp"
 #include "crosspad/pad/IPadMix.hpp"
 #include "crosspad/platform/PlatformServices.hpp"
+#include "crosspad/audio/IOutputLevels.hpp"
 #include "crosspad/song/ISongEngine.hpp"
 #include "SongEnginePort.hpp"
 #include "bsp_sdmmc.h"
@@ -4160,6 +4161,46 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         cdc_reply(reply);
         return true;
     }
+    /* SPEAKERS [0|1 [pct]] -- Settings -> Audio's Speakers switch and the
+     * speakers' saved level, set as that switch and the output's slider set
+     * them (IOutputLevels: saved; off drops the amp at once). Bare reads
+     * "SPEAKERS: on=0|1 level=N". A UI walk that lands on the switch leaves
+     * it on across reboots; crosspad-hil puts it back with this. The set runs
+     * on the LVGL thread (NVS writes), after the reply. */
+    if (strncmp(cmd, "SPEAKERS", 8) == 0 && (cmd[8] == 0 || cmd[8] == ' ')) {
+        static int s_spkOn = -1, s_spkPct = -1;
+        auto* st = crosspad::CrosspadSettings::getInstance();
+        int on = -1, pct = -1;
+        const int n = cmd[8] ? sscanf(cmd + 9, "%d %d", &on, &pct) : 0;
+        if (n == 0 && cmd[8] == 0) {
+            char reply[64];
+            snprintf(reply, sizeof(reply), "SPEAKERS: on=%d level=%u\r\n",
+                     (st && st->masterFX.speakersEnabled) ? 1 : 0,
+                     st ? (unsigned)st->masterFX.outVolumeCodec[0][0] : 0u);
+            cdc_reply(reply);
+            return true;
+        }
+        if (n < 1 || (on != 0 && on != 1) || (n == 2 && (pct < 0 || pct > 100)) ||
+            !crosspad::getPlatformServices().outputLevels) {
+            cdc_reply("ERR SPEAKERS [0|1 [pct]]\r\n");
+            return true;
+        }
+        s_spkOn = on;
+        s_spkPct = n == 2 ? pct : -1;
+        cdc_reply("OK\r\n");
+        lv_async_call_locked([](void*) {
+            auto* ol = crosspad::getPlatformServices().outputLevels;
+            for (int i = 0; ol && i < ol->outputs(); ++i) {
+                if (strcmp(ol->name(i), "Speakers") != 0) continue;
+                if (s_spkPct >= 0) ol->setLevel(i, s_spkPct);
+                ol->setMuted(i, s_spkOn == 0);
+            }
+            if (s_spkOn == 0) {
+                if (auto* cs = crosspad::getStm32Manager().configSync()) cs->writeReg8(REG_CTL_AUDIO_EN, 0);
+            }
+        }, nullptr);
+        return true;
+    }
     /* MIX_EQ [out ON|OFF|FLAT | out band OFF | out band PEAK|LOSHELF|HISHELF|HP|LP hz [db] [q]]
      * -- the four bands across an output, for evening out what it plays
      * through. Bare MIX_EQ reports a line per output; db is in tenths and q
@@ -4520,6 +4561,37 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
             cdc_reply(ok ? "OK\r\n" : "ERR MIX_ROUTE ch out 0|1\r\n");
             return true;
         }
+    }
+    /* MIX_SOLO -- the soloed channels (MIX_LVL numbering), "-" for none;
+     * MIX_SOLO ch 0|1 sets one, as the Mixer's S button does. A solo the desk
+     * keeps in NVS silences every other channel, USB playback included, and
+     * MIX_LVL does not show it: an audio test then measures silence. Saved
+     * like MIX_MUTE, after the reply. CDC only. */
+    if (strncmp(cmd, "MIX_SOLO", 8) == 0 && (cmd[8] == 0 || cmd[8] == ' ')) {
+        auto& mx = getMixerEngine();
+        int ch = -1, on = -1;
+        const int n = sscanf(cmd, "MIX_SOLO %d %d", &ch, &on);
+        if (n == 2) {
+            const bool ok = ch >= 0 && ch < mx.maxChannels() && mx.isChannelActive((uint8_t)ch) &&
+                            (on == 0 || on == 1);
+            if (!ok) { cdc_reply("ERR MIX_SOLO [ch 0|1]\r\n"); return true; }
+            mx.setChannelSolo((uint8_t)ch, on == 1);
+            cdc_reply("OK\r\n");
+            lv_async_call_locked([](void*) { getMixerEngine().notifyStateChanged(); }, nullptr);
+            return true;
+        }
+        if (cmd[8] != 0) { cdc_reply("ERR MIX_SOLO [ch 0|1]\r\n"); return true; }
+        char reply[96];
+        size_t len = (size_t)snprintf(reply, sizeof(reply), "MIXSOLO: ch=");
+        bool any = false;
+        for (int i = 0; i < mx.maxChannels() && len < sizeof(reply) - 8; ++i) {
+            if (!mx.isChannelActive((uint8_t)i) || !mx.isChannelSoloed((uint8_t)i)) continue;
+            len += (size_t)snprintf(reply + len, sizeof(reply) - len, "%s%d", any ? "," : "", i);
+            any = true;
+        }
+        snprintf(reply + len, sizeof(reply) - len, "%s\r\n", any ? "" : "-");
+        cdc_reply(reply);
+        return true;
     }
     /* MIX_MUTE ch 0|1, MIX_VOL ch pct, MIX_OUT_MUTE out 0|1, MIX_OUT_VOL out pct
      * -- a channel's (MIX_LVL numbering) or an output's mute and level, set

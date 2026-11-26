@@ -184,6 +184,30 @@ def cdc(verb: str, timeout_ms: int = 4000) -> str | None:
     return out.strip() if rc == 0 else None
 
 
+def soloed_channels(text: str | None) -> list[int] | None:
+    """Channels a MIX_SOLO reply names, [] for none; None when the board has
+    no MIX_SOLO (it echoes the line) or did not answer."""
+    line = next((l for l in (text or "").splitlines() if l.startswith("MIXSOLO:")), None)
+    if line is None:
+        return None
+    ids = line.split("ch=", 1)[1].strip() if "ch=" in line else ""
+    if ids in ("", "-"):
+        return []
+    return [int(t) for t in ids.split(",") if t.strip().isdigit()]
+
+
+def channel_names(text: str | None) -> dict[int, str]:
+    """MIX_LVL rows -> {ch: name}."""
+    names: dict[int, str] = {}
+    for line in (text or "").splitlines():
+        if not line.startswith("MIXLVL: ch="):
+            continue
+        fields = dict(f.split("=", 1) for f in line[len("MIXLVL: "):].split() if "=" in f)
+        if fields.get("ch", "").isdigit():
+            names[int(fields["ch"])] = fields.get("name", "?")
+    return names
+
+
 def fw_rollback_state(text: str | None) -> bool | None:
     """Parses FW_SLOTS' own "FWSLOT: rollback=0|1" trailer row. None when the
     line never came back — older firmware without it, or no reply at all."""
@@ -551,6 +575,17 @@ def cmd_check(_args) -> int:
         "tools/bench.py ready   (scenarios needing a kit exit 2 without one)")
     worst = worst if loaded else EXIT_BENCH
 
+    # A solo the desk kept in NVS silences every other channel -- USB playback
+    # too, so audio_loopback records nothing -- and MIX_LVL does not show it.
+    solo = soloed_channels(cdc("MIX_SOLO --expect MIXSOLO:"))
+    if solo is not None:
+        names = channel_names(cdc("MIX_LVL --expect MIXLVL:")) if solo else {}
+        say(not solo, "mixer solo",
+            ", ".join(names.get(c, str(c)) for c in solo) + " soloed" if solo else "none",
+            "tools/bench.py ready   (a solo silences every other channel, USB playback "
+            "included: audio_loopback then records nothing)")
+        worst = worst if not solo else EXIT_BENCH
+
     # Advisory, not a failure: rollback=0 means only that the flashed
     # bootloader itself lacks rollback support (fw_rollback_supported() reads
     # its own descriptor version, which is below the minimum) — deterministic,
@@ -661,6 +696,11 @@ def ensure(verbose: bool = True, kit: bool = True) -> int:
         # Input before the source, the order audio_route_apply_preset uses.
         cdc("AUDIO_ADC 0 LINE2")
         cdc(f"AUDIO_MIC_SRC {ROUTE_HOME_MIC_SRC}")
+
+    solo = soloed_channels(cdc("MIX_SOLO --expect MIXSOLO:"))
+    for ch in solo or []:
+        note(f"mixer: channel {ch} soloed -> solo off (it silences every other channel)")
+        cdc(f"MIX_SOLO {ch} 0 --expect OK")
 
     if not kit:
         return EXIT_OK
