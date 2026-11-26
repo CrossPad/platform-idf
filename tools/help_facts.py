@@ -16,8 +16,9 @@ from the sources that decide them and fails on any difference:
 - Power-off hold: core Stm32Settings kLongPressDefaultMs, equal to gui's
   default and one of the Settings presets (kLongPressOpts).
 - Ship, switch-on and 0.5 s holds: the STM firmware (CrossPad_STM32_r2
-  power_btn.c / power_btn.h) when --stm names a checkout; without it only
-  that the ship hold lies above the longest power-off hold the STM accepts.
+  power_btn.c / power_btn.h) when --stm names a checkout -- CI checks out
+  the tag of the bundled stm32_fw.bin (--stm-tag); without it only that the
+  ship hold lies above the longest power-off hold the STM accepts.
 - Dim and sleep defaults: core Stm32Settings dimTimeoutS / sleepTimeoutS,
   each one of the Settings presets (kTimeoutSecs).
 - Every "Settings > A > B" path: each step is a string in crosspad-gui's
@@ -44,6 +45,7 @@ STM32_SETTINGS = "components/crosspad-core/include/crosspad/settings/Stm32Settin
 AUDIO_SONG = "components/crosspad-core/include/crosspad/song/AudioSong.hpp"
 STM_BTN_C = "app/src/power_btn.c"
 STM_BTN_H = "app/inc/power_btn.h"
+STM_BUNDLE = "main/stm32_fw/stm32_fw.bin"
 
 NUMBER_WORDS = {w: i for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve "
@@ -257,12 +259,25 @@ def read_facts(root: Path, stm: Path | None) -> dict:
     return facts
 
 
+def bundled_stm_tag(root: Path) -> str:
+    """The CrossPad_STM32_r2 tag of the STM image this firmware bundles (CPFW at 0x100)."""
+    head = (root / STM_BUNDLE).read_bytes()[0x100:0x106]
+    if head[:4] != b"CPFW":
+        raise SourceError(f"{STM_BUNDLE}: no CPFW descriptor at 0x100")
+    return f"v{head[4]}.{head[5]}"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--root", type=Path, default=ROOT, help="platform-idf checkout")
     ap.add_argument("--stm", type=Path, help="CrossPad_STM32_r2 checkout (ship/on/0.5 s holds)")
+    ap.add_argument("--stm-tag", action="store_true",
+                    help="print the STM tag of the bundled stm32_fw.bin and exit")
     args = ap.parse_args(argv)
     try:
+        if args.stm_tag:
+            print(bundled_stm_tag(args.root))
+            return 0
         facts = read_facts(args.root, args.stm)
         md = (args.root / HELP).read_text()
     except (SourceError, OSError) as e:

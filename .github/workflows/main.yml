@@ -97,6 +97,55 @@ jobs:
     steps:
       - run: echo "Only Markdown or docs/ changed; nothing to build."
 
+  # The on-device Help page (main/docs/instructions.md) against the facts it
+  # states: MODE map, kit tabs, Arrange tracks, power holds, dim/sleep
+  # defaults, Settings paths (tools/help_facts.py). No `needs`: a Help-only
+  # pull request is Markdown and skips the build, and is what this is for.
+  # The STM holds come from the tag of the bundled stm32_fw.bin; without
+  # access to that private repo the check falls back to their order.
+  help-facts:
+    name: help facts
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: ghcr.io/crosspad/crosspad-ci:v5.5.5-1@sha256:d89e2175ab2371eca90278a6a8774108b9387775344b2bbf837eabc2a30036bd
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      HAVE_STM_TOKEN: ${{ secrets.SUBMODULE_PAT != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: The sources the Help page is checked against
+        shell: bash
+        run: git submodule update --init --depth 1 components/crosspad-core components/crosspad-gui components/crosspad-sampler
+      - id: stm
+        if: env.HAVE_STM_TOKEN == 'true'
+        shell: bash
+        run: echo "tag=$(python3 tools/help_facts.py --stm-tag)" >> "$GITHUB_OUTPUT"
+      - name: The bundled STM firmware's power button
+        if: steps.stm.outputs.tag
+        continue-on-error: true
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: CrossPad/CrossPad_STM32_r2
+          ref: ${{ steps.stm.outputs.tag }}
+          path: .stm
+          token: ${{ secrets.SUBMODULE_PAT }}
+          sparse-checkout: |
+            app/src/power_btn.c
+            app/inc/power_btn.h
+          sparse-checkout-cone-mode: false
+      - name: Checker tests
+        shell: bash
+        run: python3 -m pip install --quiet pytest && python3 -m pytest -q tools/tests/test_help_facts.py
+      - name: Help page matches the firmware
+        shell: bash
+        run: |
+          stm=()
+          if [[ -f .stm/app/src/power_btn.c ]]; then stm=(--stm .stm); else
+            echo "::warning::STM sources not reached; ship/on holds checked only for order"; fi
+          python3 tools/help_facts.py "${stm[@]}"
+
   # Which kits to build. A tag (a release), a manual run and a pull request
   # that touches config/profiles build every kit; any other push only the
   # default kit. Only v2 unless a manual run names more (input revs). tools/ci_matrix.py refuses a profile whose name
