@@ -359,6 +359,11 @@ its own send). How it works:
 A send of the mics to `Out 1/2` is a mic next to its own speakers: that howls,
 as it would on any desk. `MIX_ROUTE ch out 0|1` over CDC sets a send.
 
+A solo is kept with the desk (NVS) and silences every other channel, USB
+playback included; `MIX_LVL` does not show it. `MIX_SOLO` over CDC lists the
+soloed channels (`MIXSOLO: ch=0` or `ch=-`), `MIX_SOLO ch 0|1` sets one, and
+`tools/bench.py check` reports a solo left behind (`ready` clears it).
+
 **From an audio track.** Arrange's audio track has MONITOR in its
 input sheet (a long press on its header, crosspad-arrange 0.22.0): the input it
 records heard live or not. It goes through core's `IInputMonitor`

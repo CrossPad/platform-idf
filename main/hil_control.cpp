@@ -4521,6 +4521,37 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
             return true;
         }
     }
+    /* MIX_SOLO -- the soloed channels (MIX_LVL numbering), "-" for none;
+     * MIX_SOLO ch 0|1 sets one, as the Mixer's S button does. A solo the desk
+     * keeps in NVS silences every other channel, USB playback included, and
+     * MIX_LVL does not show it: an audio test then measures silence. Saved
+     * like MIX_MUTE, after the reply. CDC only. */
+    if (strncmp(cmd, "MIX_SOLO", 8) == 0 && (cmd[8] == 0 || cmd[8] == ' ')) {
+        auto& mx = getMixerEngine();
+        int ch = -1, on = -1;
+        const int n = sscanf(cmd, "MIX_SOLO %d %d", &ch, &on);
+        if (n == 2) {
+            const bool ok = ch >= 0 && ch < mx.maxChannels() && mx.isChannelActive((uint8_t)ch) &&
+                            (on == 0 || on == 1);
+            if (!ok) { cdc_reply("ERR MIX_SOLO [ch 0|1]\r\n"); return true; }
+            mx.setChannelSolo((uint8_t)ch, on == 1);
+            cdc_reply("OK\r\n");
+            lv_async_call_locked([](void*) { getMixerEngine().notifyStateChanged(); }, nullptr);
+            return true;
+        }
+        if (cmd[8] != 0) { cdc_reply("ERR MIX_SOLO [ch 0|1]\r\n"); return true; }
+        char reply[96];
+        size_t len = (size_t)snprintf(reply, sizeof(reply), "MIXSOLO: ch=");
+        bool any = false;
+        for (int i = 0; i < mx.maxChannels() && len < sizeof(reply) - 8; ++i) {
+            if (!mx.isChannelActive((uint8_t)i) || !mx.isChannelSoloed((uint8_t)i)) continue;
+            len += (size_t)snprintf(reply + len, sizeof(reply) - len, "%s%d", any ? "," : "", i);
+            any = true;
+        }
+        snprintf(reply + len, sizeof(reply) - len, "%s\r\n", any ? "" : "-");
+        cdc_reply(reply);
+        return true;
+    }
     /* MIX_MUTE ch 0|1, MIX_VOL ch pct, MIX_OUT_MUTE out 0|1, MIX_OUT_VOL out pct
      * -- a channel's (MIX_LVL numbering) or an output's mute and level, set
      * with the setters the Mixer's M button and fader use. pct is linear gain
