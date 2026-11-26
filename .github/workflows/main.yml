@@ -137,7 +137,10 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: Checker tests
         shell: bash
-        run: python3 -m pip install --quiet pytest && python3 -m pytest -q tools/tests/test_help_facts.py
+        # The image's python3 has no pip; python3-venv brings one.
+        run: |
+          python3 -m venv /tmp/pytest-venv && /tmp/pytest-venv/bin/pip install --quiet pytest
+          /tmp/pytest-venv/bin/python -m pytest -q tools/tests/test_help_facts.py
       - name: Help page matches the firmware
         shell: bash
         run: |
