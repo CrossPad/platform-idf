@@ -24,7 +24,6 @@ lv_obj_t * LoadMainScreen(lv_obj_t *parent); // main screen
 
 // miscellaneous functions
 void AddApps();
-void createKnobs(lv_obj_t *parent);
 
 /**********************
  *      MACROS
