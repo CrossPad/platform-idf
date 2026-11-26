@@ -90,6 +90,19 @@ if(NOT MSVC)
     target_link_options(surface_map_tests PRIVATE -fsanitize=address,undefined)
 endif()
 
+# Keeping a bench session awake and waking a dimmed board
+# (main/include/host_keepawake.hpp), header-only for exactly this test: the
+# nudge period, the quiet window a host falls back into and the lease that
+# covers a silent build are all pinned here, because the alternative is a
+# scenario that loses the board to a 1800 s soft-off halfway through.
+add_executable(host_keepawake_tests test_host_keepawake.cpp)
+target_include_directories(host_keepawake_tests PRIVATE ${MAIN_DIR}/include)
+target_link_libraries(host_keepawake_tests PRIVATE Catch2::Catch2WithMain)
+if(NOT MSVC)
+    target_compile_options(host_keepawake_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(host_keepawake_tests PRIVATE -fsanitize=address,undefined)
+endif()
+
 # The settings write queue (crosspad-platform-idf/NvsWriteQueue.cpp): the part
 # of the store's deferral that is pure policy, so the cooldown, the read-back,
 # the erase and the retry rules are pinned without a board and without NVS.
@@ -112,4 +125,5 @@ catch_discover_tests(cdc_line_tests)
 catch_discover_tests(kit_pc_tests)
 catch_discover_tests(host_midi_tests)
 catch_discover_tests(surface_map_tests)
+catch_discover_tests(host_keepawake_tests)
 catch_discover_tests(nvs_write_queue_tests)

@@ -171,6 +171,7 @@ extern "C" void     audio_mixer_prof_read(void *mixer, char *out, uint32_t cap);
 #include "crosspad/dsp/PortableFft.hpp"
 #include "crosspad/instrument/SampleBank.hpp"
 #include "indev/encoder_hil.h"
+#include "host_keepawake.hpp"   /* PWR: the bench keep-awake rule (main/include) */
 #include "EspBleMidi.hpp"
 #include "BleCompanion.hpp"
 #include "processMIDI.hpp"
@@ -1251,6 +1252,48 @@ static uint32_t heap_watch_job(void *)
         s_heap_watch = false;
     }
     return 0;
+}
+
+/* ---- the host keep-awake pump (main/include/host_keepawake.hpp) -----------
+ * What a host's control traffic is worth to the STM's idle timer, and the one
+ * place that spends it: one decision a second while a session is live, sixty
+ * when nothing has been said for the quiet window. Started by the first host
+ * command of a session and never taken back out -- an idle pass is a compare
+ * and a multiply, and the worker already runs pad_anim every 10 ms.
+ *
+ * The nudge is `REG_CMD_USER_ACTIVITY`, the same byte the touch callback writes
+ * (IGuiPlatform::onUserInteraction -> Stm32Manager::notifyUserActivity) and the
+ * IMU writes when a board in LIGHT sleep is picked up. It is counted here
+ * rather than left to the manager's flag because the I2C result is the thing a
+ * bench has to see: an ESP that restarted in the middle of a transaction with
+ * the STM lost the whole shared bus for the rest of that session (IMU_REG
+ * answered ERR i2c as well), and a keep-awake that quietly fails is worse than
+ * one that says so. */
+static bsp_worker_job_t *s_host_awake_job = nullptr;
+static uint32_t s_host_awake_ok = 0;
+static uint32_t s_host_awake_fail = 0;
+static uint32_t s_host_awake_manual = 0;
+
+static uint32_t host_awake_job(void *)
+{
+    auto &ka = crosspad::hostKeepAwake();
+    const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000ull);
+    if (ka.shouldNudge(now)) {
+        if (stm32_i2c_write_u8(REG_CMD_USER_ACTIVITY, 1) == ESP_OK) ++s_host_awake_ok;
+        else ++s_host_awake_fail;
+    }
+    return ka.pumpPeriodMs(now);
+}
+
+static void note_host_command(void)
+{
+    auto &ka = crosspad::hostKeepAwake();
+    ka.noteCommand((uint32_t)(esp_timer_get_time() / 1000ull));
+    if (!s_host_awake_job) {
+        s_host_awake_job = bsp_worker_add("host_awake",
+                                          crosspad::HostKeepAwake::kPumpPeriodMs,
+                                          host_awake_job, nullptr);
+    }
 }
 
 static bool heap_watch_on(void) { return s_heap_watch; }
@@ -2619,6 +2662,12 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
     memcpy(cmd, buff, len);
     cmd[len] = '\0';
 
+    /* A command on the console is a person or a test harness sitting in front
+     * of this board: it is user activity as surely as a finger on the panel,
+     * and the first one after a quiet stretch is what turns the screen back
+     * over. The rule and its numbers live in host_keepawake.hpp. */
+    note_host_command();
+
     int a = -1, b = -1;
     char name[32] = {0};
 
@@ -2750,6 +2799,87 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
         else if (strncmp(arg, "HOLD", 4) == 0)  power_button_inject(true);
         else { cdc_reply("ERR PWR_GESTURE CLICK|HOLD\r\n"); return true; }
         cdc_reply("OK\r\n");
+        return true;
+    }
+    /* PWR -- the sleep and wake state a bench run has to see to survive it.
+     * Measured on a v2 board 2026-11-26: the STM dims the screen at
+     * REG_CTL_DIM_TO_S (600 s by default) and takes the whole board into
+     * soft-off at REG_CTL_SLEEP_TO_S (1800 s). In between -- PWR_STATE_LIGHT --
+     * the ESP stays up, so the console answers while the screen and the pads
+     * stay dimmed, and that is what misleads an automated run: it reads replies
+     * and concludes the device is live. Past the sleep timeout the ESP
+     * restarts into its soft-off gate and the console is gone for good --
+     * `REG_CMD_USER_ACTIVITY` resets the STM's idle timer, it does not wake
+     * anything, and the STM wakes on its own power button or a charger event.
+     * No register asks it to, so a dark board is out of a host's reach until a
+     * hand presses the button; docs/subsystems/power-button.md has the ladder.
+     * Hence WAKE (climb back out of the dim state) and KEEPAWAKE (never fall
+     * into it, or anything below it).
+     *
+     * `stored` and `stm` print side by side because they can disagree: STM_REGW
+     * writes the STM's copy and saves nothing, and only a settings push puts the
+     * stored value back. That is how a board ends up dimming after five seconds
+     * for reasons nobody at the desk remembers. */
+    if (strncmp(cmd, "PWR", 3) == 0 && (cmd[3] == '\0' || cmd[3] == ' ')) {
+        char out[256];
+        auto &ka = crosspad::hostKeepAwake();
+        const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000ull);
+        const char *rest = cmd + 3;
+        if (strncmp(rest, " WAKE", 5) == 0) {
+            /* One byte now, from this task, so the reply means something: `OK`
+             * is the STM having been told, not the pump agreeing to do it
+             * later. On the bench this moved REG_IN_PWR_STATE 0x03/0x04 -> 0x00
+             * on a board that had dimmed itself, and the ESP restored the
+             * backlight and the pad brightness on the AWAKE case that followed
+             * (app_pwr_state_cb, main.cpp). */
+            ++s_host_awake_manual;
+            const esp_err_t err = stm32_i2c_write_u8(REG_CMD_USER_ACTIVITY, 1);
+            if (err == ESP_OK) ++s_host_awake_ok; else ++s_host_awake_fail;
+            cdc_reply(err == ESP_OK ? "PWRW: OK\r\n" : "PWRW: ERR i2c\r\n");
+            return true;
+        }
+        if (strncmp(rest, " KEEPAWAKE", 10) == 0) {
+            int secs = -1;
+            if (sscanf(rest + 10, " %d", &secs) != 1 || secs < 0 || secs > 8 * 3600) {
+                cdc_reply("ERR PWR KEEPAWAKE <sec, 0..28800>\r\n");
+                return true;
+            }
+            ka.keepAwakeFor((uint32_t)secs * 1000u, now);
+            if (!s_host_awake_job) {
+                s_host_awake_job = bsp_worker_add("host_awake",
+                                                  crosspad::HostKeepAwake::kPumpPeriodMs,
+                                                  host_awake_job, nullptr);
+            }
+            snprintf(out, sizeof(out), "PWRKA: lease_left=%ums nudge_every=%ums\r\n",
+                     (unsigned)ka.leaseLeftMs(now),
+                     (unsigned)crosspad::HostKeepAwake::kNudgePeriodMs);
+            cdc_reply(out);
+            return true;
+        }
+        uint8_t live_state = 0xFF, auto_sleep = 0xFF;
+        uint8_t buf[2] = {0, 0};
+        unsigned dim_hi = 0, dim_lo = 0, slp_hi = 0, slp_lo = 0;
+        const bool link = (stm32_i2c_read_u8(REG_IN_PWR_STATE, &live_state) == ESP_OK);
+        if (link) {
+            stm32_i2c_read_u8(REG_CTL_AUTO_SLEEP, &auto_sleep);
+            if (stm32_i2c_read(REG_CTL_DIM_TO_S_HI, buf, 2) == ESP_OK) { dim_hi = buf[0]; dim_lo = buf[1]; }
+            if (stm32_i2c_read(REG_CTL_SLEEP_TO_S_HI, buf, 2) == ESP_OK) { slp_hi = buf[0]; slp_lo = buf[1]; }
+        }
+        auto *cfg = crosspad::CrosspadSettings::getInstance();
+        snprintf(out, sizeof(out),
+                 "PWR: state=0x%02X cached=0x%02X link=%s | stm dim=%us sleep=%us auto=%u | "
+                 "stored dim=%us sleep=%us auto=%u | lease=%ums host_quiet=%ums cmds=%u relights=%u "
+                 "nudges=%u i2c_ok=%u i2c_fail=%u manual=%u\r\n",
+                 (unsigned)live_state, (unsigned)g_hil_last_pwr_state.load(), link ? "ok" : "down",
+                 (unsigned)((dim_hi << 8) | dim_lo), (unsigned)((slp_hi << 8) | slp_lo),
+                 (unsigned)auto_sleep,
+                 (unsigned)(cfg ? cfg->stm.dimTimeoutS : 0),
+                 (unsigned)(cfg ? cfg->stm.sleepTimeoutS : 0),
+                 (unsigned)(cfg ? cfg->stm.autoSleep : 0),
+                 (unsigned)ka.leaseLeftMs(now), (unsigned)ka.quietMs(now),
+                 (unsigned)ka.stats().commands, (unsigned)ka.stats().reopens,
+                 (unsigned)ka.stats().nudges, (unsigned)s_host_awake_ok,
+                 (unsigned)s_host_awake_fail, (unsigned)s_host_awake_manual);
         return true;
     }
     if (strncmp(cmd, "TASKS", 5) == 0) {
@@ -5656,6 +5786,10 @@ static bool codec_reg_is_read(const char *args)
 }
 
 void hil_control_companion_handle(const char *command, char *reply, size_t capacity) {
+    /* The companion path is the control plane of the USB-audio profile, which
+     * has no CDC at all: a phone page steering the board is a person at the
+     * board, and they get the same relight the console gets. */
+    note_host_command();
     if (strcmp(command, "CP_CAPS") == 0) {
         snprintf(reply, capacity, "CP_CAPS 1 control=1 files=0\r\n"); return;
     }
