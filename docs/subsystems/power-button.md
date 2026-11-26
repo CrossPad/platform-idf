@@ -132,6 +132,20 @@ Two traps worth knowing before anyone reaches for this from a script:
   reset line (GPIO46, `bsp_stm32_reset()`) and is the only reset a host can
   reach; if the bus stays down after that, the board needs a power cycle.
 
+**Verifying it on a board, in three commands** (the numbers are the point — a
+run that cannot read them is the one that loses the board halfway):
+
+```text
+PWR                       state=0x04 ... host_quiet=... ; 0x04 = dimmed but alive
+PWR WAKE                  PWRW: OK  ->  PWR again, state must read 0x00
+PWR KEEPAWAKE 900         PWRKA: lease_left=900000ms nudge_every=20000ms
+```
+
+With the lease on, leave the console alone for five minutes and ask again: the
+state is still 0x00 and `nudges` has grown by roughly the number of periods that
+passed. `i2c_fail` growing instead means the STM link is down — that is the bus
+hang below, not a keep-awake that does not work.
+
 **What the STM still owes this** (no ESP-side fix exists): a register that
 asks it to wake the ESP — a host-side equivalent of BTN1 — so a soft-off board
 is not a brick until someone touches it; and keeping its I2C slave answerable
