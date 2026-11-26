@@ -13,6 +13,7 @@
 #include "crosspad-gui/theme/crosspad_theme.h"
 #include "crosspad-gui/widgets/gui_helpers.h"
 #include "indev/encoder_hil.h"
+#include "indev/encoder_accel.h"
 #include <cstdio>
 
 extern lv_group_t *encoderTop_group;
@@ -32,16 +33,32 @@ void encoderTop_read(lv_indev_t *indev, lv_indev_data_t *data)
      * knob sat between detents -- is gone too: a detent is a decision
      * somebody made with their fingers. */
     const int ddiff = handler.takeEncoderSteps();
+    const int dir_phys = -ddiff;      // the direction LVGL is given (see below)
+    const int32_t hil = encoderTop_hil_diff().exchange(0);
+
+    /* A fast turn steps further, a slow one stays fine. The multiplier comes from
+     * the detent rate of the last third of a second; the rule and the reason for
+     * each part of it are in indev/encoder_accel.h, and
+     * docs/subsystems/encoder-navigation.md is the page a person reads. What the
+     * estimator is fed is the window this read drained, so it sees the same
+     * quantity from the knob as it would from a scripted injection. */
+    auto& accel = crosspad::encoderAccel();
+    accel.setEnabled(crosspad::enc_accel_enabled().load(std::memory_order_relaxed));
+    const bool hil_accel = crosspad::enc_accel_hil_inject().load(std::memory_order_relaxed);
+    const int mult = accel.apply(lv_tick_get(), hil_accel ? dir_phys + (int)hil : dir_phys);
 
 #if CROSSPAD_ENCODER_DEBUG
     // Compact debug telemetry in the status-bar icon flex zone (smallest font,
     // theme-derived colour so it follows the active palette). Off by default:
     // it shares the zone with real status icons and overlaps the centred logo.
-    // Build with -DCROSSPAD_ENCODER_DEBUG=1 while tuning the detent logic.
+    // Build with -DCROSSPAD_ENCODER_DEBUG=1 while tuning the detent logic. The
+    // last field is the multiplier the accelerator chose for this window, which
+    // is what a hand is compared against (`ENC_ACCEL` counts the same windows
+    // without a debug build).
     static char enc_dbg_buf[40] = "";
     static bool enc_dbg_inited  = false;
-    std::snprintf(enc_dbg_buf, sizeof(enc_dbg_buf), "d%d %+d",
-                  handler.encoderDetent() & 0x0F, ddiff);
+    std::snprintf(enc_dbg_buf, sizeof(enc_dbg_buf), "d%d %+d x%d",
+                  handler.encoderDetent() & 0x0F, ddiff, mult);
     if (!enc_dbg_inited) {
         const lv_color_t text_col =
             lv_color_bw_from_color(CROSSPAD_THEME_PRIMARY);
@@ -65,7 +82,12 @@ void encoderTop_read(lv_indev_t *indev, lv_indev_data_t *data)
     // Steps are + where the STM's count rises (one physical direction);
     // negate so GUI focus moves the way the user expects (matches the prior
     // last-minus-current convention this rewrite replaced).
-    data->enc_diff = -ddiff + encoderTop_hil_diff().exchange(0);
+    // The multiplier multiplies the knob's detents. An injected diff is exact
+    // unless the tuning switch says otherwise, because the scenarios that use
+    // `ENC_ROTATE` read the injected number as a movement they asked for.
+    data->enc_diff = hil_accel ? dir_phys * mult + (int)hil * mult
+                               : dir_phys * mult + (int)hil;
+    accel.noteReported(data->enc_diff);
 
     const uint32_t now_ms = lv_tick_get();
     const bool hil_held = (int32_t)(encoderTop_hil_press_until().load() - now_ms) > 0;

@@ -171,6 +171,7 @@ extern "C" void     audio_mixer_prof_read(void *mixer, char *out, uint32_t cap);
 #include "crosspad/dsp/PortableFft.hpp"
 #include "crosspad/instrument/SampleBank.hpp"
 #include "indev/encoder_hil.h"
+#include "indev/encoder_accel.h"   /* ENC_ACCEL: the detent-rate accelerator */
 #include "EspBleMidi.hpp"
 #include "BleCompanion.hpp"
 #include "processMIDI.hpp"
@@ -3459,6 +3460,54 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
     }
     if (strncmp(cmd, "ENC_STATE", 9) == 0) {
         handle_enc_state();
+        return true;
+    }
+    /* ENC_ACCEL -- the detent-rate accelerator (components/bsp/crosspad/include/
+     * indev/encoder_accel.h). Bare or SHOW answers what the last windows did;
+     * `0|1` switches it; `INJECT 0|1` lets an injected ENC_ROTATE join the window
+     * the knob's own detents make, which is how a ladder measures the tiers
+     * without a hand on the knob; `RESET` zeroes the counters so one turn of a
+     * real hand can be read on its own. The histogram is detents per 33 ms read
+     * window -- 0, 1, 2-3, 4-7, 8+ -- which is what the tier thresholds are
+     * tuned from. */
+    if (strncmp(cmd, "ENC_ACCEL", 9) == 0) {
+        auto& accel = crosspad::encoderAccel();
+        const char* rest = cmd + 9;
+        if (sscanf(rest, " INJECT %d", &a) == 1) {
+            crosspad::enc_accel_hil_inject().store(a != 0);
+        } else if (strncmp(rest, " RESET", 6) == 0) {
+            accel.resetStats();
+        } else if (sscanf(rest, " %d", &a) == 1) {
+            crosspad::enc_accel_enabled().store(a != 0);
+        }
+        /* The LVGL task writes these counters from its own read callback;
+         * esp_lvgl_port holds the port lock around lv_timer_handler, so taking it
+         * here is what makes the read-out one consistent snapshot. A 320 B reply
+         * buffer is static for the same reason the other long ones are: the drain
+         * loop's stack is 4 kB and snprintf has run out of it before. */
+        static char reply[320];
+        if (lvgl_port_lock(1000)) {
+            const auto& st = accel.stats();
+            snprintf(reply, sizeof(reply),
+                     "ENCACCEL: on=%d hil_inject=%d mult=%d rate=%ld rate_max=%ld tiers=%d,%d,%d "
+                     "tau_ms=%u idle_ms=%u windows=%u moving=%u detents=%u reported=%u "
+                     "hist=%u,%u,%u,%u,%u up=%u down=%u reversed=%u idles=%u\r\n",
+                     crosspad::enc_accel_enabled().load() ? 1 : 0,
+                     crosspad::enc_accel_hil_inject().load() ? 1 : 0,
+                     accel.multiplier(), (long)accel.ratePerSec(), (long)accel.rateMaxPerSec(),
+                     (int)crosspad::EncoderAccel::kRate2, (int)crosspad::EncoderAccel::kRate4,
+                     (int)crosspad::EncoderAccel::kRate8,
+                     (unsigned)crosspad::EncoderAccel::kTauMs, (unsigned)crosspad::EncoderAccel::kIdleMs,
+                     (unsigned)st.windows, (unsigned)st.moving, (unsigned)st.detents,
+                     (unsigned)st.reported,
+                     (unsigned)st.hist[0], (unsigned)st.hist[1], (unsigned)st.hist[2],
+                     (unsigned)st.hist[3], (unsigned)st.hist[4],
+                     (unsigned)st.up, (unsigned)st.down, (unsigned)st.reversed, (unsigned)st.idles);
+            lvgl_port_unlock();
+        } else {
+            snprintf(reply, sizeof(reply), "ERR ENC_ACCEL lvgl_busy\r\n");
+        }
+        cdc_reply(reply);
         return true;
     }
     if (strncmp(cmd, "LED_STATE", 9) == 0) {

@@ -293,6 +293,21 @@ doesn't roll back the fresh instance. Consequence for app authors: an overlay
 started from a pre-launch hook never stays "started" against a tree LVGL
 already tore down.
 
+## Navigation Encoder
+
+One knob, one read callback (`encoderTop_read()` in
+`components/bsp/crosspad/include/indev/encoder.h`): a detent is one LVGL step and
+nothing else repeats. **A fast turn multiplies that step** — ×2/×4/×8 from the
+detent rate of the last 200 ms (τ), back to one unit the moment the hand reverses
+or after 500 ms of quiet, capped at 8 because the knob has 16 detents a turn. The
+rule is `indev/encoder_accel.h`: header-only, no LVGL and no ESP in it, pinned by
+`main/tests/test_encoder_accel.cpp` (11 cases / 332 assertions) against
+hand-shaped 33 ms windows. `ENC_ACCEL [0|1|INJECT 0|1|RESET]` over CDC is the
+switch and the counters; an `ENC_ROTATE n` injection is exact unless `INJECT` puts
+it in the same window as the knob, which is what lets a ladder walk the tiers
+without a hand. Tiers, tuning and what LVGL's own `rotary_sensitivity` would not
+have done: [docs/subsystems/encoder-navigation.md](docs/subsystems/encoder-navigation.md).
+
 ## Power Button
 
 Timing lives in `main/power_button.cpp`; resolution in crosspad-gui
