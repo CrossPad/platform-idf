@@ -55,7 +55,6 @@ crosspad::PatternSequencer& getSequencer();
 #include <memory>
 #include <new>
 
-#include "esp_attr.h"
 #include "esp_cpu.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -93,7 +92,6 @@ crosspad::PatternSequencer& getSequencer();
 #endif
 #include "crosspad-gui/components/app_orchestrator.h"
 #include "crosspad-gui/components/mode_overlay.h"
-#include "CrosspadPlatform.hpp"
 #include "crosspad/pad/PadManager.hpp"
 #include "crosspad/pad/PadLedController.hpp"
 #include "EspLedStrip.hpp"
