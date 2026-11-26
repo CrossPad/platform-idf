@@ -15,6 +15,7 @@ So this does the half that can be done and says plainly when it cannot:
     tools/keepawake.py wake                  take it out of the dim state now
     tools/keepawake.py keep --minutes 30     one keep-awake lease, then report
     tools/keepawake.py watch --minutes 30    hold the lease, refreshing and printing
+    tools/keepawake.py meter                 log battery current + power state to a CSV
 
 Exit codes: 0 the board is awake, or was dim and became awake; 1 it is past
 reach (soft-off, or its ESP in ROM download mode: a hand at the button, or a
@@ -230,6 +231,162 @@ def probe(base):
     return parse_pwr(text), text
 
 
+# The POWER block of the STM register map, for `meter`. CrossPad's battery gauge
+# is the STM's: REG_PWR_IBAT_* is a signed 16-bit big-endian milliamp reading
+# (positive = the battery discharging, negative = charging), REG_PWR_VBAT_* is the
+# STM's own direct-ADC millivolts, and REG_PWR_CHG_STATUS says whether VBUS is
+# even there. Nothing in the ESP firmware reads IBAT -- the device itself has never
+# looked at its own current -- which is why this is a host tool: ask the gauge, log
+# it, and the idle-drain question in docs/subsystems/power-button.md gets answered
+# by a CSV instead of by a guess.
+REG_PWR_STATE = 0x012D          # INPUTS block: PWR_STATE_*
+REG_PWR_VBAT_HI = 0x0200        # POWER block starts here
+REG_PWR_VBAT_LO = 0x0201
+REG_PWR_CHG_STATUS = 0x0207
+REG_PWR_IBAT_HI = 0x0229
+REG_PWR_IBAT_LO = 0x022A
+POWER_BLOCK_LEN = REG_PWR_IBAT_LO - REG_PWR_VBAT_HI + 1   # 0x0200..0x022A, 43: fits STM_REG's len<=64
+
+STATE_NAMES = {0: "awake", 1: "sleep_pending", 2: "ship_pending", 3: "woke", 4: "light", 5: "charge"}
+
+
+def parse_reg_block(text):
+    """`REG 0200: 0E C1 ...` -> {address: value}. {} when the read failed.
+
+    The verb answers one line per call with every byte of the block after the
+    address, so one call covers 0x0200..0x022A; `ERR i2c` (the STM link down or
+    asleep) and a short reply both give a dict that is simply missing keys, which
+    the row builder turns into a gap rather than a zero -- a zero would be a lie
+    about the drain.
+    """
+    for line in text.splitlines():
+        t = line.strip()
+        if not t.startswith("REG "):
+            continue
+        parts = t.split()
+        if len(parts) < 2:
+            continue
+        try:
+            base = int(parts[1].rstrip(":"), 16)
+        except ValueError:
+            continue
+        regs = {}
+        for i, tok in enumerate(parts[2:]):
+            try:
+                regs[base + i] = int(tok, 16)
+            except ValueError:
+                break
+        return regs
+    return {}
+
+
+def signed16(hi, lo):
+    """The gauge's milliamps: two's complement, positive is the battery giving."""
+    v = ((hi & 0xFF) << 8) | (lo & 0xFF)
+    return v - 0x10000 if v & 0x8000 else v
+
+
+def meter_row(stamp, state_regs, power_regs):
+    state = state_regs.get(REG_PWR_STATE)
+    hi, lo = power_regs.get(REG_PWR_IBAT_HI), power_regs.get(REG_PWR_IBAT_LO)
+    vhi, vlo = power_regs.get(REG_PWR_VBAT_HI), power_regs.get(REG_PWR_VBAT_LO)
+    return {
+        "t": stamp,
+        "state": state,
+        "name": STATE_NAMES.get(state, "unknown"),
+        "ma": signed16(hi, lo) if hi is not None and lo is not None else None,
+        "mv": ((vhi << 8) | vlo) if vhi is not None and vlo is not None else None,
+        "chg": power_regs.get(REG_PWR_CHG_STATUS),
+    }
+
+
+def summarise(rows):
+    """Mean/min/max milliamps per power state, and how many samples were gaps.
+
+    Grouping by state is the whole point: the question is what the dim state
+    (PWR_STATE_LIGHT) actually costs against awake, and a mean over a run that
+    covered both answers neither.
+    """
+    out = {}
+    gaps = 0
+    for r in rows:
+        if r["ma"] is None:
+            gaps += 1
+            continue
+        g = out.setdefault(r["name"], {"n": 0, "sum": 0, "min": r["ma"], "max": r["ma"], "mv": []})
+        g["n"] += 1
+        g["sum"] += r["ma"]
+        g["min"] = min(g["min"], r["ma"])
+        g["max"] = max(g["max"], r["ma"])
+        if r["mv"] is not None:
+            g["mv"].append(r["mv"])
+    for name, g in out.items():
+        g["mean"] = g["sum"] / g["n"]
+        g["mv"] = (sum(g["mv"]) / len(g["mv"])) if g["mv"] else None
+    return out, gaps
+
+
+def read_sample(base, cdc=cdc):
+    """One sample's two register reads. Kept separate so a test can script them."""
+    _, a = cdc(base, ["STM_REG", "0x012D"], expect="REG")
+    _, b = cdc(base, ["STM_REG", "0x0200", str(POWER_BLOCK_LEN)], expect="REG")
+    return parse_reg_block(a), parse_reg_block(b)
+
+
+def meter_main(base, minutes, interval, out_path, cdc=cdc, clock=time.time, pause=time.sleep,
+               now=None):
+    """Log current and state to a CSV, then print what the states cost."""
+    now = now or time.strftime("%Y%m%d-%H%M%S")
+    path = out_path or ("crosspad-meter-%s.csv" % now)
+    samples = max(1, int(minutes * 60 // max(1, interval)))
+    print("metering %d samples every %g s into %s (Ctrl-C stops it; what is written "
+          "stays written)" % (samples, interval, path))
+    print("two console reads per sample, so a long run is a slow log -- and let the "
+          "board dim by itself while it runs; `wake` in another window is how you "
+          "compare the states on purpose")
+    rows = []
+    last = None
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write("time,pwr_state,state,ibat_ma,vbat_mv,chg_flags\n")
+        for _ in range(samples):
+            started = clock()
+            st, pw = read_sample(base, cdc=cdc)
+            row = meter_row(time.strftime("%Y-%m-%dT%H:%M:%S"), st, pw)
+            if not st and not pw:
+                print("the STM answers nothing: either its link to the ESP is hung "
+                      "(`STM_RESET`, then a power cycle if that fails) or the board "
+                      "is in soft-off, where the ESP itself is asleep. Metering stops.")
+                return EXIT_UNREACHABLE
+            rows.append(row)
+            fh.write("%s,%s,%s,%s,%s,%s\n" % (row["t"],
+                                              ("%02X" % row["state"]) if row["state"] is not None else "",
+                                              row["name"],
+                                              "" if row["ma"] is None else row["ma"],
+                                              "" if row["mv"] is None else row["mv"],
+                                              ("%02X" % row["chg"]) if row["chg"] is not None else ""))
+            fh.flush()
+            if last is not None and row["state"] != last:
+                print("  %s: %s -> %s" % (row["t"], STATE_NAMES.get(last, "?"), row["name"]))
+            last = row["state"]
+            wait = interval - (clock() - started)
+            if wait > 0:
+                pause(wait)
+    groups, gaps = summarise(rows)
+    print("\n%s samples, %d of them gaps (the gauge answered nothing)" % (len(rows), gaps))
+    for name in sorted(groups, key=lambda k: -groups[k]["mean"]):
+        g = groups[name]
+        mv = "" if g["mv"] is None else "  at %d mV" % round(g["mv"])
+        print("  %-14s n=%-4d mean %+7.1f mA   min %+7d  max %+7d%s"
+              % (name, g["n"], g["mean"], g["min"], g["max"], mv))
+    if "light" in groups and "awake" in groups:
+        d = groups["awake"]["mean"] - groups["light"]["mean"]
+        print("  awake minus dim: %+0.1f mA -- that is what the dim state saves, if "
+              "anything. On a 4000 mAh cell 100 mA is about 40 h, so a small number "
+              "here is still the number that matters for a set." % d)
+    print("wrote %s" % path)
+    return EXIT_OK
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("-d", "--device", default=None, help="passed through to crosspad-hil")
@@ -240,6 +397,11 @@ def main(argv=None):
     keep.add_argument("--minutes", type=int, default=30)
     watch = sub.add_parser("watch", help="hold a lease down, refreshing and reporting")
     watch.add_argument("--minutes", type=int, default=30)
+    meter = sub.add_parser("meter", help="log the STM battery gauge and power state to a CSV")
+    meter.add_argument("--minutes", type=int, default=20)
+    meter.add_argument("--interval", type=float, default=10.0,
+                       help="seconds between samples (default 10; each sample is two console reads)")
+    meter.add_argument("-o", "--out", default=None, help="CSV path")
     args = ap.parse_args(argv)
 
     hil = hil_path()
@@ -248,7 +410,11 @@ def main(argv=None):
         return EXIT_NO_TOOLING
     base = [hil] + (["-d", args.device] if args.device else [])
 
+    if args.mode == "meter":
+        return meter_main(base, args.minutes, args.interval, args.out)
+
     info, raw = probe(base)
+
     if not info:
         # No `PWR` reply: either this firmware predates the verb, or the console
         # is gone. Ask for the state the way the older boards answer it before

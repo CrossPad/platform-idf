@@ -196,6 +196,28 @@ read afterwards. The counterpart list is `components/stm32_hal/TODO.md`.
   healthy and fails when it is hung. `tools/keepawake.py` does exactly that
   before it says anything about sleep.
 
+**What `tools/keepawake.py meter` is for.** The STM publishes its battery gauge and
+nothing in the ESP firmware reads `REG_PWR_IBAT_HI/LO` at all -- the device has never
+looked at its own current -- so the only way to find out what a power state actually
+costs is to ask the gauge from the host and log it. The meter does two console reads
+per sample (`STM_REG 0x012D` for the state, and `STM_REG 0x0200 43`: one block that
+spans `REG_PWR_VBAT_*`, `REG_PWR_CHG_STATUS` and `REG_PWR_IBAT_*` inside `STM_REG`'s
+64-byte cap), writes one CSV row each -- `IBAT` is a signed 16-bit milliamp value,
+positive is the battery giving and negative is charging -- and finishes with a
+mean/min/max per `PWR_STATE`, gaps recorded as gaps and never as zeros. A sample of
+a hung or sleeping STM is not a measurement of 0 mA. `--minutes 20 --interval 10` is
+the short version; the number worth having is `awake` minus `light`, and `keepawake.py
+wake` in a second window is how you force that comparison instead of waiting for the
+board to dim on its own. For scale: on a 4000 mAh cell, 100 mA is about 40 hours.
+
+**A host can already press the button logically.** `PWR_GESTURE CLICK|HOLD` is
+catalogued in crosspad-hil and injects the gesture into the STM: a `HOLD` (at or above
+`REG_CTL_LONG_PRESS`, 2.4 s by default) takes the board into soft-off exactly as a
+hand does. So the whole *descent* -- awake, dim, soft-off, and the ESP restarting into
+its gate -- is testable end to end from a script, with `meter` logging it. What still
+needs a person is the way back up out of soft-off, which is what I13 in
+`components/stm32_hal/TODO.md` asks the STM to fix.
+
 **A charge-screen boot starts nothing else.** The ESP learns it at the wake
 gate (`PWR_STATE_CHARGE`, `charge_boot_active()` in `main.cpp`) and then skips
 the launcher and the apps (the screen is black under the charge overlay before
