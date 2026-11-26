@@ -17,6 +17,11 @@ if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/.vscode/settings.json"
 endif()
 
 add_compile_options(-DUSE_LVGL -DCROSSPAD_REGISTER_APP_NAMED_FUNCTIONS)
+# GCC's IPA-SRA makes a private copy of a small inline function in every file
+# that calls it (std::string::_M_create was in the image 38 times): 27 kB of
+# .flash.text, a 64 kB page of PSRAM (config/image_budget.json). The hot paths
+# turn it back on (main/CMakeLists.txt, _hot_flags).
+add_compile_options(-fno-ipa-sra)
 
 # ---------------------------------------------------------------------------
 # The board revision's sdkconfig, and compile-time configuration for the
