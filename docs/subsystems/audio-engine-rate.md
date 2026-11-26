@@ -26,8 +26,13 @@ that engine built, content must match the engine rate.
 
 - `bsp_i2s_set_sample_rate()` / `bsp_i2s_get_sample_rate()` in the BSP; the
   default I2S configs use it. `AudioControl_Setup()` sets it from
-  `audioEngine.sampleRate` before the codec init (44100 or 48000; anything else
-  falls back to 48000 with a warning — the UAC endpoints are sized for 48 kHz).
+  `audioEngine.sampleRate` before the codec init. The board runs 44100 or
+  48000 (the UAC endpoints are sized for 48 kHz); the core's settings list
+  also holds 96000. `bsp_i2s_supported_sample_rate()` maps any other rate to
+  48000: `app_main()` applies it to the loaded settings with a warning, and the
+  I2S clock, the mixer and the audio task's block time all take the mapped
+  rate, so they cannot disagree. Settings → Audio lists only 44100 and 48000
+  (`IGuiPlatform::maxAudioSampleRate()`).
 - The USB audio bridge clocks I2S at the same rate; `usb_device_uac` takes
   `sample_rate` in its config and reports that one rate to the host instead of
   a compile-time table. The mic task sizes its transfer per interval

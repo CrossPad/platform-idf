@@ -27,7 +27,7 @@ const char *cp_account_base(void);                        /* CROSSPAD_ACCOUNT_UR
 bool        cp_account_auth_header(const char *url, char *out, size_t n, uint32_t *gen);   /* "Bearer <token>": linked and url under the base; *gen: the link it belongs to; any task */
 void        cp_account_revoked(uint32_t gen);             /* a 401 to a request that carried link `gen`'s token; ignored once the board linked again; any task */
 bool        cp_account_notice(void);                      /* "unlinked - link again" is to be shown; cleared by a link or an unlink */
-bool        cp_account_pair_start(char *refusal, size_t n);   /* lease on the caller's task; false: "busy" or the lease refusal */
+bool        cp_account_pair_start(char *refusal, size_t n);   /* lease on the caller's task; false: "busy" or the lease refusal; true while a cancelled pairing still ends: the new one follows it */
 void        cp_account_pair_cancel(void);
 cpa_pair_t  cp_account_pair_state(void);
 const char *cp_account_pair_state_name(cpa_pair_t s);    /* "idle" "starting" "code" "linked" "expired" "failed" */

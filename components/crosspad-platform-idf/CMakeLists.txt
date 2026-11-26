@@ -14,6 +14,7 @@ if(IDF_TARGET STREQUAL "esp32s3")
         "OutputLevelsPort.cpp"  # the speakers' and jacks' analog levels, per codec output pair
         "InputPairPort.cpp"     # which two of mics / Line 1/2 / Line 3/4 the ADCs hear
         "InputMonitorPort.cpp"  # an IN channel sent anywhere holds its ADC on the input
+        "FxBusPort.cpp"         # the effects bus a performance FX app inserts on (IFxBus)
         "AudioBufferPort.cpp"   # the render's block and output queue, chosen live
         "EspDspFft.cpp"         # esp-dsp's FFT, registered as core's FFT backend
         "EspDspKernels.cpp")    # the S3's render kernels (PIE, TRUNC.S/CLAMPS), core's AudioKernelTable
@@ -43,6 +44,7 @@ idf_component_register(
         "LatTrace.cpp"
         "CrosspadPlatform.cpp"
         "NvsSettingsStore.cpp"
+        "NvsWriteQueue.cpp"    # the settings write queue: policy only, no ESP, host-tested
         "SamplePlayerAccess.cpp"
         "SequenceStorePort.cpp"
         "EspBleMidi.cpp"

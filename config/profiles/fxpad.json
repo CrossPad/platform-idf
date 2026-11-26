@@ -1,0 +1,15 @@
+{
+  "name": "fxpad",
+  "display_name": "FX Pad",
+  "icon": "icons/fxpad.png",
+  "description": "The CrossPad as a performance multi-effect: line in, the mics and USB through 32 effects on the pads, an XY surface, synced to the tempo. No sampler, no radio.",
+  "platform": "esp-idf",
+  "features": {},
+  "standalone": "FxPad",
+  "top_bar": true,
+  "sample_engine": false,
+  "radio": false,
+  "apps": {
+    "fxpad": { "track": "pinned", "commit": "0b632be2be6badedaf4577b3227196b140ac6e7f" }
+  }
+}

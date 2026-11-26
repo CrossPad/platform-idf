@@ -607,6 +607,26 @@ MCLK and LRCK then drift against each other (a 200 Hz timing smear, THD+N
 Measure with `tools/make_tone_kit.py` + `crosspad-hil run sampler_record`;
 judge offline. Details and numbers: [docs/subsystems/audio-engine-rate.md](docs/subsystems/audio-engine-rate.md).
 
+## FX Pad (the fxpad kit: a performance multi-effect)
+
+`config/profiles/fxpad.json`: one app, FX Pad (`components/crosspad-fxpad`),
+no sampler started. Line 1/2, line 3/4, the mics and USB go through 32
+effects in two banks (B cuts the last seconds of the input up: stutter, beat
+repeat, glitch, tape stop, scratch …; one shared 1 MB tape ring) the pads hold (`FxEngine.cpp`, portable, host tests in the app's
+`tests/`) to Out 1/2, Out 3/4 and USB. **The mixer has one FX insert bus**
+(crosspad-mixer 0.22 `setFxProcessor/Send/Return`): sent, processed and
+returned in the same render pass, before the outputs' volume and limiter;
+the app sees it as core 2.48's **`IFxBus`** (`FxBusPort.cpp`), which takes the
+sources off their own routes while attached and picks the input pair from the
+sends. The pads start an effect from their own task straight into the
+engine's atomics; the screen follows from a timer. No buffer is cleared on the
+render thread (a delay line reads past what it has written as silence). USB
+REC switches USB to its audio profile so a phone records the FX. The XY pad
+redraws only the cursor's small objects at a 16 ms refresh -- a style set
+invalidates its whole object, so nothing is restyled unless it changed.
+`idf.py -B build_v2 -DSDKCONFIG=sdkconfig.v2 -DCROSSPAD_FW_KIT=fxpad build`.
+Details: [docs/subsystems/fx-pad.md](docs/subsystems/fx-pad.md).
+
 ## BLE MIDI
 
 Browser companion control shares NimBLE: custom GATT service `7e400001-b5a3-f393-e0a9-e50e24dcca9e`, bounded request/reply mailbox, main-task HIL dispatch. The same verb set rides USB MIDI SysEx `0x1F` (`main/companion_sysex.cpp`, `crosspad-hil companion "<VERB>"`) — that is the control plane of the MIDI+UAC2 profile, which has no CDC. A host's request for the CDC profile (SysEx `0x1B 01`) is confirmed **on the device** unless `USB_GUARD 0` (persisted; a development board sets it once). Protocol and limits: `docs/subsystems/ble-midi.md`. No files or OTA over BLE or SysEx.
@@ -1055,13 +1075,18 @@ connected over USB, so the traps below are handled for you.
 python3 tools/bench.py check              # what is wrong + the command that fixes it
 python3 tools/bench.py ready              # CDC profile, MICS route, a kit loaded
 python3 tools/bench.py flash [--assets]   # flash the NEWEST build, prove it landed
+python3 tools/bench.py flash --pr 28      # a trial build: the image CI built for PR #28
 python3 tools/bench.py test smoke ...     # scenarios, with the flags each one needs
 python3 tools/bench.py recover            # UART-reflash via the STM bridge (no CDC left)
 python3 tools/bench.py hil <args>         # raw crosspad-hil, venv resolved for you
 ```
 
 Exit codes match crosspad-hil: **0** fine, **1** the firmware is at fault, **2**
-the test setup is. `test` re-prepares the board before *each* scenario, because a
+the test setup is. A trial build (`--pr N`, or `--image DIR` for a dir holding
+`CrossPad.bin`) is a pull request's `build-<rev>-full` artifact, kept 3 days
+(`gh run rerun` brings it back), downloaded to `.crosspad/trial/`; the OTA writes
+the slot that was not running, so `bench.py hil cdc FW_SWITCH` goes back to what
+ran before. `test` re-prepares the board before *each* scenario, because a
 scenario that resets the board (smoke does) leaves it with no kit loaded and the
 next one then fails as a setup problem instead of telling you anything.
 

@@ -45,6 +45,8 @@
 #include "companion_sysex.h"
 #include "host_info.h"
 #include "usb_host_profile.h"
+#include "midi_kit_pc.h"
+#include "host_midi.h"
 #include "include/fw_updater.h"
 #include "include/cp_account.h"
 #include "include/cp_remote.h"
@@ -250,6 +252,12 @@ static void __attribute__((noinline)) softoff_gate_write()
 void app_arm_softoff_boot_gate()
 {
     if (s_softoff_nv_armed.exchange(true)) return;
+    /* A power-off is where the settings write queue has to have finished: a
+     * slider moved a second ago lives in RAM until its cooldown comes round.
+     * Ask for it here, before the gate, on the queue's own internal-stack task
+     * -- the STM cuts the rail a few hundred ms after it asks, and the gate
+     * write below is the one that must not be cut short. */
+    NvsSettingsStore::queueFlushWait("soft-off", 400);
     if (esp_ptr_internal(pxTaskGetStackStart(nullptr))) {
         softoff_gate_write();
         return;
@@ -1027,6 +1035,21 @@ extern "C" void app_main(void)
     NvsSettingsStore::getInstance().init();
     fw_slots_init();
     settings->loadFrom(NvsSettingsStore::getInstance());
+#ifdef BSP_BOARD_CROSSPAD_S3
+    {
+        /* The core's rate list goes to 96 kHz, the board's I2S and USB audio to
+         * 48 kHz. A stored rate above that (an old Settings pick, an imported
+         * backup) is brought back here, before anything reads it: the clock,
+         * the mixer, every node and what Settings shows then agree. */
+        const uint32_t stored = settings->audioEngine.sampleRate;
+        const uint32_t rate = bsp_i2s_supported_sample_rate(stored);
+        if (rate != stored) {
+            ESP_LOGW(TAG, "engine rate %lu Hz unsupported on this board, using %lu",
+                     (unsigned long)stored, (unsigned long)rate);
+            settings->audioEngine.sampleRate = rate;
+        }
+    }
+#endif
     {
         /* After a Store update the other slot holds the image we came from. */
         FwSlotInfo slots[2];
@@ -1077,6 +1100,8 @@ extern "C" void app_main(void)
     wifi_creds_init();
     instrument_host_init();                  // an app may borrow the pitched engine
 
+    kit_change_init();                       // the saved Program Change policy, before MIDI can answer
+    host_midi_init();                        // the Control Change map and the pad-LED lease, same reason
     midiCallbacks_init();
     crosspad::getPadManager().begin();
     hil_pad_inject_init();
