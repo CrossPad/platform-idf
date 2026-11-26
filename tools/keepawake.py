@@ -225,8 +225,14 @@ def cdc(base, words, expect=None, timeout=30.0):
 
 
 def probe(base):
-    """(info, raw reply). `PWR` is not in crosspad-hil's verb catalog yet, so it is
-    sent with an explicit expect prefix -- the CLI's own escape hatch."""
+    """(info, raw reply), sent with an explicit expect prefix on purpose.
+
+    `PWR` is catalogued on a pending crosspad-hil branch (task/cdc-verbs-power-encoder)
+    and in no released CLI yet, and the board may be running firmware that predates the
+    verb entirely -- so naming the prefix here is the version-independent way to ask,
+    and it costs nothing when the catalog does know the verb. The fallback that reads
+    `REG_IN_PWR_STATE` straight lives in main(), below.
+    """
     rc, text = cdc(base, ["PWR"], expect="PWR:")
     return parse_pwr(text), text
 
