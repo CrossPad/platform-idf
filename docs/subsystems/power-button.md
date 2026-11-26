@@ -98,9 +98,17 @@ the ones the headers imply. The STM dims the screen at `REG_CTL_DIM_TO_S`
 
 So an automated run fails silently in the middle, and the failure has two
 shapes. In LIGHT the console keeps answering — a scenario reads replies and
-concludes the device is live while its screen is dark and `UI_STATE` shows what
+assumes a live device while its screen is dark and `UI_STATE` shows what
 a dim board shows. Past the sleep timeout the console is gone altogether, and
-only a hand at the button recovers it. `PWR`, `PWR WAKE` and
+only a hand at the button recovers it.
+
+One more shape, worth knowing because it asks for a hand anyway: an OTA over
+CDC pops a confirm dialog on the device (`main/gui/ota_overlay.cpp`, with an
+"Auto-accept updates" checkbox) and `ota_flash.py` gets
+`OTA_ERROR timeout_confirm` until somebody presses it — on a board that may be
+sitting at 8 % backlight at that moment. The keep-awake rule below is what makes
+that dialog readable: the host request that started the transfer is itself the
+activity that relights the panel. `PWR`, `PWR WAKE` and
 `PWR KEEPAWAKE <sec>` over CDC (and the companion verbs, which is how a phone
 page steers a board in the audio profile) are the answer to both: they are the
 same `REG_CMD_USER_ACTIVITY` byte the touch callback and the IMU already write,
