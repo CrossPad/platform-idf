@@ -20,6 +20,7 @@ FetchContent_MakeAvailable(Catch2)
 set(MAIN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set(CORE_DIR ${MAIN_DIR}/../components/crosspad-core)
 set(PLATFORM_DIR ${MAIN_DIR}/../components/crosspad-platform-idf)
+set(BSP_DIR ${MAIN_DIR}/../components/bsp/crosspad/include)
 
 add_executable(hil_text_tests
     test_hil_text.cpp
@@ -90,6 +91,18 @@ if(NOT MSVC)
     target_link_options(surface_map_tests PRIVATE -fsanitize=address,undefined)
 endif()
 
+# What a fast turn of the navigation encoder is worth (components/bsp/crosspad/
+# include/indev/encoder_accel.h), header-only and free of ESP and LVGL includes
+# for exactly this test: the windows fed here are the 33 ms ones the board's read
+# callback really hands it.
+add_executable(encoder_accel_tests test_encoder_accel.cpp)
+target_include_directories(encoder_accel_tests PRIVATE ${BSP_DIR})
+target_link_libraries(encoder_accel_tests PRIVATE Catch2::Catch2WithMain)
+if(NOT MSVC)
+    target_compile_options(encoder_accel_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(encoder_accel_tests PRIVATE -fsanitize=address,undefined)
+endif()
+
 # The settings write queue (crosspad-platform-idf/NvsWriteQueue.cpp): the part
 # of the store's deferral that is pure policy, so the cooldown, the read-back,
 # the erase and the retry rules are pinned without a board and without NVS.
@@ -112,4 +125,5 @@ catch_discover_tests(cdc_line_tests)
 catch_discover_tests(kit_pc_tests)
 catch_discover_tests(host_midi_tests)
 catch_discover_tests(surface_map_tests)
+catch_discover_tests(encoder_accel_tests)
 catch_discover_tests(nvs_write_queue_tests)
