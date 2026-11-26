@@ -120,6 +120,7 @@ crosspad::PatternSequencer& getSequencer();
 #include "crosspad/kit/IKitManager.hpp"
 #include "crosspad/pad/IPadMix.hpp"
 #include "crosspad/platform/PlatformServices.hpp"
+#include "crosspad/audio/IOutputLevels.hpp"
 #include "crosspad/song/ISongEngine.hpp"
 #include "SongEnginePort.hpp"
 #include "bsp_sdmmc.h"
@@ -4158,6 +4159,46 @@ bool hil_control_handle_cdc(const char *buff, size_t len)
                  st ? (unsigned)st->masterFX.outVolumeCodec[0][0] : 0u,
                  (st && st->masterFX.speakersEnabled) ? "on" : "off");
         cdc_reply(reply);
+        return true;
+    }
+    /* SPEAKERS [0|1 [pct]] -- Settings -> Audio's Speakers switch and the
+     * speakers' saved level, set as that switch and the output's slider set
+     * them (IOutputLevels: saved; off drops the amp at once). Bare reads
+     * "SPEAKERS: on=0|1 level=N". A UI walk that lands on the switch leaves
+     * it on across reboots; crosspad-hil puts it back with this. The set runs
+     * on the LVGL thread (NVS writes), after the reply. */
+    if (strncmp(cmd, "SPEAKERS", 8) == 0 && (cmd[8] == 0 || cmd[8] == ' ')) {
+        static int s_spkOn = -1, s_spkPct = -1;
+        auto* st = crosspad::CrosspadSettings::getInstance();
+        int on = -1, pct = -1;
+        const int n = cmd[8] ? sscanf(cmd + 9, "%d %d", &on, &pct) : 0;
+        if (n == 0 && cmd[8] == 0) {
+            char reply[64];
+            snprintf(reply, sizeof(reply), "SPEAKERS: on=%d level=%u\r\n",
+                     (st && st->masterFX.speakersEnabled) ? 1 : 0,
+                     st ? (unsigned)st->masterFX.outVolumeCodec[0][0] : 0u);
+            cdc_reply(reply);
+            return true;
+        }
+        if (n < 1 || (on != 0 && on != 1) || (n == 2 && (pct < 0 || pct > 100)) ||
+            !crosspad::getPlatformServices().outputLevels) {
+            cdc_reply("ERR SPEAKERS [0|1 [pct]]\r\n");
+            return true;
+        }
+        s_spkOn = on;
+        s_spkPct = n == 2 ? pct : -1;
+        cdc_reply("OK\r\n");
+        lv_async_call_locked([](void*) {
+            auto* ol = crosspad::getPlatformServices().outputLevels;
+            for (int i = 0; ol && i < ol->outputs(); ++i) {
+                if (strcmp(ol->name(i), "Speakers") != 0) continue;
+                if (s_spkPct >= 0) ol->setLevel(i, s_spkPct);
+                ol->setMuted(i, s_spkOn == 0);
+            }
+            if (s_spkOn == 0) {
+                if (auto* cs = crosspad::getStm32Manager().configSync()) cs->writeReg8(REG_CTL_AUDIO_EN, 0);
+            }
+        }, nullptr);
         return true;
     }
     /* MIX_EQ [out ON|OFF|FLAT | out band OFF | out band PEAK|LOSHELF|HISHELF|HP|LP hz [db] [q]]

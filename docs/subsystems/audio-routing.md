@@ -363,6 +363,9 @@ A solo is kept with the desk (NVS) and silences every other channel, USB
 playback included; `MIX_LVL` does not show it. `MIX_SOLO` over CDC lists the
 soloed channels (`MIXSOLO: ch=0` or `ch=-`), `MIX_SOLO ch 0|1` sets one, and
 `tools/bench.py check` reports a solo left behind (`ready` clears it).
+`SPEAKERS` reads Settings -> Audio's Speakers switch and the speakers' saved
+level (`SPEAKERS: on=0 level=10`); `SPEAKERS 0|1 [pct]` sets them as the switch
+and the slider do, so a test that walked the UI can put them back.
 
 **From an audio track.** Arrange's audio track has MONITOR in its
 input sheet (a long press on its header, crosspad-arrange 0.22.0): the input it
