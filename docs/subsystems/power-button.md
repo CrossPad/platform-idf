@@ -160,6 +160,33 @@ is not a brick until someone touches it; and keeping its I2C slave answerable
 while it is in STOP1, or publishing the reason it slept in a way a host can
 read afterwards. The counterpart list is `components/stm32_hal/TODO.md`.
 
+**Three questions the sleep path still owes, and the cheap way to answer each:**
+
+- **Does the ESP come back on its own, and into what?** The gate re-checks the STM
+  every `STM_GATE_RECHECK_US` (60 s) and leaves after `STM_GATE_MAX_UNREADABLE`
+  (3) unreadable rounds -- so an ESP gated against an STM that answers nothing
+  boots itself roughly three minutes later. That is not a wake: the STM is still
+  asleep, so it boots with no pads, no encoder and no battery gauge, which is
+  exactly what `STM_FW running=0.0(down)` on a live-looking board means. Cheap
+  test: let a board soft-off, touch nothing, and watch `crosspad-hil devices` for
+  five minutes -- then ask whether a degraded boot like that should show a screen
+  of its own ("co-processor not answering") instead of a launcher whose pads do
+  nothing.
+- **Does a VBUS change wake a soft-off board that is on a charger?** The
+  ship-mode paragraph above says a charger on the ESP port brings a *shipped*
+  unit back; for a soft-off unit on a cable it is untested, and it decides
+  whether "unplug it and plug it back in" is a recovery anyone can be told to
+  do. The STM publishes the wake reason afterwards
+  (`REG_IN_PWR_WAKE_FLAGS`: bit0 active, bit1 qualified; `REG_IN_PWR_HOLD_*` the
+  real BTN1 hold time), so one read after the replug answers it.
+- **Two different faults look the same to a host.** The bridge USB
+  (`0483:5740`, its VCP and its MIDI) can stay enumerated while every STM
+  register reads `ERR i2c` -- seen tonight with the shared bus hung, and it would
+  also be seen in STOP1. The way to tell them apart from the host side is the
+  rest of that bus: `IMU_REG 0x6F` (WHO_AM_I, 0x6A) answers when the bus is
+  healthy and fails when it is hung. `tools/keepawake.py` does exactly that
+  before it says anything about sleep.
+
 **A charge-screen boot starts nothing else.** The ESP learns it at the wake
 gate (`PWR_STATE_CHARGE`, `charge_boot_active()` in `main.cpp`) and then skips
 the launcher and the apps (the screen is black under the charge overlay before
