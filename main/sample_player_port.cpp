@@ -1283,8 +1283,6 @@ void sample_player_port_engine_started(void)
 
 /* Last eight events the engine played, for SMPL_LAST over CDC — listening
  * cannot tell "the pad below sounds" from "the wrong note arrived". */
-#include <atomic>
-#include "esp_timer.h"
 struct EngineNoteEvent { uint8_t note; uint8_t wavIdx; uint32_t ms; };
 EngineNoteEvent g_engine_last[8];
 std::atomic<uint32_t> g_engine_last_count{0};

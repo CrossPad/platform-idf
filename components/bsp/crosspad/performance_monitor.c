@@ -9,7 +9,6 @@
 #include "performance_monitor.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
-#include "esp_heap_caps.h"
 #include "bsp_worker.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
