@@ -64,6 +64,9 @@ def test_flash_does_not_need_a_kit(monkeypatch):
         seen["kit"] = kit
         return bench.EXIT_BENCH        # stop right after: only the call matters
 
-    monkeypatch.setattr(hardware, "ensure", fake_ensure)
+    # bench, not "hardware": that name was never defined in this file, so the test
+    # below died with a NameError before it could assert anything. The behaviour it
+    # guards is in bench.py -- cmd_flash calls ensure(kit=False).
+    monkeypatch.setattr(bench, "ensure", fake_ensure)
     assert bench.cmd_flash(type("A", (), {"assets": False})()) == bench.EXIT_BENCH
     assert seen == {"kit": False}
