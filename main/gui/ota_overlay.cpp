@@ -14,8 +14,7 @@
 #include "lv_async_safe.h"
 #include "bsp/esp-bsp.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
-#include "nvs.h"
+#include "NvsSettingsStore.hpp"
 #include "crosspad-gui/components/app_orchestrator.h"
 
 extern lv_group_t * encoderTop_group;
@@ -32,15 +31,14 @@ static lv_obj_t * s_progress_label = nullptr;
 static lv_obj_t * s_confirm_auto_cb = nullptr;
 static int s_last_percent = -1;
 
-// ── NVS helpers (same namespace as update_app) ──────────────────────────
+// ── Auto-accept (same key and same store as update_app) ─────────────────
 
+// Through the settings store, not a handle of our own: the Firmware app reads
+// its checkbox from the store, which answers from its write queue, so a tick
+// written past it stayed invisible there for the rest of the boot. The value
+// reaches flash with the queue's flush (5 s, or the restart that ends the OTA).
 static void nvs_set_auto_accept(bool accept) {
-    nvs_handle_t h;
-    if (nvs_open("ota_prefs", NVS_READWRITE, &h) == ESP_OK) {
-        nvs_set_u8(h, "auto_accept", accept ? 1 : 0);
-        nvs_commit(h);
-        nvs_close(h);
-    }
+    NvsSettingsStore::getInstance().saveU8("ota_prefs", "auto_accept", accept ? 1 : 0);
 }
 
 // ── Progress overlay ────────────────────────────────────────────────────

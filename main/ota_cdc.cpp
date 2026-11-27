@@ -4,7 +4,7 @@
  *
  * Contains:
  *   - OTA state machine (begin, data write, complete/error)
- *   - NVS auto-accept preference
+ *   - Auto-accept preference (settings store, NVS ota_prefs/auto_accept)
  *   - CDC response helper
  *   - UI callback dispatch (no LVGL dependency)
  */
@@ -13,6 +13,7 @@
 #include "ota_cdc.h"
 #include "fw_slots.h"
 #include "motion_stream.h"
+#include "NvsSettingsStore.hpp"
 
 #include <string.h>
 #include <stdio.h>
@@ -22,8 +23,6 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "esp_delta_ota.h"
-#include "nvs_flash.h"
-#include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "tusb_cdc_acm.h"
@@ -81,13 +80,11 @@ void ota_user_respond(bool accepted) {
 /* ── OTA NVS preferences ────────────────────────────────────────────── */
 
 bool ota_auto_accept_enabled(void) {
-    nvs_handle_t h;
-    uint8_t val = 0;
-    if (nvs_open("ota_prefs", NVS_READONLY, &h) == ESP_OK) {
-        nvs_get_u8(h, "auto_accept", &val);
-        nvs_close(h);
-    }
-    return val != 0;
+    /* Through the settings store, like the Firmware app's checkbox and the
+     * confirm dialog's tick: the store answers a value still waiting in its
+     * write queue, where a direct NVS read would see what flash held up to 5 s
+     * ago and start an update the user had just asked to be prompted for. */
+    return NvsSettingsStore::getInstance().readU8("ota_prefs", "auto_accept", 0) != 0;
 }
 
 /* ── CDC response helper ─────────────────────────────────────────────── */
