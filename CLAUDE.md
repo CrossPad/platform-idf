@@ -1267,6 +1267,12 @@ Before/after evidence for anything that touches fonts, styles or layout: the
   per-file list of non-RT files), mixer; at `-Os` a UAC2 loopback glitched
   ~10×/s. 256 kB free. Keep `crosspad-core` off that list: it costs a 64 kB
   page (141 kB free), too little for the explorer.
+  The image is also built `-fno-ipa-sra` (top-level `CMakeLists.txt`): GCC's
+  IPA-SRA gave every file its own copy of small inline functions
+  (`std::string::_M_create` 38 times), 29 kB of `.flash.text` and with it a
+  64 kB page (2026-11-27, 52 → 51 pages). Every `-O2` path gets `-fipa-sra`
+  back (`_hot_flags` in `main/CMakeLists.txt`), so the render's code is what
+  was measured; a new `-O2` file takes `${_hot_flags}`, not a bare `-O2`.
   Check `xtensa-esp32s3-elf-size -A build_v2/CrossPad.elf | grep ext_ram.dummy`
   after anything big.
 - **LVGL's software blend lives in flash, and only the renderers we draw with

@@ -298,23 +298,38 @@ target_include_directories(${_lvgl_lib} PUBLIC "${CMAKE_CURRENT_LIST_DIR}/lvgl_a
 # LVGL's software renderer, and the audio path from I2S through the mixer to
 # the USB audio endpoints — at -Os a host loopback over UAC2 glitched ~10
 # times a second, at -O2 not once.
-target_compile_options(${_lvgl_lib} PRIVATE -O2)
+# The image is built -fno-ipa-sra (top-level CMakeLists.txt); every hot path
+# here gets -fipa-sra back so its code is what it was measured as.
+set(_hot_flags -O2 -fipa-sra)
+target_compile_options(${_lvgl_lib} PRIVATE ${_hot_flags})
 # Not the parts of LVGL no frame waits for: the themes (run once per object
 # created, to pick its styles), the observer (subject notifications) and the
 # text entry widgets (textarea, keyboard: the Wi-Fi password, a kit's name).
 idf_component_get_property(_lvgl_dir lvgl__lvgl COMPONENT_DIR)
+# The PNG decoder runs when an icon is first drawn, not per frame (23 kB at -O2).
 file(GLOB _lvgl_cold "${_lvgl_dir}/src/themes/*/*.c" "${_lvgl_dir}/src/others/observer/*.c"
-     "${_lvgl_dir}/src/widgets/textarea/*.c" "${_lvgl_dir}/src/widgets/keyboard/*.c")
+     "${_lvgl_dir}/src/widgets/textarea/*.c" "${_lvgl_dir}/src/widgets/keyboard/*.c"
+     "${_lvgl_dir}/src/libs/lodepng/*.c")
 set_source_files_properties(${_lvgl_cold} DIRECTORY ${_lvgl_dir} PROPERTIES COMPILE_OPTIONS -Os)
 foreach(_hot crosspad-mixer crosspad-platform-idf usb_device_uac
              espressif__tinyusb espressif__esp_tinyusb)
     idf_component_get_property(_hot_lib ${_hot} COMPONENT_LIB)
-    target_compile_options(${_hot_lib} PRIVATE -O2)
+    target_compile_options(${_hot_lib} PRIVATE ${_hot_flags})
 endforeach()
+# FX Pad sets its engine -O2 in its own CMakeLists; the whole component keeps
+# -fipa-sra so neither the engine nor its UI changes. Outside the fxpad kit it
+# builds nothing (an INTERFACE library).
+if(TARGET __idf_crosspad-fxpad)
+    idf_component_get_property(_fxpad_lib crosspad-fxpad COMPONENT_LIB)
+    get_target_property(_fxpad_type ${_fxpad_lib} TYPE)
+    if(NOT _fxpad_type STREQUAL "INTERFACE_LIBRARY")
+        target_compile_options(${_fxpad_lib} PRIVATE -fipa-sra)
+    endif()
+endif()
 set_source_files_properties(usb_audio_bridge.c
     audio/audio_control.cpp audio/audio_module.cpp audio/audio_task.cpp
     audio/engine_handoff.cpp
-    PROPERTIES COMPILE_OPTIONS -O2)
+    PROPERTIES COMPILE_OPTIONS "${_hot_flags}")
 # The pitched engine's voice render and the DSP it loads with, not the rest of
 # core: at -Os one voice took 123 us of the 1451 us block (49 at -O2), sixteen
 # overran it and the USB capture lost two seconds; all of core at -O2 crosses
@@ -333,7 +348,7 @@ file(GLOB _core_hot "${_core_dir}/src/instrument/*.cpp" "${_core_dir}/src/dsp/*.
 # of core.
 list(APPEND _core_hot "${_core_dir}/src/audio/OutputEq.cpp")
 set_source_files_properties(${_core_hot} DIRECTORY ${_core_dir}
-    PROPERTIES COMPILE_OPTIONS -O2)
+    PROPERTIES COMPILE_OPTIONS "${_hot_flags}")
 # The native sampler's store of resident heads runs when a kit is taken,
 # never in the render: -Os (2026-10-09). So does the take's copy of the kit
 # (KitTake.cpp, built on the asking thread).
