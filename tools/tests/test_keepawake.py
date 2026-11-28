@@ -181,3 +181,24 @@ def test_meter_main_stops_when_the_gauge_answers_nothing(tmp_path, capsys):
     assert "answers nothing" in printed
     # Only the header: a file of nothing but zeros would read like a measurement.
     assert out.read_text(encoding="utf-8").splitlines() == ["time,pwr_state,state,ibat_ma,vbat_mv,chg_flags"]
+
+def test_woke_is_a_board_that_is_on_not_one_that_is_dim():
+    """Measured on the second v2 board on this bench, 28.11.2026: REG_IN_PWR_STATE =
+    0x03 (PWR_STATE_WOKE) with the Sampler running on the display and all sixteen pads
+    lit, and it stayed 0x03 the whole time auto-sleep was off in Settings. The rule
+    used to group WOKE with LIGHT and tell the operator to wake a board that was
+    already on -- harmless to write, misleading to read, which is the part that
+    matters at 2 a.m.
+    """
+    action, why = ka.decide({"state": ka.WOKE}, None)
+    assert action == "ok" and "soft-off" in why
+    action, why = ka.decide({"state": ka.LIGHT}, None)
+    assert action == "wake" and "dim" in why
+
+
+def test_the_meter_names_every_state_the_gauge_can_answer():
+    # These names are what the CSV and the per-state summary group by, so a state that
+    # is missing here silently becomes "unknown" and its samples are dropped.
+    for value, name in ((0, "awake"), (1, "sleep_pending"), (2, "ship_pending"),
+                        (3, "woke"), (4, "light"), (5, "charge")):
+        assert ka.STATE_NAMES[value] == name

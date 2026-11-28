@@ -186,10 +186,17 @@ def decide(info, mode):
         state = info.get("state")
         if state is None:
             state = info.get("cached")
-        if state == LIGHT or state == WOKE:
+        if state == LIGHT:
             return "wake", ("dim: the ESP answers and the screen is dark; "
                             "`PWR WAKE` writes REG_CMD_USER_ACTIVITY and the board "
                             "lights back up")
+        if state == WOKE:
+            # PWR_STATE_WOKE is a board that came back from soft-off and is ON: lit
+            # screen, pads working. Measured on the second v2 board on this bench
+            # (COM41) on 28.11: REG_IN_PWR_STATE = 0x03 with the Sampler on the display
+            # and all sixteen pads glowing, and it stayed 0x03 for as long as auto-sleep
+            # was off. Calling that "dim" sends an operator to wake a board already on.
+            return "ok", "awake (back from soft-off: PWR_STATE_WOKE)"
         if state == AWAKE:
             quiet = info.get("host_quiet")
             suffix = "" if quiet is None else " (host quiet %ss)" % quiet
