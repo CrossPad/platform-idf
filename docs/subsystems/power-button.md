@@ -227,6 +227,8 @@ management), the update check and the STM update offer. USB comes up before the
 gate, so the host sees the CDC+MIDI profile for those seconds, never USB audio.
 The button on the charge screen (`PWR_STATE_WOKE`) restarts the ESP into a
 
+normal boot.
+
 **`PWR_STATE_WOKE` is an awake board, not a dim one.** On the second v2 board on this
 bench (COM41, STM 1.16) on 28.11.2026 `REG_IN_PWR_STATE` read 0x03 while the Sampler ran
 on the display with all sixteen pads lit, and it held at 0x03 for as long as auto-sleep
@@ -234,7 +236,6 @@ was off in Settings -- the state the STM parks in when there is nothing left to 
 of. `tools/keepawake.py` used to group 0x03 with `PWR_STATE_LIGHT` and answer
 "dim: the screen is dark, wake it", which is harmless to send and wrong to read; the two
 states answer separately now, with the measurement quoted in `decide()` and a test on it.
-normal boot.
 
 **Nested layers register, they do not rely on the app hook.** A layer that is
 not the app itself — the file explorer over the pad editor over the sampler
