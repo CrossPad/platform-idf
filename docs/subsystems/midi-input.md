@@ -139,18 +139,27 @@ over** — skipping would move every later program up one and drift the host's
 setlist under itself. In `group` such a slot has no kind to be counted in, so it
 is not part of the bucket at all; the map shows each mode the way it resolves.
 
-## Channels, and the one place they are off by one
+## Channels: 1..16 from the library, 0..15 after the callbacks
 
 The MIDI library gives callbacks channels **1..16**; the core API and the
 BLE output are **0-based** (`crosspad-core/include/crosspad/midi/IMidiOutput.hpp:15-16`).
-The note paths convert (`midiCallbacks.cpp:597-599`), but the `handleSample*`
-family — CC, aftertouch, bend, program — passes the 1-based value straight
-through, so a re-forwarded message lands one channel high
-(`MidiInputHandler.cpp:85-88` → `EspBleMidi.cpp:964-966`, which masks `& 0x0F`:
-channel 16 comes out as 1). Open PR #21 (`task/ble-fwd-channel`) fixes exactly
-that in the forwards. `main/midi_kit_pc.cpp` converts once at its own door
-(`kit_change_program(ch1, program)` takes 1..16 like a DAW and a person), so this
-feature does not depend on that fix and does not add to it.
+The callbacks convert once, at that door: every lambda in
+`main/midiCallbacks.cpp` passes `ch - 1` into core -- the notes
+(`:597-605`) and the `handleSample*` family, CC, aftertouch, bend and program,
+on both the STM32 and the USB side (`:640-686`; the rule is written above them
+at `:622-625`). Everything after the callbacks is 0-based, so a re-forwarded
+message keeps its channel: `EspBleMidi.cpp:940-974` only masks `& 0x0F`, and
+channel 16 comes out as 16. The output adapters go the other way, `channel + 1`
+into the library (`midiCallbacks.cpp:84-90`).
+
+A new callback passes `ch - 1`; a new output adapter passes `channel + 1`.
+Nothing downstream corrects a 1-based value, so a missed conversion shows up as
+one message type landing a channel above the notes at the peer (16 wrapping
+to 1).
+
+The one deliberate exception is `main/midi_kit_pc.cpp`: it takes the library's
+value at its own door (`kit_change_program(ch, program)`, 1..16 like a DAW and a
+person, `midiCallbacks.cpp:655`, `:685`) and does its own arithmetic from there.
 
 ## Host Control Changes: a DAW's faders on this board's levels
 
