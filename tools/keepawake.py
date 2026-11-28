@@ -400,9 +400,172 @@ def meter_main(base, minutes, interval, out_path, cdc=cdc, clock=time.time, paus
     return EXIT_OK
 
 
+# ── the two-point drain: what the board costs when nobody touches it ──────────
+#
+# `meter` reads REG_PWR_IBAT, and on a bench with the cable in that reading is
+# near zero. Measured on the second v2 board on 28.11.2026: **+5 mA** with an app
+# running on its screen, because the current that register sees is the one
+# crossing the battery terminals, and with USB in the charger feeds the system and
+# the battery rests. The register is fine; the condition is not.
+#
+# The idle-power design note needs the opposite condition, and without a shunt
+# resistor the honest number comes from the STM's own SoC estimate across a
+# window when the cable is out: 0.1 % of a 4000 mAh cell is 4 mAh, so half an hour
+# at 200 mA is 100 mAh -- a fortieth of the pack, far outside the estimator's
+# wander, and it needs nothing but the console at both ends. Two commands with
+# real time in between:
+#
+#     tools/keepawake.py drain mark        # read the gauge, write the mark
+#     unplug USB, leave the board alone for 30 minutes, plug it back
+#     tools/keepawake.py drain calc        # read again, report the average
+#
+# What the estimator is and is not: STM firmware runs an EKF over the coulomb
+# count and the voltage curve, so a "drain" here is a difference in an estimate,
+# not an integration of current. That is why the caveats below are part of the
+# result: the estimator re-converges when the pack is at rest and the charge
+# status says done, which is exactly the state a charged board on a desk sits in.
+# The two-point number is a bound unless the window is long and the board is
+# actually running down -- which is what the note in
+# docs/subsystems/power-button.md asks for and what a bench can get for free.
+
+REG_PWR_SOC_PCT = 0x0223
+REG_PWR_SOC_PMIL_HI = 0x0224
+REG_PWR_SOC_PMIL_HI = 0x0224   # the estimate is percent x 10: 993 is 99.3 %,
+# one unit is 0.1 % of the pack, 4 mAh on a 4000 mAh cell
+REG_PWR_SOC_PMIL_LO = 0x0225
+REG_PWR_SOC_FLAGS = 0x0226
+SOC_FLAG_VALID = 0x01
+SOC_FLAG_CONVERGED = 0x02
+SOC_FLAG_NO_BATTERY = 0x20
+CHG_FLAG_VBUS_PRESENT = 0x08
+BATTERY_MAH = 4000          # the spec table's figure; the only capacity this product states
+SOC_GRANULARITY = 3.0       # permil: below a change this size, treat it as a bound
+
+
+def read_gauge(base, cdc=cdc):
+    """State, SoC estimate and the voltages around it -- or None when the gauge
+    is not talking (hung I2C, soft-off, or a board too old for the SoC block)."""
+    _, a = cdc(base, ["STM_REG", "0x012D"], expect="REG")
+    _, b = cdc(base, ["STM_REG", "0x0200", str(POWER_BLOCK_LEN)], expect="REG")
+    st, pw = parse_reg_block(a), parse_reg_block(b)
+    pm_hi, pm_lo = pw.get(REG_PWR_SOC_PMIL_HI), pw.get(REG_PWR_SOC_PMIL_LO)
+    if pm_hi is None or pm_lo is None:
+        return None
+    vhi, vlo = pw.get(REG_PWR_VBAT_HI), pw.get(REG_PWR_VBAT_LO)
+    ibhi, iblo = pw.get(REG_PWR_IBAT_HI), pw.get(REG_PWR_IBAT_LO)
+    return {
+        "state": st.get(REG_PWR_STATE),
+        "soc_permil": ((pm_hi & 0xFF) << 8) | (pm_lo & 0xFF),
+        "soc_pct": pw.get(REG_PWR_SOC_PCT),
+        "soc_flags": pw.get(REG_PWR_SOC_FLAGS),
+        "chg": pw.get(REG_PWR_CHG_STATUS),
+        "mv": ((vhi << 8) | vlo) if vhi is not None and vlo is not None else None,
+        "ma": signed16(ibhi, iblo) if ibhi is not None and iblo is not None else None,
+    }
+
+
+def drain_estimate(mark, later, capacity_mah=BATTERY_MAH):
+    """The average current the pack gave between two readings. Discharge is
+    positive. Pure on purpose: the arithmetic is the part that can be wrong
+    quietly, and the hardware only ever contributes two numbers and a clock."""
+    out = {"delta_permil": None, "seconds": None, "mah": None, "ma": None, "why": []}
+    if mark is None or later is None:
+        out["why"].append("the gauge did not answer at both ends of the window")
+        return out
+    delta = mark["soc_permil"] - later["soc_permil"]
+    seconds = later["t"] - mark["t"]
+    out["delta_permil"], out["seconds"] = delta, seconds
+    if seconds <= 0:
+        out["why"].append("the window is not positive: was the mark written after the reading?")
+        return out
+    mah = delta / 1000.0 * capacity_mah   # the estimate is in 0.1 % units: a thousand of them is the whole pack
+    out["mah"], out["ma"] = mah, mah / (seconds / 3600.0)
+    if delta < 0:
+        out["why"].append("the estimate rose across the window -- the pack was being charged, "
+                          "so this is not a drain number")
+    elif abs(delta) < SOC_GRANULARITY:
+        out["why"].append("the change is under %g units of 0.1 %% (%.1f mAh): the estimator "
+                          "re-converges at rest, so read this as an upper bound"
+                          % (SOC_GRANULARITY, SOC_GRANULARITY / 1000.0 * capacity_mah))
+    if (mark.get("chg") or 0) & CHG_FLAG_VBUS_PRESENT:
+        out["why"].append("USB was present when the mark was taken, so that reading is the "
+                          "charger's view; take the mark on battery")
+    if not (mark.get("soc_flags") or 0) & SOC_FLAG_VALID:
+        out["why"].append("the mark was taken while the gauge called its estimate invalid")
+    if not (later.get("soc_flags") or 0) & SOC_FLAG_VALID:
+        out["why"].append("the far reading was taken while the gauge called its estimate invalid")
+    if (later.get("soc_flags") or 0) & SOC_FLAG_NO_BATTERY:
+        out["why"].append("the charger now reports no battery, so the far reading is not the pack's")
+    return out
+
+
+def drain_main(base, step, state_path, minutes, cdc=cdc, clock=time.time):
+    """`mark` writes the near end, `calc` reads the far end and reports."""
+    path = state_path or "crosspad-drain-mark.json"
+    if step == "mark":
+        g = read_gauge(base, cdc=cdc)
+        if g is None:
+            print("the gauge answers nothing: the STM link is hung or the board is in "
+                  "soft-off; nothing was written")
+            return EXIT_UNREACHABLE
+        g["t"] = clock()
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            json.dump(g, fh, indent=1)
+        flags = g.get("soc_flags") or 0
+        print("marked: SoC %.1f %% of the pack (flags %02X%s), pack %s mV, IBAT %s mA, state %s, USB %s"
+              % (g["soc_permil"] / 10.0, flags,
+                 "" if flags & SOC_FLAG_CONVERGED else ", NOT converged yet",
+                 g.get("mv"), g.get("ma"), STATE_NAMES.get(g.get("state"), "?"),
+                 "present" if (g.get("chg") or 0) & CHG_FLAG_VBUS_PRESENT else "away"))
+        if (g.get("chg") or 0) & CHG_FLAG_VBUS_PRESENT:
+            print("  USB is in right now. For a drain number the mark has to be taken on "
+                  "battery: unplug, wait a couple of minutes for the estimate to settle, "
+                  "then run this again -- or take it now and treat the result as a bound.")
+        if not flags & SOC_FLAG_CONVERGED:
+            print("  the estimator has not converged: a window started now measures its "
+                  "settle as well as the load.")
+        print("now: unplug USB, do not touch the board for %d minutes, plug it back in, "
+              "then run the same tool with `drain calc`. Mark kept in %s" % (minutes, path))
+        return EXIT_OK
+
+    try:
+        with open(path, encoding="utf-8") as fh:
+            mark = json.load(fh)
+    except (FileNotFoundError, ValueError):
+        print("no usable mark at %s: run `drain mark` first (or point -o at the file)" % path)
+        return EXIT_UNREACHABLE
+    later = read_gauge(base, cdc=cdc)
+    if later is None:
+        print("the gauge answers nothing now, so the far end of the window is missing")
+        return EXIT_UNREACHABLE
+    later["t"] = clock()
+    res = drain_estimate(mark, later)
+    print("window %.1f min: SoC %.1f %% -> %.1f %%  (%+d permil)"
+          % ((res["seconds"] or 0) / 60.0, (mark["soc_permil"]) / 10.0,
+             later["soc_permil"] / 10.0, res["delta_permil"] or 0))
+    if res["ma"] is not None:
+        print("  %.1f mAh out of a %d mAh pack  ->  %+.0f mA average"
+              % (res["mah"], BATTERY_MAH, res["ma"]))
+        if res["ma"] > 0:
+            print("  at that rate the same pack runs %.1f h" % (BATTERY_MAH / res["ma"]))
+    for why in res["why"]:
+        print("  caveat: " + why)
+    out_path = path.replace(".json", "-result.json")
+    with open(out_path, "w", encoding="utf-8", newline="") as fh:
+        json.dump({"mark": mark, "later": later, "result": res, "capacity_mah": BATTERY_MAH},
+                  fh, indent=1)
+    print("wrote %s -- put it in PRs/measurements.md, that is where these numbers go" % out_path)
+    return EXIT_OK
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("-d", "--device", default=None, help="passed through to crosspad-hil")
+    ap.add_argument("--no-hub", action="store_true",
+                        help="passed through to crosspad-hil: address the port "
+                             "directly. A bench with two boards attached needs it: "
+                             "the hub can neither pick between them nor address "
+                             "either one")
     sub = ap.add_subparsers(dest="mode", required=True)
     sub.add_parser("status", help="print the PWR line and a verdict")
     sub.add_parser("wake", help="ask the STM for activity now")
@@ -415,13 +578,24 @@ def main(argv=None):
     meter.add_argument("--interval", type=float, default=10.0,
                        help="seconds between samples (default 10; each sample is two console reads)")
     meter.add_argument("-o", "--out", default=None, help="CSV path")
+    drain = sub.add_parser("drain", help="measure what the board costs untouched: mark the "
+                           "gauge, unplug USB, come back, then calculate")
+    drain.add_argument("step", choices=("mark", "calc"))
+    drain.add_argument("-o", "--state", default=None,
+                       help="mark file (default crosspad-drain-mark.json)")
+    drain.add_argument("--minutes", type=int, default=30,
+                       help="the window you plan to leave the board alone for, printed back")
     args = ap.parse_args(argv)
 
     hil = hil_path()
     if not hil:
         print("crosspad-hil not found: install it, or set CROSSPAD_HIL to its entry point")
         return EXIT_NO_TOOLING
-    base = [hil] + (["-d", args.device] if args.device else [])
+    base = ([hil] + (["--no-hub"] if args.no_hub else []) +
+            (["-d", args.device] if args.device else []))
+
+    if args.mode == "drain":
+        return drain_main(base, args.step, args.state, args.minutes)
 
     if args.mode == "meter":
         return meter_main(base, args.minutes, args.interval, args.out)

@@ -202,3 +202,140 @@ def test_the_meter_names_every_state_the_gauge_can_answer():
     for value, name in ((0, "awake"), (1, "sleep_pending"), (2, "ship_pending"),
                         (3, "woke"), (4, "light"), (5, "charge")):
         assert ka.STATE_NAMES[value] == name
+
+
+
+def _block(pmil, pct=99, flags=0x0F, chg=0x00, mv=4100, ma=0):
+    """A 43-byte POWER block, answered the way `STM_REG 0x0200 43` answers it.
+
+    `pmil` is in the units the register actually uses: SoC percent times ten, so
+    993 is 99.3 % -- one unit is 0.1 % of the pack, which is 4 mAh of a 4000 mAh
+    cell. Getting this wrong is how a "25 permil" difference turns into 25 % of
+    the battery on paper."""
+    b = [0] * 43
+    b[0x00], b[0x01] = (mv >> 8) & 0xFF, mv & 0xFF          # REG_PWR_VBAT_HI/LO
+    b[0x07] = chg                                           # REG_PWR_CHG_STATUS
+    b[0x23] = pct                                           # REG_PWR_SOC_PCT
+    b[0x24], b[0x25] = (pmil >> 8) & 0xFF, pmil & 0xFF      # REG_PWR_SOC_PMIL_HI/LO
+    b[0x26] = flags                                         # REG_PWR_SOC_FLAGS
+    b[0x29], b[0x2A] = (ma >> 8) & 0xFF, ma & 0xFF          # REG_PWR_IBAT_HI/LO
+    return "REG 0200: " + " ".join("%02X" % x for x in b)
+
+
+def _gauge(units, **kw):
+    """A gauge dict, `units` in 0.1 % of the pack."""
+    return {"t": kw.get("t", 0.0), "state": kw.get("state", 0), "soc_permil": units,
+            "soc_pct": kw.get("pct", 99), "soc_flags": kw.get("flags", 0x0F),
+            "chg": kw.get("chg", 0x00), "mv": kw.get("mv", 4100), "ma": kw.get("ma", 0)}
+
+
+def test_two_gauge_points_become_an_average_current():
+    """30 minutes across which the estimate falls from 95.0 % to 92.5 % of a
+    4000 mAh pack: 2.5 % is 100 mAh, so 200 mA. This is the arithmetic the
+    idle-power ladder is gated on, and nobody has had the number before."""
+    res = ka.drain_estimate(_gauge(950, t=1000.0), _gauge(925, t=2800.0))
+    assert res["delta_permil"] == 25              # 25 units of 0.1 % = 2.5 % of the pack
+    assert res["mah"] == 100.0
+    assert abs(res["ma"] - 200.0) < 1e-9
+    assert res["why"] == []
+
+
+def test_a_battery_being_charged_is_reported_as_such_and_not_as_a_negative_load():
+    res = ka.drain_estimate(_gauge(800, t=0.0), _gauge(820, t=1800.0))
+    assert res["ma"] is not None and res["ma"] < 0
+    assert any("charged" in w for w in res["why"])
+
+
+def test_a_change_the_estimator_cannot_tell_from_its_own_settle_becomes_a_bound():
+    # 2 units is 8 mAh: over half an hour that computes to a plausible-sounding
+    # 16 mA, built entirely out of the EKF re-converging on a rested pack.
+    res = ka.drain_estimate(_gauge(900, t=0.0), _gauge(898, t=1800.0))
+    assert res["ma"] is not None
+    assert any("upper bound" in w for w in res["why"])
+
+
+def test_a_mark_taken_with_usb_in_is_flagged_because_that_figure_is_the_chargers():
+    mark = _gauge(950, t=0.0, chg=ka.CHG_FLAG_VBUS_PRESENT | 0x02)
+    res = ka.drain_estimate(mark, _gauge(925, t=1800.0))
+    assert any("USB was present" in w for w in res["why"])
+
+
+def test_an_estimate_the_gauge_does_not_vouch_for_is_said_so_at_both_ends():
+    mark = _gauge(950, t=0.0, flags=ka.SOC_FLAG_CONVERGED)   # the valid bit is missing
+    res = ka.drain_estimate(mark, _gauge(925, t=1800.0, flags=0x00))
+    assert sum(1 for w in res["why"] if "invalid" in w) == 2
+
+
+def test_a_missing_reading_ends_the_window_instead_of_inventing_a_number():
+    res = ka.drain_estimate(_gauge(950, t=0.0), None)
+    assert res["ma"] is None and res["mah"] is None
+    assert res["why"] == ["the gauge did not answer at both ends of the window"]
+    res2 = ka.drain_estimate(_gauge(950, t=500.0), _gauge(925, t=500.0))
+    assert res2["ma"] is None and "not positive" in res2["why"][0]
+
+
+def test_the_constants_the_note_quotes_are_the_ones_the_code_uses():
+    # "one unit of this register is 0.1 % of the pack, which is 4 mAh of a 4000 mAh
+    # cell" is the claim a person decides on; it has to be true of the arithmetic.
+    assert ka.BATTERY_MAH == 4000
+    assert 1 / 1000.0 * ka.BATTERY_MAH == 4.0
+    assert ka.SOC_GRANULARITY / 1000.0 * ka.BATTERY_MAH == 12.0
+
+
+def test_mark_then_calc_round_trips_against_a_scripted_console(tmp_path):
+    """The whole two-command flow with no board: what `drain mark` writes has to be
+    what `drain calc` reads, and the number out has to be the number the two
+    readings imply."""
+    blocks = iter([_block(950, chg=0x00), _block(925, chg=ka.CHG_FLAG_VBUS_PRESENT)])
+    calls = []
+
+    def fake(base, words, expect=None, timeout=30.0):
+        calls.append(words)
+        if words[1] == "0x012D":
+            return True, "REG 012D: 00"
+        return True, next(blocks)
+
+    path = str(tmp_path / "mark.json")
+    assert ka.drain_main(["hil"], "mark", path, 30, cdc=fake, clock=lambda: 1000.0) == ka.EXIT_OK
+    assert ka.drain_main(["hil"], "calc", path, 30, cdc=fake, clock=lambda: 2800.0) == ka.EXIT_OK
+    with open(path.replace(".json", "-result.json"), encoding="utf-8") as fh:
+        import json as _json
+        out = _json.load(fh)
+    assert out["mark"]["soc_permil"] == 950 and out["later"]["soc_permil"] == 925
+    assert abs(out["result"]["ma"] - 200.0) < 1e-9
+    assert len(calls) == 4                      # two reads at each end, and no more
+
+
+def test_calc_without_a_mark_says_where_to_start_rather_than_guessing(tmp_path):
+    def fake(base, words, expect=None, timeout=30.0):
+        return True, "REG 012D: 00" if words[1] == "0x012D" else _block(940)
+    rc = ka.drain_main(["hil"], "calc", str(tmp_path / "nothing-here.json"), 30, cdc=fake)
+    assert rc == ka.EXIT_UNREACHABLE
+
+
+def test_an_unreachable_gauge_stops_the_flow_at_the_near_end(tmp_path):
+    def deaf(base, words, expect=None, timeout=30.0):
+        return False, "ERR i2c"
+    mark = str(tmp_path / "m.json")
+    assert ka.drain_main(["hil"], "mark", mark, 30, cdc=deaf) == ka.EXIT_UNREACHABLE
+    import os
+    assert not os.path.exists(mark)             # nothing written when nothing answered
+
+
+def test_the_mark_remembers_the_state_the_board_was_in(tmp_path):
+    """A drain measured while the board sits dim is not the drain of the same state,
+    so the mark has to carry the power state it was taken in: 0x012D on the wire, its
+    number in the file."""
+    blocks = iter([_block(950, chg=0x00)])
+
+    def fake(base, words, expect=None, timeout=30.0):
+        if words[1] == "0x012D":
+            return True, "REG 012D: 04"              # PWR_STATE_LIGHT: the dim state
+        return True, next(blocks)
+
+    path = str(tmp_path / "m.json")
+    assert ka.drain_main(["hil"], "mark", path, 5, cdc=fake, clock=lambda: 100.0) == ka.EXIT_OK
+    import json as _json
+    with open(path, encoding="utf-8") as fh:
+        mark = _json.load(fh)
+    assert mark["state"] == 4 and mark["soc_permil"] == 950 and mark["t"] == 100.0

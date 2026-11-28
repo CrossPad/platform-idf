@@ -210,6 +210,23 @@ the short version; the number worth having is `awake` minus `light`, and `keepaw
 wake` in a second window is how you force that comparison instead of waiting for the
 board to dim on its own. For scale: on a 4000 mAh cell, 100 mA is about 40 hours.
 
+**And `drain`, because `IBAT` cannot answer the idle question from a desk.** With USB
+connected the current register reads a handful of milliamps -- +5 mA measured on 28.11.2026
+with an app running on the screen -- because what it sees is the current crossing the
+battery terminals, and on a charger the battery rests while the system runs off VBUS. The
+honest number, short of a shunt resistor, comes from the SoC estimate the STM maintains
+over a window when the cable is out: `drain mark` writes the estimate to a file, half an hour of
+leaving the board alone follows, `drain calc` reads it again and reports the average. The
+estimate is in units of 0.1 % of the pack, so one unit is 4 mAh of a 4000 mAh cell, and 30
+minutes at 200 mA is 100 mAh -- far outside the wander of the estimator.
+
+Its limits are part of the result rather than a footnote, because a difference in an
+estimate is not an integration of current: under 3 units (12 mAh) the estimator is
+re-converging on a rested pack and the figure is only an upper bound; a mark taken while
+VBUS is present is a reading from the charger, not from the battery; an estimate the gauge
+does not call valid is refused; and a rising estimate means the pack was being charged,
+which is the mistake this whole path exists to avoid making twice.
+
 **A host can already press the button logically.** `PWR_GESTURE CLICK|HOLD` is
 catalogued in crosspad-hil and injects the gesture into the STM: a `HOLD` (at or above
 `REG_CTL_LONG_PRESS`, 2.4 s by default) takes the board into soft-off exactly as a
