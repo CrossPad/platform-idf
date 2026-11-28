@@ -145,18 +145,43 @@ class MidiOut:
     no MIDI stack at all. That is deliberate: the part worth testing here is the
     bitmap-to-pad mapping, and it must not need hardware to be checked."""
 
-    def __init__(self, name_part: str = "crosspad"):
+    @staticmethod
+    def port_names() -> list[str]:
+        import rtmidi
+        out = rtmidi.MidiOut()
+        return [out.get_port_name(i) for i in range(out.get_port_count())]
+
+    def __init__(self, name_part: str = "crosspad", index: int | None = None):
         import rtmidi
         self.rt = rtmidi
         self.out = None
-        probe = rtmidi.MidiOut()
-        names = [probe.get_port_name(i) for i in range(probe.get_port_count())]
+        names = self.port_names()
+        if index is not None:
+            # Pick by the number --midi-list prints. Matching by name is how this tool
+            # found a board before, and on a bench with two of them the names differ by
+            # a digit and a space -- which is also exactly what a shell eats.
+            if not 0 <= index < len(names):
+                raise SystemExit(f"no MIDI output port {index}; this machine offers "
+                                 f"0..{len(names) - 1} (see --midi-list)")
+            self.index = index
+            self.name = names[index]
+            return
         cand = [i for i, n in enumerate(names) if name_part.lower() in n.lower()]
         esp = [i for i in cand if "midi+serial" not in names[i].lower()]
         cand = esp or cand
         if not cand:
             raise SystemExit(f"no MIDI output matching {name_part!r}; the ports this "
                              f"machine offers are: {names}")
+        if len(cand) > 1:
+            # Two boards on one bench, two ports whose names both contain the filter.
+            # Choosing the wrong one paints a board nobody is looking at and reports
+            # complete success, which is the worst kind of nothing: measured here on
+            # 28.11.2026, three runs of the show over a port belonging to the other
+            # board, each one printing a byte count and changing nothing visible.
+            print(f"warning: {len(cand)} MIDI outputs match {name_part!r}: "
+                  f"{[names[i] for i in cand]}")
+            print(f"         driving {names[cand[0]]!r}; pass --midi to choose another, "
+                  f"or --midi-list to see them all")
         self.index = cand[0]
         self.name = names[cand[0]]
 
@@ -207,6 +232,18 @@ class Sender:
 
     def palette(self, triples: list[int]) -> None:
         self.syx(PAL_LOAD, [0, len(triples) // 3] + triples)
+
+    def claim_pads(self, first: int = 0, count: int = 16) -> None:
+        """Take host mode on the pads this run is about to paint.
+
+        The surface map's pad mode is per pad: 0 = the board paints its own colours
+        again, 1 = the host holds this pad (docs/subsystems/surface-sysex.md). A parked
+        colour is not ownership: write colours without taking the mode and every frame
+        is accepted, parked and repainted by the app in the same beat. On current
+        firmware that is a run which appears to do nothing and reports no error
+        anywhere -- measured on a bench, twice, before this existed. `give_back()`
+        puts mode 0 back, so the board gets its own colours at the end either way."""
+        self.syx(SEC_WRITE, [S_PAD_MODE, first, count] + [1] * count)
 
     def anim(self, which: int, period_ms: int) -> None:
         self.syx(SEC_WRITE, [S_ANIM, 0, 2, which, max(1, period_ms // 10)])
@@ -273,9 +310,34 @@ def main() -> int:
     ap.add_argument("--camera", action="store_true",
                     help="freeze on one slide and let the webcam say whether the pads are lit "
                          "the way the bitmap asked")
+    ap.add_argument("--freeze", type=int, default=None, metavar="COLUMN",
+                    help="paint one window of the strip and hold it still: the frame a "
+                         "photograph, a camera check or a retake of the movie needs. A "
+                         "window is 4 columns and a glyph is 3 plus a blank column, so one "
+                         "frame holds exactly one letter -- the word is legible in motion, "
+                         "not in a still. --list prints one line per letter, with the column to pass")
+    ap.add_argument("--freeze-for", type=float, default=6.0, metavar="SECONDS",
+                    help="how long to hold the frozen window (default 6 s, enough to "
+                         "photograph; the pads are handed back when it ends)")
 
     ap.add_argument("--midi", default=None, help="MIDI port name to match (default: the ESP's own)")
+    ap.add_argument("--midi-index", type=int, default=None, metavar="N",
+                    help="drive MIDI output port N, the number --midi-list prints; with two "
+                         "boards on the bench this is the only way to be sure which one is "
+                         "getting the frames")
+    ap.add_argument("--midi-list", action="store_true",
+                    help="print every MIDI output this machine offers and exit -- with two "
+                         "boards attached the names are nearly identical and guessing which "
+                         "one is the board in front of the camera is not a strategy")
     a = ap.parse_args()
+
+    if a.midi_list:
+        # Deliberately before anything else: this is the question "what is plugged in",
+        # and it should answer it without needing --list, a board, or a hub lease.
+        names = MidiOut.port_names()
+        for i, n in enumerate(names):
+            print(f"  {i:>2}  {n}")
+        return 0
 
     cols = strip_columns()
     if a.list:
@@ -285,6 +347,13 @@ def main() -> int:
             pads = [(3 - r) * 4 + c for c in range(4)]
             shown = " ".join(f"pad {n:<2d}" for n in pads)
             print("  " + cols[r].replace(".", "\u00b7") + "   ->   " + shown)
+        ruler = "".join(str(c % 10) for c in range(len(cols[0])))
+        print("  column ruler for --freeze: " + ruler)
+        for i, ch in enumerate(WORD):
+            c = i * 4
+            top = cols[0][c:c + 4].replace(".", "\u00b7")
+            lit = sum(1 for r in range(4) for cell in cols[r][c:c + 4] if cell == "#")
+            print(f"    --freeze {c:<2d}  letter {ch!r}: top row {top}, {lit} pads lit")
         print("  (pads 0..3 are the BOTTOM row of the board; the printed label on the case "
               "is index + 1)")
         print("  the same strip, laid out as the board is held (a window at column 6):")
@@ -297,6 +366,7 @@ def main() -> int:
     if a.dry_run:
         s = Sender()
         s.palette(build_palette())
+        s.claim_pads()
         for step in range(total):
             s.grid(frame_at(cols, step))
         s.give_back()
@@ -314,8 +384,11 @@ def main() -> int:
     from crosspad_hil import hub_link
 
     with hub_link.exclusive("ledshow: pad slide show over the SysEx surface"):
-        midi = MidiOut(name_part=a.midi or "crosspad")
+        midi = MidiOut(name_part=a.midi or "crosspad", index=a.midi_index)
         midi.open()
+        # Two boards on one bench means two ports whose names both contain
+        # "crosspad"; say which one is being driven.
+        print(f"midi out: {midi.name}")
         # There used to be a CDC session here as well, opened for --camera and closed at
         # the end without ever being asked anything: the camera check reads the pads from
         # a frame, not from the board, so the session bought nothing and cost a port.
@@ -326,7 +399,27 @@ def main() -> int:
             calib = cam.load_calib(cam.CALIB)
         try:
             s.palette(build_palette())
+            s.claim_pads()
             time.sleep(0.06)
+            if a.freeze is not None:
+                # One window, held, and nothing else: the show is 35 frames a second for
+                # the eye, which is exactly what a camera cannot read. Returning from here
+                # still runs the finally below, so the pads go back to the board.
+                # `--list` numbers the strip the person is reading; `frame_at` indexes the
+                # copy padded with four blank columns on each side. The gap between the two
+                # is four, and without adding it `--freeze 20` paints the window that
+                # `--list` calls 16 -- an off-by-four that only shows up when somebody
+                # photographs the wrong letter and wonders why.
+                col = max(0, min(total - 4, a.freeze + 4))
+                frame = frame_at(cols, col)
+                s.grid(frame)
+                print(f"frozen window at strip column {col - 4} (held {a.freeze_for:g} s) -- "
+                      f"pads as the board is held (top row first):")
+                for line in describe_grid(frame):
+                    print("   " + line)
+                print(f"lit pads: {[i for i, v in enumerate(frame) if v]}")
+                time.sleep(a.freeze_for)
+                return 0
             for loop in range(max(1, a.loops)):
                 # The scroll: one 24-byte frame per step, the word walking across the grid.
                 for step in range(total):

@@ -77,6 +77,53 @@ the bottom is 0..3, a lit cell at the left edge is pad 12 and not 15, and that t
 the letter `p` -- the one letter in the font with a left-hand side -- stays on the left.
 Run against the old loop, those tests fail exactly as they should; the check was done.
 
+
+## What a board says about a pad show, and what a photograph cannot
+
+`SURFACE STATUS` and `SURFACE PAD <n>` (the SysEx control surface's own record, decoded in
+`main/include/surface_map.h`) are the authority on whether a host painted a pad. A
+photograph is not, and on 28.11.2026 that distinction cost three runs of this tool.
+
+Painting the word with the corrected row order and asking the board mid-paint:
+
+```
+SURFACE: writes=11 ... restores=32 skipped=0 refused=0 claims=0xFFFF held=0xFFFF
+SURFACE PAD 0  : pad=0  now=FE5420 wrote=FE5420 before=20FF10 claim=1 mine=1 hold=1
+SURFACE PAD 9  : pad=9  now=000000 wrote=000000 before=20FF10 claim=1 mine=1 hold=1
+SURFACE PAD 11 : pad=11 now=000000 wrote=000000 before=400000 claim=1 mine=1 hold=1
+```
+
+Every pad reads `claim=1 mine=1 hold=1`: the host owns it, the colour on it is the one the
+host wrote, and the surface may still take it back. Pad 0 carries the palette colour
+(`0x7F,0x2A,0x10` on the wire, doubled to `FE5420` on the strip); the dark cells of the
+glyph read `000000`; `before=` is the colour the app had them (`20FF10`) — which is why
+every photograph of this board shows a field of green pads with a word in the middle of it.
+
+The photograph had lied about two pads. In the frame, `PAD 10` and `PAD 12` looked lit
+while the glyph asked for them dark, and the reasonable reading was "the app is winning on
+two of sixteen". The board says otherwise, and the physics says otherwise too: the pads are
+translucent cubes over a single WS2812, photographed at 3x from a 1080p frame with the
+exposure blown by the two neighbours on either side. Glow is not a colour write. **Ask the
+surface first, and use the camera for geometry — where the squares are — not for what is on
+them.**
+
+`writes=11 → 12` and `restores=32 → 48` around a run are the other half of the story:
+sixteen pads handed back, exactly one give-back, nothing refused and nothing skipped. If a
+run ever shows `refused=` or `skipped=` climbing, the app moved a pad between the write and
+the restore, and that is a real race rather than a photographic illusion.
+
+Two tool traps in the same session:
+
+- The installed `crosspad-hil` (1.6.0) does not know `SURFACE` — `UNKNOWN_VERB` — while the
+  checkout does. Same lag as `LED_HOST`. Running the checkout (`sys.path` pointed at it and
+  `crosspad_hil.cli.main(sys.argv[1:])`) answers verbs the released wheel has never heard
+  of; that is the way to drive a board whose firmware is newer than the published tool.
+- With two boards on one bench there are two MIDI outputs whose names both contain
+  `crosspad`, differing by a digit and a space. Driving the wrong one paints a board nobody
+  is looking at and reports complete success. `--midi-list` and `--midi-index N` in
+  `tools/ledshow.py` exist because of that, and the board in front of this camera was port
+  7, which no name in the list announces.
+
 ## Still open: the DAW host scripts count the rows the other way
 
 `components/crosspad-dawcontrol/host/fl_studio/device_CrossPad.py:85` and
